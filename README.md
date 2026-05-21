@@ -35,16 +35,16 @@ Maven 또는 Gradle 둘 다 지원. 환경에 맞게 선택:
 cd backend
 
 # Windows에서 환경변수 로드 후 실행 (PowerShell)
-$env:DB_URL="jdbc:postgresql://...pooler.supabase.com:6543/postgres?prepareThreshold=0"
-$env:DB_USERNAME="postgres.xxxx"
-$env:DB_PASSWORD="..."
+$env:DB_URL      = "jdbc:postgresql://aws-1-ap-northeast-2.pooler.supabase.com:6543/postgres?sslmode=require&channelBinding=disable&prepareThreshold=0"
+$env:DB_USERNAME = "postgres.your_project_ref"
+$env:DB_PASSWORD = "..."
+$env:CORS_ORIGINS = "http://localhost:3000"
 
 # Maven
 mvn spring-boot:run
-
-# 또는 Gradle (wrapper 별도 셋업 필요)
-# ./gradlew bootRun
 ```
+
+> ⚠️ **Supabase JDBC 접속 핵심**: `channelBinding=disable` 옵션이 **필수**입니다. JDBC 드라이버의 SCRAM-SHA-256 처리가 Supabase Pooler와 충돌해서 인증 실패가 나는 알려진 이슈. 이 옵션 빼면 비밀번호가 맞아도 `password authentication failed` 에러가 납니다.
 
 빌드 검증:
 - `mvn test` → HangulUtil 7개 테스트 통과

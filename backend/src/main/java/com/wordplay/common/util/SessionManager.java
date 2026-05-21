@@ -3,6 +3,7 @@ package com.wordplay.common.util;
 import jakarta.servlet.http.Cookie;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 import java.util.UUID;
@@ -17,6 +18,14 @@ public class SessionManager {
 
     public static final String COOKIE_NAME = "wp_session";
     private static final int MAX_AGE_DAYS = 30;
+
+    /** 운영(HTTPS)에선 true. SPRING_PROFILES_ACTIVE=prod일 때 또는 COOKIE_SECURE=true 환경변수로 override */
+    @Value("${app.cookie.secure:false}")
+    private boolean cookieSecure;
+
+    /** Cross-site 요청(다른 도메인 프론트 → 백엔드 API)에선 SameSite=None 필요 */
+    @Value("${app.cookie.same-site:Lax}")
+    private String cookieSameSite;
 
     public String getOrCreate(HttpServletRequest req, HttpServletResponse res) {
         String existing = extract(req);
@@ -36,15 +45,15 @@ public class SessionManager {
     }
 
     private void write(HttpServletResponse res, String value) {
-        Cookie cookie = new Cookie(COOKIE_NAME, value);
-        cookie.setHttpOnly(true);
-        cookie.setSecure(false);   // 운영(HTTPS)에서는 true로
-        cookie.setPath("/");
-        cookie.setMaxAge(MAX_AGE_DAYS * 24 * 60 * 60);
-        // SameSite=Lax — Servlet API에 직접 setter 없음. 헤더로 추가
-        res.addCookie(cookie);
-        res.addHeader("Set-Cookie",
-                String.format("%s=%s; Path=/; Max-Age=%d; HttpOnly; SameSite=Lax",
-                        COOKIE_NAME, value, MAX_AGE_DAYS * 24 * 60 * 60));
+        // SameSite는 Servlet API에 직접 setter 없으므로 헤더로 직접 작성.
+        // Cross-site에서 쿠키 보내려면 Secure + SameSite=None 둘 다 필요.
+        StringBuilder sb = new StringBuilder()
+                .append(COOKIE_NAME).append("=").append(value)
+                .append("; Path=/")
+                .append("; Max-Age=").append(MAX_AGE_DAYS * 24 * 60 * 60)
+                .append("; HttpOnly");
+        if (cookieSecure) sb.append("; Secure");
+        sb.append("; SameSite=").append(cookieSameSite);
+        res.addHeader("Set-Cookie", sb.toString());
     }
 }
