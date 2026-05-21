@@ -113,4 +113,41 @@ class HangulUtilTest {
         assertThat(r.get(0).marks()).extracting(JamoMark::mark)
                 .containsExactly("H", "H", "S");
     }
+
+    @Test
+    void decompose_떼_쌍자음_이중모음_모두분해() {
+        // 떼 = ㄸ + ㅔ
+        // 새 규칙: ㄸ → ㄷㄷ, ㅔ → ㅓㅣ
+        // 결과: ㄷ(CHO) + ㄷ(CHO) + ㅓ(JUNG) + ㅣ(JUNG)
+        List<HangulUtil.Jamo> r = HangulUtil.decompose('떼');
+        assertThat(r).hasSize(4);
+        assertThat(r).extracting(HangulUtil.Jamo::jamo)
+                .containsExactly("ㄷ", "ㄷ", "ㅓ", "ㅣ");
+        assertThat(r).extracting(HangulUtil.Jamo::kind)
+                .containsExactly(Kind.CHO, Kind.CHO, Kind.JUNG, Kind.JUNG);
+    }
+
+    @Test
+    void decompose_봬_쌍받침_없음() {
+        // 봬 = ㅂ + ㅙ (= ㅗ + ㅏ + ㅣ) → 4 jamos
+        List<HangulUtil.Jamo> r = HangulUtil.decompose('봬');
+        assertThat(r).extracting(HangulUtil.Jamo::jamo)
+                .containsExactly("ㅂ", "ㅗ", "ㅏ", "ㅣ");
+    }
+
+    @Test
+    void decompose_았_쌍받침() {
+        // 았 = ㅇ + ㅏ + ㅆ → ㅇ + ㅏ + ㅅ + ㅅ (4 jamos)
+        List<HangulUtil.Jamo> r = HangulUtil.decompose('았');
+        assertThat(r).extracting(HangulUtil.Jamo::jamo)
+                .containsExactly("ㅇ", "ㅏ", "ㅅ", "ㅅ");
+    }
+
+    @Test
+    void decompose_애_이중모음() {
+        // 애 = ㅇ + ㅐ → ㅇ + ㅏ + ㅣ (3 jamos)
+        List<HangulUtil.Jamo> r = HangulUtil.decompose('애');
+        assertThat(r).extracting(HangulUtil.Jamo::jamo)
+                .containsExactly("ㅇ", "ㅏ", "ㅣ");
+    }
 }
