@@ -46,6 +46,7 @@ app:
   game:
     id-length: 8
     max-word-length: 20
+    wordguess-max-attempts: 5
   wordsim:
     # WordSim 참고용 벡터 사전 위치 (rank 비교 기준)
     vectors-path: ${WORDSIM_VECTORS_PATH:/etc/wordplay/word_vectors.bin}

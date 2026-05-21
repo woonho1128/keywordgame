@@ -30,6 +30,9 @@ public class GameService {
     @Value("${app.game.id-length:8}")
     private int gameIdLength;
 
+    @Value("${app.game.wordguess-max-attempts:5}")
+    private int wordGuessMaxAttempts;
+
     @Transactional
     public CreateGameResponse createGame(CreateGameRequest req) {
         String answer = TextNormalizer.normalize(req.answerWord());
@@ -83,7 +86,7 @@ public class GameService {
             var refs = similarityService.getReferenceScores(g.getAnswerWord());
             return GameResponse.fromWithSim(g, refs);
         }
-        return GameResponse.from(g);
+        return GameResponse.from(g, wordGuessMaxAttempts);
     }
 
     @Transactional(readOnly = true)

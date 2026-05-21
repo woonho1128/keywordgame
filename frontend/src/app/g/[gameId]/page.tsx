@@ -7,7 +7,9 @@ import { SyllableResult } from '@/lib/hangul';
 import { HangulBoard } from '@/components/wordguess/HangulBoard';
 import { JamoInputCells } from '@/components/wordguess/JamoInputCells';
 import { ShareButton } from '@/components/common/ShareButton';
+import { ShareResultButton } from '@/components/common/ShareResultButton';
 import { GuessHistory, WordSimGuess } from '@/components/wordsim/GuessHistory';
+import { buildWordGuessShareText, buildWordSimShareText, formatTime } from '@/lib/share';
 
 /** WordSim 참고 점수 표시 (1위/10위/100위/1000위 유사도) */
 function ReferenceScoreCell({ label, sim }: { label: string; sim: number | null }) {
@@ -30,6 +32,7 @@ type GameInfo = {
   creatorNick: string | null;
   playCount: number;
   solvedCount: number;
+  maxAttempts: number | null;     // WordGuess만 채워짐 (현재 5)
   // WordSim 참고 점수
   top1Similarity: number | null;
   top10Similarity: number | null;
@@ -58,6 +61,10 @@ type GuessResp = {
   similarity: number | null;
   similarityScore: number | null;
   rank: number | null;
+  // 게임 종료 시점 정보
+  status: 'IN_PROGRESS' | 'SOLVED' | 'GAVE_UP';
+  revealedAnswer: string | null;
+  timeSpentSec: number | null;
 };
 
 type GuessHistoryItem = {
@@ -80,6 +87,8 @@ export default function PlayPage() {
   const [lastSimGuess, setLastSimGuess] = useState<WordSimGuess | undefined>();
   const [error, setError] = useState<string | null>(null);
   const [revealedAnswer, setRevealedAnswer] = useState<string | null>(null);
+  const [timeSpentSec, setTimeSpentSec] = useState<number | null>(null);
+  const [attemptCount, setAttemptCount] = useState(0);
 
   // 1) 게임 메타 로드
   useEffect(() => {
@@ -140,7 +149,6 @@ export default function PlayPage() {
             isCorrect: res.isCorrect,
           };
           setSimHistory((h) => {
-            // 같은 단어 재추측 방지
             if (h.some(x => x.guessWord === entry.guessWord)) return h;
             return [...h, entry];
           });
@@ -148,7 +156,18 @@ export default function PlayPage() {
         }
       }
 
-      if (res.isCorrect) setStatus('SOLVED');
+      // 공통 상태 갱신
+      setAttemptCount(res.guessOrder);
+      if (res.status === 'SOLVED') {
+        setStatus('SOLVED');
+        if (res.timeSpentSec != null) setTimeSpentSec(res.timeSpentSec);
+      } else if (res.status === 'GAVE_UP') {
+        // 5회 초과 자동 실패
+        setStatus('GAVE_UP');
+        if (res.revealedAnswer) setRevealedAnswer(res.revealedAnswer);
+        if (res.timeSpentSec != null) setTimeSpentSec(res.timeSpentSec);
+      }
+
       setGuessInput('');
     } catch (e) {
       setError(e instanceof Error ? e.message : '추측 실패');
@@ -165,6 +184,8 @@ export default function PlayPage() {
       );
       setStatus('GAVE_UP');
       setRevealedAnswer(res.answerWord);
+      setAttemptCount(res.totalAttempts);
+      // /giveup은 timeSpent를 안 줘서 클라이언트에서 계산 안 함 (공유 텍스트엔 빈칸)
     } catch (e) {
       setError(e instanceof Error ? e.message : '포기 실패');
     }
@@ -291,6 +312,18 @@ export default function PlayPage() {
             <span className="font-bold text-gray-800">{game.jamoCount}개</span>
           </div>
         )}
+        {game.gameType === 'WORDGUESS' && game.maxAttempts != null && (
+          <div className="inline-flex items-center gap-2 bg-gray-50 rounded-lg px-3 py-2 text-sm">
+            <span className="text-gray-500">남은 시도</span>
+            <span className={`font-bold ${
+              game.maxAttempts - attemptCount <= 1 ? 'text-red-500'
+              : game.maxAttempts - attemptCount <= 2 ? 'text-orange-500'
+              : 'text-gray-800'
+            }`}>
+              {Math.max(0, game.maxAttempts - attemptCount)}/{game.maxAttempts}
+            </span>
+          </div>
+        )}
         {game.hintText && (
           <div className="flex-1 min-w-0 bg-yellow-50 rounded-lg px-3 py-2 text-sm">
             💡 {game.hintText}
@@ -365,14 +398,69 @@ export default function PlayPage() {
       )}
 
       {status === 'SOLVED' && (
-        <div className="mt-8 bg-green-50 rounded-lg p-4 text-center">
-          🎉 <span className="font-bold">정답입니다!</span> {history.length}번 시도
+        <div className="mt-8 space-y-3">
+          <div className="bg-green-50 rounded-lg p-4 text-center">
+            🎉 <span className="font-bold">정답입니다!</span>
+            {' · '}
+            {game.gameType === 'WORDGUESS' && game.maxAttempts
+              ? `${attemptCount}/${game.maxAttempts}`
+              : `${attemptCount}번 시도`}
+            {timeSpentSec != null && ` · ${formatTime(timeSpentSec)}`}
+          </div>
+          <ShareResultButton
+            text={
+              game.gameType === 'WORDGUESS'
+                ? buildWordGuessShareText({
+                    solved: true,
+                    attempts: attemptCount,
+                    maxAttempts: game.maxAttempts ?? 5,
+                    timeSpentSec,
+                    history,
+                    url: shareUrl,
+                  })
+                : buildWordSimShareText({
+                    solved: true,
+                    attempts: attemptCount,
+                    timeSpentSec,
+                    url: shareUrl,
+                  })
+            }
+          />
         </div>
       )}
 
       {status === 'GAVE_UP' && (
-        <div className="mt-8 bg-gray-50 rounded-lg p-4 text-center">
-          정답은 <span className="font-bold text-hit">{revealedAnswer}</span> 였습니다.
+        <div className="mt-8 space-y-3">
+          <div className="bg-gray-50 rounded-lg p-4 text-center">
+            <div>
+              정답은 <span className="font-bold text-hit">{revealedAnswer}</span> 였습니다.
+            </div>
+            <div className="text-sm text-gray-500 mt-1">
+              {game.gameType === 'WORDGUESS' && game.maxAttempts
+                ? `${attemptCount}/${game.maxAttempts} 시도`
+                : `${attemptCount}번 시도`}
+              {timeSpentSec != null && ` · ${formatTime(timeSpentSec)}`}
+            </div>
+          </div>
+          <ShareResultButton
+            text={
+              game.gameType === 'WORDGUESS'
+                ? buildWordGuessShareText({
+                    solved: false,
+                    attempts: attemptCount,
+                    maxAttempts: game.maxAttempts ?? 5,
+                    timeSpentSec,
+                    history,
+                    url: shareUrl,
+                  })
+                : buildWordSimShareText({
+                    solved: false,
+                    attempts: attemptCount,
+                    timeSpentSec,
+                    url: shareUrl,
+                  })
+            }
+          />
         </div>
       )}
 

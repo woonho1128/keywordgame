@@ -20,6 +20,7 @@ import com.wordplay.play.repository.PlayRecordRepository;
 import com.wordplay.similarity.SimilarityService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -37,6 +38,9 @@ public class GuessService {
     private final GuessLogRepository guessLogRepository;
     private final SimilarityService similarityService;
     private final ObjectMapper objectMapper;
+
+    @Value("${app.game.wordguess-max-attempts:5}")
+    private int wordGuessMaxAttempts;
 
     @Transactional
     public GuessResponse guess(String gameId, GuessRequest req, String sessionKey) {
@@ -101,12 +105,22 @@ public class GuessService {
                 .build());
 
         record.setAttemptCount(order);
+
+        String revealedAnswer = null;
         if (correct) {
             finalizeSolved(game, record);
+        } else if (order >= wordGuessMaxAttempts) {
+            // 최대 시도 초과 → 자동 실패 (정답 공개)
+            finalizeGaveUp(record);
+            revealedAnswer = game.getAnswerWord();
         }
         playRecordRepository.save(record);
 
-        return GuessResponse.wordGuess(guess, order, correct, result);
+        Integer timeSpent = (record.getStatus() != PlayStatus.IN_PROGRESS) ? record.getTimeSpentSec() : null;
+        return GuessResponse.wordGuess(
+                guess, order, correct, result,
+                record.getStatus().name(), revealedAnswer, timeSpent
+        );
     }
 
     // ------------------------------------------------------------------
@@ -151,7 +165,11 @@ public class GuessService {
         }
         playRecordRepository.save(record);
 
-        return GuessResponse.wordSim(guess, order, correct, inDict, similarity, rank);
+        Integer timeSpent = (record.getStatus() != PlayStatus.IN_PROGRESS) ? record.getTimeSpentSec() : null;
+        return GuessResponse.wordSim(
+                guess, order, correct, inDict, similarity, rank,
+                record.getStatus().name(), null, timeSpent
+        );
     }
 
     private void finalizeSolved(Game game, PlayRecord record) {
@@ -162,5 +180,13 @@ public class GuessService {
 
         game.setSolvedCount(game.getSolvedCount() + 1);
         gameRepository.save(game);
+    }
+
+    /** 5회 초과 등으로 자동 실패 처리. */
+    private void finalizeGaveUp(PlayRecord record) {
+        Instant now = Instant.now();
+        record.setStatus(PlayStatus.GAVE_UP);
+        record.setFinishedAt(now);
+        record.setTimeSpentSec((int) Duration.between(record.getStartedAt(), now).getSeconds());
     }
 }

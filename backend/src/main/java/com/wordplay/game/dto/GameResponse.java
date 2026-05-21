@@ -17,18 +17,20 @@ public record GameResponse(
         Instant createdAt,
         Integer playCount,
         Integer solvedCount,
+        Integer maxAttempts,          // WordGuess 최대 시도 횟수 (WordSim은 null)
         // WordSim 참고 점수 (정답과의 유사도 분포)
         Float top1Similarity,
         Float top10Similarity,
         Float top100Similarity,
         Float top1000Similarity
 ) {
-    public static GameResponse from(Game g) {
+    public static GameResponse from(Game g, Integer wordGuessMaxAttempts) {
         return new GameResponse(
                 g.getGameId(), g.getGameType(), g.getWordLength(),
                 computeJamoCount(g),
                 g.getHintText(), g.getCreatorNick(), g.getCreatedAt(),
                 g.getPlayCount(), g.getSolvedCount(),
+                g.getGameType() == GameType.WORDGUESS ? wordGuessMaxAttempts : null,
                 null, null, null, null
         );
     }
@@ -39,6 +41,7 @@ public record GameResponse(
                 computeJamoCount(g),
                 g.getHintText(), g.getCreatorNick(), g.getCreatedAt(),
                 g.getPlayCount(), g.getSolvedCount(),
+                null,   // WordSim은 시도 제한 없음
                 refs.top1(), refs.top10(), refs.top100(), refs.top1000()
         );
     }
