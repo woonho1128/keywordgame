@@ -53,6 +53,9 @@ app:
     # OpenAI Embeddings API 키 (사전에 없는 단어 동적 임베딩용)
     # 비어있으면 사전 단어만 사용 가능
     api-key: ${OPENAI_API_KEY:}
+    # 모델은 word_vectors.bin 빌드한 모델과 동일해야 함!
+    # text-embedding-3-small (1536d, $0.02/1M) 또는 text-embedding-3-large (3072d, $0.13/1M)
+    model: ${OPENAI_MODEL:text-embedding-3-large}
     timeout-ms: 10000
 
 ---

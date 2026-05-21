@@ -26,7 +26,10 @@ import java.util.Map;
 public class OpenAiEmbeddingClient {
 
     private static final String URL = "https://api.openai.com/v1/embeddings";
-    private static final String MODEL = "text-embedding-3-small";
+
+    /** 모델은 사전(word_vectors.bin)과 동일해야 함. 다르면 벡터 공간이 안 맞음. */
+    @Value("${app.openai.model:text-embedding-3-large}")
+    private String model;
 
     @Value("${app.openai.api-key:}")
     private String apiKey;
@@ -67,7 +70,7 @@ public class OpenAiEmbeddingClient {
         try {
             String body = mapper.writeValueAsString(Map.of(
                     "input", words,
-                    "model", MODEL
+                    "model", model
             ));
             HttpRequest req = HttpRequest.newBuilder()
                     .uri(URI.create(URL))

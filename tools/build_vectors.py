@@ -38,7 +38,7 @@ SCRIPT_DIR = Path(__file__).parent
 NOUNS_FILE = SCRIPT_DIR / "korean_nouns.txt"
 OUTPUT_FILE = SCRIPT_DIR / "word_vectors.bin"
 
-MODEL = "text-embedding-3-small"
+MODEL = "text-embedding-3-large"   # 3072차원, $0.13/1M tokens (small의 6.5배)
 BATCH_SIZE = 500   # OpenAI는 한 번에 여러 input 처리 가능
 
 
@@ -88,8 +88,11 @@ def main():
     print(f"📖 단어 로드: {len(words)}개")
 
     client = OpenAI()
+    # 모델별 가격 (단위: $ / 1M tokens)
+    PRICING = {"text-embedding-3-small": 0.02, "text-embedding-3-large": 0.13}
+    price_per_million = PRICING.get(MODEL, 0.02)
     print(f"⏬ OpenAI 임베딩 요청: {MODEL}")
-    print(f"   (예상 비용: ${len(words) * 2 / 1_000_000 * 0.02:.6f})")
+    print(f"   (예상 비용: ${len(words) * 2 / 1_000_000 * price_per_million:.6f})")
 
     all_vectors = []
     total_tokens = 0
@@ -113,7 +116,7 @@ def main():
     save_binary(words, vectors, OUTPUT_FILE)
     size_mb = OUTPUT_FILE.stat().st_size / 1024 / 1024
     print(f"✅ 완료. 파일 크기: {size_mb:.2f} MB")
-    print(f"💰 실사용 토큰: {total_tokens} (비용 ${total_tokens / 1_000_000 * 0.02:.6f})")
+    print(f"💰 실사용 토큰: {total_tokens} (비용 ${total_tokens / 1_000_000 * price_per_million:.6f})")
 
     # 검증 샘플
     print("\n🧪 검증 샘플 (정답과 유사한 top5):")
