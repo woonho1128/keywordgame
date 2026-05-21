@@ -5,6 +5,7 @@ import { useParams, useRouter } from 'next/navigation';
 import { api, GameType } from '@/lib/api';
 import { SyllableResult } from '@/lib/hangul';
 import { HangulBoard } from '@/components/wordguess/HangulBoard';
+import { ShareButton } from '@/components/common/ShareButton';
 
 type GameInfo = {
   gameId: string;
@@ -124,6 +125,9 @@ export default function PlayPage() {
     return <main className="p-8 text-gray-400">불러오는 중...</main>;
   }
 
+  // 현재 페이지 URL (브라우저 환경에서만 정확)
+  const shareUrl = typeof window !== 'undefined' ? window.location.href : '';
+
   // ----- 닉네임 입력 화면 -----
   if (!started) {
     return (
@@ -131,12 +135,21 @@ export default function PlayPage() {
         <h1 className="text-2xl font-bold mb-4">
           {game.gameType === 'WORDGUESS' ? '🟩 WordGuess' : '🔤 WordSim'}
         </h1>
-        <div className="bg-gray-50 rounded-lg p-4 mb-6">
+        <div className="bg-gray-50 rounded-lg p-4 mb-4">
           <p className="text-sm text-gray-500">출제자: {game.creatorNick || '익명'}</p>
           <p className="text-sm text-gray-500">정답 글자수: {game.wordLength}</p>
           {game.hintText && (
             <p className="mt-2"><span className="font-bold">힌트:</span> {game.hintText}</p>
           )}
+        </div>
+
+        {/* 공유 URL 영역 */}
+        <div className="mb-6 border border-gray-200 rounded-lg p-4 bg-yellow-50/40">
+          <p className="text-xs text-gray-500 mb-2">📨 친구에게 공유</p>
+          <p className="text-xs text-gray-700 mb-3 break-all font-mono bg-white rounded p-2 border">
+            {shareUrl}
+          </p>
+          <ShareButton url={shareUrl} />
         </div>
 
         <label className="block text-sm font-medium mb-1">닉네임</label>
@@ -164,12 +177,29 @@ export default function PlayPage() {
     <main className="min-h-screen p-8 max-w-2xl mx-auto">
       <div className="flex items-baseline justify-between mb-6">
         <h1 className="text-2xl font-bold">{game.gameType === 'WORDGUESS' ? '🟩 WordGuess' : '🔤 WordSim'}</h1>
-        <button
-          onClick={() => router.push(`/g/${params.gameId}/board`)}
-          className="text-sm text-gray-500 underline"
-        >
-          리더보드 →
-        </button>
+        <div className="flex gap-4 items-baseline">
+          <button
+            onClick={async () => {
+              try {
+                if (navigator.clipboard && window.isSecureContext) {
+                  await navigator.clipboard.writeText(shareUrl);
+                } else {
+                  window.prompt('URL을 복사하세요:', shareUrl);
+                }
+              } catch {}
+            }}
+            className="text-sm text-gray-500 underline hover:text-hit"
+            title="이 게임 URL 복사"
+          >
+            🔗 공유
+          </button>
+          <button
+            onClick={() => router.push(`/g/${params.gameId}/board`)}
+            className="text-sm text-gray-500 underline"
+          >
+            리더보드 →
+          </button>
+        </div>
       </div>
 
       {game.hintText && (
