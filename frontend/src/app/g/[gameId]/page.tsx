@@ -235,11 +235,19 @@ export default function PlayPage() {
         </div>
       </div>
 
-      {game.hintText && (
-        <div className="bg-yellow-50 rounded-lg p-3 mb-6 text-sm">
-          💡 {game.hintText}
-        </div>
-      )}
+      <div className="flex flex-wrap gap-3 mb-6">
+        {game.gameType === 'WORDGUESS' && game.jamoCount != null && (
+          <div className="inline-flex items-center gap-2 bg-gray-50 rounded-lg px-3 py-2 text-sm">
+            <span className="text-gray-500">정답 자모</span>
+            <span className="font-bold text-gray-800">{game.jamoCount}개</span>
+          </div>
+        )}
+        {game.hintText && (
+          <div className="flex-1 min-w-0 bg-yellow-50 rounded-lg px-3 py-2 text-sm">
+            💡 {game.hintText}
+          </div>
+        )}
+      </div>
 
       <HangulBoard history={history} />
 
