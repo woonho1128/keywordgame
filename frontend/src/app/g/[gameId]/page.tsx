@@ -135,12 +135,23 @@ export default function PlayPage() {
   if (!started) {
     return (
       <main className="min-h-screen p-8 max-w-xl mx-auto">
-        <h1 className="text-2xl font-bold mb-4">
-          {game.gameType === 'WORDGUESS' ? '🟩 WordGuess' : '🔤 WordSim'}
-        </h1>
+        <div className="flex items-baseline justify-between mb-4">
+          <h1 className="text-2xl font-bold">
+            {game.gameType === 'WORDGUESS' ? '🟩 WordGuess' : '🔤 WordSim'}
+          </h1>
+          <button
+            onClick={() => router.push(`/g/${params.gameId}/board`)}
+            className="text-sm text-gray-500 underline hover:text-hit"
+          >
+            🏆 리더보드 →
+          </button>
+        </div>
         <div className="bg-gray-50 rounded-lg p-4 mb-4">
           <p className="text-sm text-gray-500">출제자: {game.creatorNick || '익명'}</p>
           <p className="text-sm text-gray-500">정답 글자수: {game.wordLength}</p>
+          <p className="text-sm text-gray-500">
+            플레이 {game.playCount}회 · 정답자 {game.solvedCount}명
+          </p>
           {game.hintText && (
             <p className="mt-2"><span className="font-bold">힌트:</span> {game.hintText}</p>
           )}
