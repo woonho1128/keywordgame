@@ -1,0 +1,56 @@
+package com.wordplay.game.entity;
+
+import jakarta.persistence.*;
+import lombok.*;
+
+import java.time.Instant;
+
+@Entity
+@Table(name = "TB_GAME")
+@Getter
+@Setter
+@NoArgsConstructor
+@AllArgsConstructor
+@Builder
+public class Game {
+
+    @Id
+    @Column(name = "game_id", length = 12)
+    private String gameId;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "game_type", nullable = false, length = 20)
+    private GameType gameType;
+
+    @Column(name = "answer_word", nullable = false, length = 100)
+    private String answerWord;
+
+    @Column(name = "word_length", nullable = false)
+    private Integer wordLength;
+
+    @Column(name = "hint_text", length = 500)
+    private String hintText;
+
+    @Column(name = "creator_nick", length = 50)
+    private String creatorNick;
+
+    @Column(name = "is_public", nullable = false)
+    private Boolean isPublic;
+
+    @Column(name = "play_count", nullable = false)
+    private Integer playCount;
+
+    @Column(name = "solved_count", nullable = false)
+    private Integer solvedCount;
+
+    @Column(name = "created_at", nullable = false, updatable = false)
+    private Instant createdAt;
+
+    @PrePersist
+    public void prePersist() {
+        if (createdAt == null) createdAt = Instant.now();
+        if (isPublic == null) isPublic = true;
+        if (playCount == null) playCount = 0;
+        if (solvedCount == null) solvedCount = 0;
+    }
+}

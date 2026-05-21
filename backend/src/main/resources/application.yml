@@ -1,0 +1,45 @@
+spring:
+  application:
+    name: wordplay-backend
+
+  # Supabase Transaction Pooler 사용 시 필수: prepareThreshold=0
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/wordplay?prepareThreshold=0}
+    username: ${DB_USERNAME:postgres}
+    password: ${DB_PASSWORD:postgres}
+    driver-class-name: org.postgresql.Driver
+    hikari:
+      maximum-pool-size: 10
+      minimum-idle: 2
+      connection-timeout: 30000
+      data-source-properties:
+        prepareThreshold: 0
+        preparedStatementCacheQueries: 0
+
+  jpa:
+    hibernate:
+      ddl-auto: validate         # 운영: validate. 개발 초기엔 update 가능
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+        format_sql: true
+        jdbc:
+          lob:
+            non_contextual_creation: true
+    open-in-view: false
+    show-sql: false               # true로 켜면 정답이 로그에 노출되므로 운영 시 false 유지
+
+server:
+  port: 8080
+  servlet:
+    context-path: /
+
+# CORS 허용 origin (Vercel 도메인 + 로컬)
+app:
+  cors:
+    allowed-origins:
+      - http://localhost:3000
+      - https://wordplay.kr
+  game:
+    id-length: 8
+    max-word-length: 20
