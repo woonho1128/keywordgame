@@ -27,6 +27,8 @@ export type SyllableResult = {
 
 const HANGUL_BASE = 0xac00;
 const HANGUL_END = 0xd7a3;
+const JUNG_COUNT = 21;
+const JONG_COUNT = 28;
 
 export function isHangulSyllable(c: string): boolean {
   if (c.length !== 1) return false;
@@ -40,4 +42,45 @@ export function isAllHangulSyllables(s: string): boolean {
     if (!isHangulSyllable(c)) return false;
   }
   return true;
+}
+
+const CHO_JAMO = [
+  'ㄱ','ㄲ','ㄴ','ㄷ','ㄸ','ㄹ','ㅁ','ㅂ','ㅃ','ㅅ',
+  'ㅆ','ㅇ','ㅈ','ㅉ','ㅊ','ㅋ','ㅌ','ㅍ','ㅎ',
+];
+
+const JUNG_DECOMP: string[][] = [
+  ['ㅏ'],['ㅐ'],['ㅑ'],['ㅒ'],['ㅓ'],['ㅔ'],['ㅕ'],['ㅖ'],
+  ['ㅗ'],['ㅗ','ㅏ'],['ㅗ','ㅐ'],['ㅗ','ㅣ'],
+  ['ㅛ'],['ㅜ'],['ㅜ','ㅓ'],['ㅜ','ㅔ'],['ㅜ','ㅣ'],
+  ['ㅠ'],['ㅡ'],['ㅡ','ㅣ'],['ㅣ'],
+];
+
+const JONG_DECOMP: string[][] = [
+  [],
+  ['ㄱ'],['ㄲ'],['ㄱ','ㅅ'],
+  ['ㄴ'],['ㄴ','ㅈ'],['ㄴ','ㅎ'],
+  ['ㄷ'],['ㄹ'],['ㄹ','ㄱ'],['ㄹ','ㅁ'],['ㄹ','ㅂ'],['ㄹ','ㅅ'],
+  ['ㄹ','ㅌ'],['ㄹ','ㅍ'],['ㄹ','ㅎ'],
+  ['ㅁ'],['ㅂ'],['ㅂ','ㅅ'],['ㅅ'],['ㅆ'],
+  ['ㅇ'],['ㅈ'],['ㅊ'],['ㅋ'],['ㅌ'],['ㅍ'],['ㅎ'],
+];
+
+/** 한 음절을 기본 자모 리스트로 분해 (백엔드 HangulUtil과 동일 규칙). */
+export function decomposeSyllable(syllable: string): string[] {
+  if (!isHangulSyllable(syllable)) return [];
+  const code = syllable.charCodeAt(0) - HANGUL_BASE;
+  const cho = Math.floor(code / (JUNG_COUNT * JONG_COUNT));
+  const jung = Math.floor((code % (JUNG_COUNT * JONG_COUNT)) / JONG_COUNT);
+  const jong = code % JONG_COUNT;
+  return [CHO_JAMO[cho], ...JUNG_DECOMP[jung], ...JONG_DECOMP[jong]];
+}
+
+/** 문자열 전체를 자모 리스트로 분해 (한글 음절만 분해, 나머지 무시). */
+export function decomposeText(text: string): string[] {
+  const out: string[] = [];
+  for (const c of text) {
+    if (isHangulSyllable(c)) out.push(...decomposeSyllable(c));
+  }
+  return out;
 }

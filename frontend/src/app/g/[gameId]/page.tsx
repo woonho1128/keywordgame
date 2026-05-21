@@ -5,6 +5,7 @@ import { useParams, useRouter } from 'next/navigation';
 import { api, GameType, setSessionKey } from '@/lib/api';
 import { SyllableResult } from '@/lib/hangul';
 import { HangulBoard } from '@/components/wordguess/HangulBoard';
+import { JamoInputCells } from '@/components/wordguess/JamoInputCells';
 import { ShareButton } from '@/components/common/ShareButton';
 
 type GameInfo = {
@@ -80,8 +81,7 @@ export default function PlayPage() {
   };
 
   // 단어 추측
-  const handleGuess = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleGuess = async () => {
     setError(null);
     const word = guessInput.trim();
     if (!word) return;
@@ -252,22 +252,43 @@ export default function PlayPage() {
       <HangulBoard history={history} />
 
       {status === 'IN_PROGRESS' && (
-        <form onSubmit={handleGuess} className="mt-8 flex gap-2">
-          <input
-            type="text"
-            value={guessInput}
-            onChange={(e) => setGuessInput(e.target.value)}
-            placeholder="한글로 추측"
-            maxLength={20}
-            className="flex-1 border border-gray-300 rounded-lg px-3 py-2"
-          />
-          <button type="submit" className="bg-hit text-white font-bold px-6 rounded-lg">
-            추측
-          </button>
-          <button type="button" onClick={handleGiveUp} className="border border-gray-300 px-4 rounded-lg text-gray-500">
-            포기
-          </button>
-        </form>
+        <div className="mt-8 space-y-3">
+          {game.gameType === 'WORDGUESS' && game.jamoCount ? (
+            <>
+              <JamoInputCells
+                jamoCount={game.jamoCount}
+                value={guessInput}
+                onChange={setGuessInput}
+                onSubmit={handleGuess}
+              />
+              <button
+                type="button"
+                onClick={handleGiveUp}
+                className="w-full border border-gray-300 py-2 rounded-lg text-gray-500 hover:text-red-500"
+              >
+                포기
+              </button>
+            </>
+          ) : (
+            // Fallback (WORDSIM 또는 jamoCount 없는 경우)
+            <form onSubmit={(e) => { e.preventDefault(); handleGuess(); }} className="flex gap-2">
+              <input
+                type="text"
+                value={guessInput}
+                onChange={(e) => setGuessInput(e.target.value)}
+                placeholder="한글로 추측"
+                maxLength={20}
+                className="flex-1 border border-gray-300 rounded-lg px-3 py-2"
+              />
+              <button type="submit" className="bg-hit text-white font-bold px-6 rounded-lg">
+                추측
+              </button>
+              <button type="button" onClick={handleGiveUp} className="border border-gray-300 px-4 rounded-lg text-gray-500">
+                포기
+              </button>
+            </form>
+          )}
+        </div>
       )}
 
       {status === 'SOLVED' && (
