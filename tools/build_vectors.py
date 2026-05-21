@@ -1,25 +1,28 @@
 #!/usr/bin/env python3
 """
-WordSim 벡터 사전 생성 스크립트.
+WordSim 벡터 사전 생성 — OpenAI 임베딩 버전.
 
 입력:
-  - korean_nouns.txt: 한국어 명사 사전 (1줄 1단어, # 주석)
+  - korean_nouns.txt: 한국어 명사 사전 (참고용 단어 풀)
+  - 환경변수 OPENAI_API_KEY
 
 출력:
-  - word_vectors.bin: Spring Boot가 로드할 바이너리 파일
-    포맷:
-      [4 bytes int]   vocab_size
-      [4 bytes int]   dimension
-      vocab_size 번 반복:
-        [2 bytes int]    word UTF-8 byte length
-        [N bytes]        word UTF-8 bytes
-        [dimension * 4 bytes float32]  vector
+  - word_vectors.bin: Spring Boot가 로드할 바이너리
 
-모델:
-  paraphrase-multilingual-MiniLM-L12-v2 (~471MB, 384차원, 한국어 포함)
+파일 포맷 (리틀엔디안):
+  [i32 vocab_size]
+  [i32 dimension]
+  vocab_size 회 반복:
+    [u16 word_utf8_byte_length]
+    [N bytes]                  UTF-8 단어
+    [dimension * f32]          L2 정규화 벡터
+
+모델: text-embedding-3-small (1536차원)
+비용: 약 3689 단어 × 2 토큰 × $0.02/1M = $0.0001 (사실상 0원)
 
 실행:
-  pip install sentence-transformers numpy
+  export OPENAI_API_KEY=sk-...
+  pip install openai numpy
   python build_vectors.py
 """
 
@@ -29,19 +32,17 @@ import sys
 from pathlib import Path
 
 import numpy as np
-from sentence_transformers import SentenceTransformer
+from openai import OpenAI
 
-# 경로 (스크립트 위치 기준)
 SCRIPT_DIR = Path(__file__).parent
 NOUNS_FILE = SCRIPT_DIR / "korean_nouns.txt"
 OUTPUT_FILE = SCRIPT_DIR / "word_vectors.bin"
 
-# 모델 — 다국어 sentence-transformers (한국어 포함, ~471MB)
-MODEL_NAME = "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
+MODEL = "text-embedding-3-small"
+BATCH_SIZE = 500   # OpenAI는 한 번에 여러 input 처리 가능
 
 
 def load_words(path: Path) -> list[str]:
-    """주석/빈 줄 제거하고 중복 없는 단어 리스트 반환."""
     seen = set()
     words = []
     with open(path, encoding="utf-8") as f:
@@ -57,14 +58,12 @@ def load_words(path: Path) -> list[str]:
 
 
 def normalize(vectors: np.ndarray) -> np.ndarray:
-    """L2 정규화 — 코사인 유사도 계산을 dot product로 단순화."""
     norms = np.linalg.norm(vectors, axis=1, keepdims=True)
-    norms[norms == 0] = 1.0  # 0 벡터 방지
+    norms[norms == 0] = 1.0
     return vectors / norms
 
 
 def save_binary(words: list[str], vectors: np.ndarray, path: Path):
-    """위 docstring의 바이너리 포맷으로 저장."""
     vocab_size, dim = vectors.shape
     with open(path, "wb") as f:
         f.write(struct.pack("<ii", vocab_size, dim))
@@ -76,6 +75,11 @@ def save_binary(words: list[str], vectors: np.ndarray, path: Path):
 
 
 def main():
+    if not os.environ.get("OPENAI_API_KEY"):
+        print("❌ OPENAI_API_KEY 환경변수가 설정되지 않았습니다.")
+        print("   export OPENAI_API_KEY=sk-... 로 설정하세요.")
+        sys.exit(1)
+
     if not NOUNS_FILE.exists():
         print(f"❌ 단어 사전 파일이 없습니다: {NOUNS_FILE}")
         sys.exit(1)
@@ -83,36 +87,42 @@ def main():
     words = load_words(NOUNS_FILE)
     print(f"📖 단어 로드: {len(words)}개")
 
-    print(f"⏬ 모델 로드 중: {MODEL_NAME}")
-    print("   (최초 1회만 다운로드, ~471MB)")
-    model = SentenceTransformer(MODEL_NAME)
-    print(f"✅ 모델 로드 완료 (차원: {model.get_sentence_embedding_dimension()})")
+    client = OpenAI()
+    print(f"⏬ OpenAI 임베딩 요청: {MODEL}")
+    print(f"   (예상 비용: ${len(words) * 2 / 1_000_000 * 0.02:.6f})")
 
-    print("🔢 임베딩 생성 중...")
-    vectors = model.encode(
-        words,
-        batch_size=64,
-        show_progress_bar=True,
-        convert_to_numpy=True,
-        normalize_embeddings=False,  # 우리가 직접 정규화
-    )
+    all_vectors = []
+    total_tokens = 0
+    for i in range(0, len(words), BATCH_SIZE):
+        batch = words[i : i + BATCH_SIZE]
+        try:
+            resp = client.embeddings.create(input=batch, model=MODEL)
+        except Exception as e:
+            print(f"❌ OpenAI API 호출 실패: {e}")
+            sys.exit(1)
+        for item in resp.data:
+            all_vectors.append(item.embedding)
+        total_tokens += resp.usage.total_tokens
+        print(f"  {i + len(batch)} / {len(words)} 완료 (누적 토큰 {total_tokens})")
 
-    print("🔧 L2 정규화...")
-    vectors = normalize(vectors.astype(np.float32))
+    vectors = np.array(all_vectors, dtype=np.float32)
+    print(f"🔧 L2 정규화 ({vectors.shape})")
+    vectors = normalize(vectors)
 
     print(f"💾 저장: {OUTPUT_FILE}")
     save_binary(words, vectors, OUTPUT_FILE)
     size_mb = OUTPUT_FILE.stat().st_size / 1024 / 1024
     print(f"✅ 완료. 파일 크기: {size_mb:.2f} MB")
+    print(f"💰 실사용 토큰: {total_tokens} (비용 ${total_tokens / 1_000_000 * 0.02:.6f})")
 
-    # 간단 검증
-    print("\n🧪 검증 샘플:")
-    for query in ["사과", "고양이", "사랑", "학교"]:
+    # 검증 샘플
+    print("\n🧪 검증 샘플 (정답과 유사한 top5):")
+    for query in ["사과", "고양이", "사랑", "학교", "전쟁"]:
         if query not in words:
             continue
         i = words.index(query)
-        sims = vectors @ vectors[i]  # 정규화돼있으니 dot이 곧 cosine
-        top5 = np.argsort(-sims)[1:6]  # 자기 자신 제외
+        sims = vectors @ vectors[i]
+        top5 = np.argsort(-sims)[1:6]
         print(f"  {query} → " + ", ".join(
             f"{words[j]}({sims[j]:.2f})" for j in top5
         ))

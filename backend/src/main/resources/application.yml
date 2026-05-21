@@ -47,8 +47,13 @@ app:
     id-length: 8
     max-word-length: 20
   wordsim:
-    # WordSim 벡터 사전 위치 (없으면 WordSim 모드 자동 비활성화)
+    # WordSim 참고용 벡터 사전 위치 (rank 비교 기준)
     vectors-path: ${WORDSIM_VECTORS_PATH:/etc/wordplay/word_vectors.bin}
+  openai:
+    # OpenAI Embeddings API 키 (사전에 없는 단어 동적 임베딩용)
+    # 비어있으면 사전 단어만 사용 가능
+    api-key: ${OPENAI_API_KEY:}
+    timeout-ms: 10000
 
 ---
 # 로컬 개발 프로필

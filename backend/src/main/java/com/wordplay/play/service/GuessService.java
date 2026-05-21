@@ -113,13 +113,16 @@ public class GuessService {
     // WordSim — 메모리 임베딩 사전 기반 유사도/순위 계산
     // ------------------------------------------------------------------
     private GuessResponse guessWordSim(Game game, PlayRecord record, String guess) {
-        if (!similarityService.isLoaded()) {
-            throw new BusinessException(ErrorCode.INTERNAL_ERROR, "WordSim 사전이 로드되지 않았습니다");
+        if (!similarityService.isAvailable()) {
+            throw new BusinessException(ErrorCode.INTERNAL_ERROR,
+                    "WordSim 사용 불가 — 사전/OpenAI 키 모두 미설정");
         }
 
         boolean correct = guess.equals(game.getAnswerWord());
         int order = record.getAttemptCount() + 1;
 
+        // OpenAI 통합 후엔 거의 모든 한국어 단어 처리 가능
+        // contains() 호출 자체가 (필요하면) OpenAI API 호출 + 캐싱을 수행
         boolean inDict = similarityService.contains(guess);
         Float similarity = null;
         Integer rank = null;
@@ -131,7 +134,7 @@ public class GuessService {
             similarity = similarityService.cosine(game.getAnswerWord(), guess);
             rank = similarityService.rank(game.getAnswerWord(), guess);
         }
-        // inDict=false → similarity/rank null → 프론트에서 "사전에 없는 단어" 메시지
+        // inDict=false → 정말 처리 불가한 단어 (예: 알 수 없는 외계어)
 
         guessLogRepository.save(GuessLog.builder()
                 .recordId(record.getRecordId())

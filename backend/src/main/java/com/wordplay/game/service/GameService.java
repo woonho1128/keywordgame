@@ -42,14 +42,16 @@ public class GameService {
             throw new BusinessException(ErrorCode.INVALID_HANGUL);
         }
 
-        // WordSim: 정답이 사전에 있는지 확인
+        // WordSim: 정답에 대해 벡터 확보 가능한지 확인
+        // (사전 또는 OpenAI 둘 중 하나에서)
         if (req.gameType() == GameType.WORDSIM) {
-            if (!similarityService.isLoaded()) {
-                throw new BusinessException(ErrorCode.INTERNAL_ERROR, "WordSim 사전이 로드되지 않았습니다");
+            if (!similarityService.isAvailable()) {
+                throw new BusinessException(ErrorCode.INTERNAL_ERROR,
+                        "WordSim 사용 불가 — 사전/OpenAI 키 모두 미설정");
             }
             if (!similarityService.contains(answer)) {
                 throw new BusinessException(ErrorCode.WORD_NOT_IN_DICTIONARY,
-                        "사전에 없는 단어입니다. 다른 단어를 시도해주세요");
+                        "처리할 수 없는 단어입니다. 다른 단어를 시도해주세요");
             }
         }
 
@@ -77,7 +79,7 @@ public class GameService {
     public GameResponse getGame(String gameId) {
         Game g = gameRepository.findById(gameId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.GAME_NOT_FOUND));
-        if (g.getGameType() == GameType.WORDSIM && similarityService.isLoaded()) {
+        if (g.getGameType() == GameType.WORDSIM && similarityService.isAvailable()) {
             var refs = similarityService.getReferenceScores(g.getAnswerWord());
             return GameResponse.fromWithSim(g, refs);
         }
