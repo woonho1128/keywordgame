@@ -98,77 +98,96 @@ public class HangulUtil {
     }
 
     /**
-     * 꼬들/Wordle 표준 2-pass 비교.
+     * 단어 전체를 평탄화된(flat) 자모 리스트로 분해.
+     * 음절 경계 무시. 비교/카운팅에 사용.
+     */
+    public static List<Jamo> decomposeFlat(String word) {
+        List<Jamo> out = new ArrayList<>(word.length() * 3);
+        for (int i = 0; i < word.length(); i++) {
+            char c = word.charAt(i);
+            if (isHangulSyllable(c)) out.addAll(decompose(c));
+        }
+        return out;
+    }
+
+    /** 단어의 총 자모 수 (꼬들 기준). */
+    public static int countJamos(String word) {
+        return decomposeFlat(word).size();
+    }
+
+    /**
+     * 꼬들 표준 2-pass 비교 — 자모 수 일치만 요구하고 음절 수는 자유.
      *
      * 매칭 규칙:
-     *   - 음절 단위로 매칭 (음절 i끼리만 비교)
-     *   - 같은 음절 내, 같은 kind(CHO/JUNG/JONG) 안에서만 비교
-     *   - 1단계: 같은 kind 안 같은 position(0/1)에 같은 jamo → H
+     *   - 정답/추측을 평탄화 (flat jamo list)
+     *   - 같은 kind(CHO/JUNG/JONG) 안에서만 비교
+     *   - 1단계: 같은 kind 안 같은 position에 같은 jamo → H
      *   - 2단계: 남은 자모는 같은 kind pool에서 매칭하면 M, 없으면 S
+     *   - 결과는 추측의 음절 구조에 맞춰 그룹화하여 반환 (시각화용)
      */
     public static List<SyllableResult> compareWords(String answer, String guess) {
-        if (answer.length() != guess.length()) {
-            throw new IllegalArgumentException("Length mismatch");
+        List<Jamo> aFlat = decomposeFlat(answer);
+        List<Jamo> gFlat = decomposeFlat(guess);
+
+        if (aFlat.size() != gFlat.size()) {
+            throw new IllegalArgumentException(
+                    "Jamo count mismatch: answer=" + aFlat.size() + " guess=" + gFlat.size());
         }
-        int n = answer.length();
-        List<SyllableResult> out = new ArrayList<>(n);
 
-        for (int i = 0; i < n; i++) {
-            List<Jamo> aJamos = decompose(answer.charAt(i));
-            List<Jamo> gJamos = decompose(guess.charAt(i));
+        // kind별 인덱스 묶기
+        Map<Kind, List<Integer>> aIdx = groupByKind(aFlat);
+        Map<Kind, List<Integer>> gIdx = groupByKind(gFlat);
 
-            // kind별 인덱스 묶기
-            Map<Kind, List<Integer>> aIdx = groupByKind(aJamos);
-            Map<Kind, List<Integer>> gIdx = groupByKind(gJamos);
+        String[] gMarks = new String[gFlat.size()];
+        boolean[] aTaken = new boolean[aFlat.size()];
 
-            String[] gMarks = new String[gJamos.size()];   // 추측 각 자모의 마크 (결과)
-            boolean[] aTaken = new boolean[aJamos.size()]; // 정답에서 H로 소진된 자모 표시
-
-            // ---- 1단계: Hit ----
-            for (Kind k : Kind.values()) {
-                List<Integer> a = aIdx.getOrDefault(k, List.of());
-                List<Integer> g = gIdx.getOrDefault(k, List.of());
-                int len = Math.min(a.size(), g.size());
-                for (int p = 0; p < len; p++) {
-                    int ai = a.get(p), gi = g.get(p);
-                    if (aJamos.get(ai).jamo().equals(gJamos.get(gi).jamo())) {
-                        gMarks[gi] = "H";
-                        aTaken[ai] = true;
-                    }
+        // ---- 1단계: Hit ----
+        for (Kind k : Kind.values()) {
+            List<Integer> a = aIdx.getOrDefault(k, List.of());
+            List<Integer> g = gIdx.getOrDefault(k, List.of());
+            int len = Math.min(a.size(), g.size());
+            for (int p = 0; p < len; p++) {
+                int ai = a.get(p), gi = g.get(p);
+                if (aFlat.get(ai).jamo().equals(gFlat.get(gi).jamo())) {
+                    gMarks[gi] = "H";
+                    aTaken[ai] = true;
                 }
             }
+        }
 
-            // ---- 2단계: Move/Skip ----
-            // kind별 pool 만들기 (H로 소진되지 않은 정답 자모)
-            Map<Kind, Map<String, Integer>> pool = new HashMap<>();
-            for (Kind k : Kind.values()) pool.put(k, new HashMap<>());
-            for (int ai = 0; ai < aJamos.size(); ai++) {
-                if (aTaken[ai]) continue;
-                Jamo j = aJamos.get(ai);
-                pool.get(j.kind()).merge(j.jamo(), 1, Integer::sum);
+        // ---- 2단계: Pool 기반 Move/Skip ----
+        Map<Kind, Map<String, Integer>> pool = new HashMap<>();
+        for (Kind k : Kind.values()) pool.put(k, new HashMap<>());
+        for (int ai = 0; ai < aFlat.size(); ai++) {
+            if (aTaken[ai]) continue;
+            Jamo j = aFlat.get(ai);
+            pool.get(j.kind()).merge(j.jamo(), 1, Integer::sum);
+        }
+        for (int gi = 0; gi < gFlat.size(); gi++) {
+            if (gMarks[gi] != null) continue;
+            Jamo j = gFlat.get(gi);
+            Map<String, Integer> kindPool = pool.get(j.kind());
+            Integer cnt = kindPool.get(j.jamo());
+            if (cnt != null && cnt > 0) {
+                gMarks[gi] = "M";
+                kindPool.merge(j.jamo(), -1, Integer::sum);
+            } else {
+                gMarks[gi] = "S";
             }
+        }
 
-            // 추측 자모 중 미정인 것들 처리
-            for (int gi = 0; gi < gJamos.size(); gi++) {
-                if (gMarks[gi] != null) continue;
-                Jamo j = gJamos.get(gi);
-                Map<String, Integer> kindPool = pool.get(j.kind());
-                Integer cnt = kindPool.get(j.jamo());
-                if (cnt != null && cnt > 0) {
-                    gMarks[gi] = "M";
-                    kindPool.merge(j.jamo(), -1, Integer::sum);
-                } else {
-                    gMarks[gi] = "S";
-                }
+        // ---- 결과를 추측 음절 단위로 묶어서 반환 ----
+        List<SyllableResult> out = new ArrayList<>();
+        int idx = 0;
+        for (int i = 0; i < guess.length(); i++) {
+            char c = guess.charAt(i);
+            if (!isHangulSyllable(c)) continue;
+            List<Jamo> sylJamos = decompose(c);
+            List<JamoMark> marks = new ArrayList<>(sylJamos.size());
+            for (Jamo j : sylJamos) {
+                marks.add(new JamoMark(j.jamo(), j.kind(), gMarks[idx++]));
             }
-
-            // 결과 조립
-            List<JamoMark> marks = new ArrayList<>(gJamos.size());
-            for (int gi = 0; gi < gJamos.size(); gi++) {
-                Jamo j = gJamos.get(gi);
-                marks.add(new JamoMark(j.jamo(), j.kind(), gMarks[gi]));
-            }
-            out.add(new SyllableResult(String.valueOf(guess.charAt(i)), marks));
+            out.add(new SyllableResult(String.valueOf(c), marks));
         }
         return out;
     }

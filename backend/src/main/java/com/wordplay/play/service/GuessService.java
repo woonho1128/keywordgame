@@ -68,11 +68,14 @@ public class GuessService {
     // WordGuess — HangulUtil로 자모 비교
     // ------------------------------------------------------------------
     private GuessResponse guessWordGuess(Game game, PlayRecord record, String guess) {
-        if (guess.length() != game.getWordLength()) {
-            throw new BusinessException(ErrorCode.INVALID_WORD_LENGTH);
-        }
         if (!HangulUtil.isAllHangulSyllables(guess)) {
             throw new BusinessException(ErrorCode.INVALID_HANGUL);
+        }
+        // 자모 수 일치만 확인 (음절 수는 자유 — 꼬들 표준)
+        int answerJamos = HangulUtil.countJamos(game.getAnswerWord());
+        int guessJamos = HangulUtil.countJamos(guess);
+        if (answerJamos != guessJamos) {
+            throw new BusinessException(ErrorCode.INVALID_WORD_LENGTH);
         }
 
         boolean correct = guess.equals(game.getAnswerWord());

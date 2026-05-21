@@ -65,43 +65,27 @@ class HangulUtilTest {
     }
 
     @Test
-    void compareWords_과vs가_복합중성_부분일치() {
-        // 정답 '과' (ㄱ+ㅗ+ㅏ), 추측 '가' (ㄱ+ㅏ)
-        // → ㄱ:H, ㅏ는 정답 ㅘ의 ㅏ와 매칭 → M
-        List<SyllableResult> r = HangulUtil.compareWords("과", "가");
-        assertThat(r.get(0).marks()).extracting(JamoMark::jamo)
-                .containsExactly("ㄱ", "ㅏ");
-        assertThat(r.get(0).marks()).extracting(JamoMark::mark)
-                .containsExactly("H", "M");
+    void compareWords_jamoCountMismatch_throws() {
+        // 자모 수 다르면 예외 (서비스 레이어에서 INVALID_WORD_LENGTH 변환)
+        org.junit.jupiter.api.Assertions.assertThrows(
+                IllegalArgumentException.class,
+                () -> HangulUtil.compareWords("과", "가")  // 3 vs 2
+        );
     }
 
     @Test
-    void compareWords_가vs과_역방향() {
-        // 정답 '가' (ㄱ+ㅏ), 추측 '과' (ㄱ+ㅗ+ㅏ)
-        // → ㄱ:H, ㅗ:S (정답에 없음), ㅏ:M (정답에 있지만 위치는 다름... 아니, 위치 0이 ㅏ인데 추측 ㅏ는 위치 1)
-        // 사실 1단계 hit는 position-by-position. 정답 jung[0]=ㅏ, 추측 jung[0]=ㅗ → 미스. 추측 jung[1]=ㅏ vs 정답 jung[1]=없음 → 미스.
-        // 2단계: 정답 pool에 ㅏ 1개. 추측 ㅗ→pool에 없음 → S. 추측 ㅏ→pool에 있음 → M.
-        List<SyllableResult> r = HangulUtil.compareWords("가", "과");
-        assertThat(r.get(0).marks()).extracting(JamoMark::jamo)
-                .containsExactly("ㄱ", "ㅗ", "ㅏ");
+    void compareWords_사과vs아사_중복자모() {
+        // 정답 "사과" (ㅅㅏㄱㅗㅏ=5), 추측 "아사" (ㅇㅏㅅㅏ=4)... 4!=5 안 됨.
+        // 같은 자모수로 다시: 정답 "사과" (5) vs 추측 "사가나" (ㅅㅏㄱㅏㄴㅏ=6)... 6!=5
+        // 사림 = ㅅㅏㄹㅣㅁ = 5. OK.
+        // 1단계: CHO ㅅ=ㅅ H, ㄱ vs ㄹ no. JUNG ㅏ=ㅏ H, ㅗ vs ㅣ no, ㅏ vs (없음).
+        // Pool: CHO {ㄱ:1}, JUNG {ㅗ:1, ㅏ:1}, JONG {}.
+        // 추측 ㄹ(CHO) → S, ㅣ(JUNG) → S, ㅁ(JONG) → S.
+        List<SyllableResult> r = HangulUtil.compareWords("사과", "사림");
         assertThat(r.get(0).marks()).extracting(JamoMark::mark)
-                .containsExactly("H", "S", "M");
-    }
-
-    @Test
-    void compareWords_사과_사사_중복자모표준() {
-        // 정답 '사과' (ㅅ+ㅏ+ㄱ+ㅗ+ㅏ), 추측 '사사' (ㅅ+ㅏ+ㅅ+ㅏ)
-        // 음절 0: 사=사 → ㅅ:H, ㅏ:H
-        // 음절 1: 정답 과=ㄱ+ㅗ+ㅏ, 추측 사=ㅅ+ㅏ
-        //   1단계: jung[0] ㅗ vs ㅏ → 미스
-        //   2단계: pool[CHO]={ㄱ:1}, pool[JUNG]={ㅗ:1, ㅏ:1}
-        //     ㅅ(CHO) → pool에 없음 → S
-        //     ㅏ(JUNG) → pool에 있음 → M
-        List<SyllableResult> r = HangulUtil.compareWords("사과", "사사");
-        assertThat(r.get(1).marks()).extracting(JamoMark::jamo)
-                .containsExactly("ㅅ", "ㅏ");
+                .containsExactly("H", "H");           // 사 → ㅅ:H, ㅏ:H
         assertThat(r.get(1).marks()).extracting(JamoMark::mark)
-                .containsExactly("S", "M");
+                .containsExactly("S", "S", "S");      // 림 → 모두 S (ㄹ/ㅣ/ㅁ 정답에 없음)
     }
 
     @Test
@@ -149,5 +133,29 @@ class HangulUtilTest {
         List<HangulUtil.Jamo> r = HangulUtil.decompose('애');
         assertThat(r).extracting(HangulUtil.Jamo::jamo)
                 .containsExactly("ㅇ", "ㅏ", "ㅣ");
+    }
+
+    @Test
+    void countJamos_complex() {
+        assertThat(HangulUtil.countJamos("사과")).isEqualTo(5);   // ㅅㅏㄱㅗㅏ
+        assertThat(HangulUtil.countJamos("떼")).isEqualTo(4);     // ㄷㄷㅓㅣ
+        assertThat(HangulUtil.countJamos("닭")).isEqualTo(4);     // ㄷㅏㄹㄱ
+        assertThat(HangulUtil.countJamos("아이시떼루")).isEqualTo(12);
+    }
+
+    @Test
+    void compareWords_음절수다름_자모수같음() {
+        // 정답 "닭" (1음절, ㄷㅏㄹㄱ=4자모) vs 추측 "다리" (2음절, ㄷㅏㄹㅣ=4자모)
+        List<SyllableResult> r = HangulUtil.compareWords("닭", "다리");
+        // 추측 음절 0 = 다 → ㄷ:H, ㅏ:H
+        assertThat(r.get(0).marks()).extracting(JamoMark::jamo)
+                .containsExactly("ㄷ", "ㅏ");
+        assertThat(r.get(0).marks()).extracting(JamoMark::mark)
+                .containsExactly("H", "H");
+        // 추측 음절 1 = 리 → ㄹ(CHO):S (정답 ㄹ은 JONG이라 다른 kind), ㅣ(JUNG):S
+        assertThat(r.get(1).marks()).extracting(JamoMark::jamo)
+                .containsExactly("ㄹ", "ㅣ");
+        assertThat(r.get(1).marks()).extracting(JamoMark::mark)
+                .containsExactly("S", "S");
     }
 }
