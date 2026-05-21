@@ -55,6 +55,8 @@ spring:
       on-profile: local
 
 # 운영 프로필 (Oracle Cloud)
+# Next.js와 Spring Boot가 같은 서버에서 돌고, nginx가 프론트로 받아서
+# /api/*만 Next.js → Spring Boot로 internal rewrite. 즉 same-origin 통신.
 ---
 spring:
   config:
@@ -65,7 +67,7 @@ spring:
 app:
   cookie:
     secure: true        # HTTPS 전제
-    same-site: None     # Cross-site (Vercel → Oracle 서버)에서 쿠키 전송 위해 필수
+    same-site: Lax      # same-origin이라 Lax로 충분 (Strict는 OAuth류에서 깨질 수 있음)
 logging:
   level:
     root: INFO
