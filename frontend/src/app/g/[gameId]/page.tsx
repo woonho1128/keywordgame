@@ -11,6 +11,7 @@ type GameInfo = {
   gameId: string;
   gameType: GameType;
   wordLength: number;
+  jamoCount: number | null;       // WordGuess만 채워짐
   hintText: string | null;
   creatorNick: string | null;
   playCount: number;
@@ -157,7 +158,9 @@ export default function PlayPage() {
         </div>
         <div className="bg-gray-50 rounded-lg p-4 mb-4">
           <p className="text-sm text-gray-500">출제자: {game.creatorNick || '익명'}</p>
-          <p className="text-sm text-gray-500">정답 글자수: {game.wordLength}</p>
+          {game.gameType === 'WORDGUESS' && game.jamoCount != null && (
+            <p className="text-sm text-gray-500">정답 자모수: {game.jamoCount}개</p>
+          )}
           <p className="text-sm text-gray-500">
             플레이 {game.playCount}회 · 정답자 {game.solvedCount}명
           </p>
@@ -246,8 +249,8 @@ export default function PlayPage() {
             type="text"
             value={guessInput}
             onChange={(e) => setGuessInput(e.target.value)}
-            placeholder={`${game.wordLength}글자 한글`}
-            maxLength={game.wordLength}
+            placeholder="한글로 추측"
+            maxLength={20}
             className="flex-1 border border-gray-300 rounded-lg px-3 py-2"
           />
           <button type="submit" className="bg-hit text-white font-bold px-6 rounded-lg">
