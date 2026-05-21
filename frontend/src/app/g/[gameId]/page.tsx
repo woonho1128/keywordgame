@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { api, GameType } from '@/lib/api';
+import { api, GameType, setSessionKey } from '@/lib/api';
 import { SyllableResult } from '@/lib/hangul';
 import { HangulBoard } from '@/components/wordguess/HangulBoard';
 import { ShareButton } from '@/components/common/ShareButton';
@@ -69,6 +69,8 @@ export default function PlayPage() {
         method: 'POST',
         body: JSON.stringify({ playerNick: nick.trim() }),
       });
+      // sessionKey를 localStorage에 저장하여 이후 호출에 헤더로 첨부
+      setSessionKey(params.gameId, res.sessionKey);
       setStarted(true);
       setStatus(res.status);
     } catch (e) {
@@ -87,6 +89,7 @@ export default function PlayPage() {
       const res = await api<GuessResp>(`/api/v1/games/${params.gameId}/guess`, {
         method: 'POST',
         body: JSON.stringify({ guessWord: word }),
+        gameId: params.gameId,
       });
       if (res.letterResult) {
         setHistory((h) => [...h, {
@@ -108,7 +111,7 @@ export default function PlayPage() {
     try {
       const res = await api<{ answerWord: string; totalAttempts: number }>(
         `/api/v1/games/${params.gameId}/giveup`,
-        { method: 'POST' }
+        { method: 'POST', gameId: params.gameId }
       );
       setStatus('GAVE_UP');
       setRevealedAnswer(res.answerWord);

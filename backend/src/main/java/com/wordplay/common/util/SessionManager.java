@@ -36,7 +36,14 @@ public class SessionManager {
         return fresh;
     }
 
+    public static final String HEADER_NAME = "X-Session-Key";
+
     public String extract(HttpServletRequest req) {
+        // 1순위: 헤더 (proxy/HTTP 환경에서도 안전)
+        String h = req.getHeader(HEADER_NAME);
+        if (h != null && !h.isEmpty()) return h;
+
+        // 2순위: 쿠키 (fallback, 동일 origin HTTPS 환경에서 자연스러움)
         if (req.getCookies() == null) return null;
         for (Cookie c : req.getCookies()) {
             if (COOKIE_NAME.equals(c.getName())) return c.getValue();
