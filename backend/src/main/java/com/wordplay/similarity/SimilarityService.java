@@ -13,6 +13,7 @@ import java.nio.ByteOrder;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * WordSim 모드용 단어 임베딩 서비스.
@@ -40,6 +41,11 @@ public class SimilarityService {
     private List<String> vocab = Collections.emptyList();
     private int dimension = 0;
     private boolean loaded = false;
+
+    /** 정답별 참고 점수 (1위/10위/100위/1000위 유사도) 캐시. */
+    private final Map<String, ReferenceScores> referenceCache = new ConcurrentHashMap<>();
+
+    public record ReferenceScores(Float top1, Float top10, Float top100, Float top1000) {}
 
     @PostConstruct
     public void load() {
@@ -133,6 +139,37 @@ public class SimilarityService {
             if (s > guessSim) higher++;
         }
         return higher + 1;  // 자기보다 큰 게 N개면 N+1등
+    }
+
+    /**
+     * 정답 기준 참고 점수.
+     * 캐시되어 두 번째 호출부터는 O(1).
+     */
+    public ReferenceScores getReferenceScores(String answer) {
+        if (!loaded || !wordToVector.containsKey(answer)) {
+            return new ReferenceScores(null, null, null, null);
+        }
+        return referenceCache.computeIfAbsent(answer, this::computeReferenceScores);
+    }
+
+    private ReferenceScores computeReferenceScores(String answer) {
+        float[] va = wordToVector.get(answer);
+        List<Float> sims = new ArrayList<>(vocab.size());
+        for (String w : vocab) {
+            if (w.equals(answer)) continue;
+            sims.add(dot(va, wordToVector.get(w)));
+        }
+        sims.sort(Comparator.reverseOrder());
+        return new ReferenceScores(
+                pick(sims, 0),     // 1위
+                pick(sims, 9),     // 10위
+                pick(sims, 99),    // 100위
+                pick(sims, 999)    // 1000위
+        );
+    }
+
+    private static Float pick(List<Float> sorted, int idx) {
+        return idx < sorted.size() ? sorted.get(idx) : null;
     }
 
     private static float dot(float[] a, float[] b) {

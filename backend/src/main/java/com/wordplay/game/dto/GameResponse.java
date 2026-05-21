@@ -3,6 +3,7 @@ package com.wordplay.game.dto;
 import com.wordplay.common.util.HangulUtil;
 import com.wordplay.game.entity.Game;
 import com.wordplay.game.entity.GameType;
+import com.wordplay.similarity.SimilarityService.ReferenceScores;
 
 import java.time.Instant;
 
@@ -10,19 +11,35 @@ public record GameResponse(
         String gameId,
         GameType gameType,
         Integer wordLength,
-        Integer jamoCount,       // 정답의 총 자모 수 (꼬들 표준 — 음절 구조 노출 최소화)
+        Integer jamoCount,            // WordGuess: 정답 자모 수
         String hintText,
         String creatorNick,
         Instant createdAt,
         Integer playCount,
-        Integer solvedCount
+        Integer solvedCount,
+        // WordSim 참고 점수 (정답과의 유사도 분포)
+        Float top1Similarity,
+        Float top10Similarity,
+        Float top100Similarity,
+        Float top1000Similarity
 ) {
     public static GameResponse from(Game g) {
         return new GameResponse(
                 g.getGameId(), g.getGameType(), g.getWordLength(),
                 computeJamoCount(g),
                 g.getHintText(), g.getCreatorNick(), g.getCreatedAt(),
-                g.getPlayCount(), g.getSolvedCount()
+                g.getPlayCount(), g.getSolvedCount(),
+                null, null, null, null
+        );
+    }
+
+    public static GameResponse fromWithSim(Game g, ReferenceScores refs) {
+        return new GameResponse(
+                g.getGameId(), g.getGameType(), g.getWordLength(),
+                computeJamoCount(g),
+                g.getHintText(), g.getCreatorNick(), g.getCreatedAt(),
+                g.getPlayCount(), g.getSolvedCount(),
+                refs.top1(), refs.top10(), refs.top100(), refs.top1000()
         );
     }
 

@@ -77,6 +77,10 @@ public class GameService {
     public GameResponse getGame(String gameId) {
         Game g = gameRepository.findById(gameId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.GAME_NOT_FOUND));
+        if (g.getGameType() == GameType.WORDSIM && similarityService.isLoaded()) {
+            var refs = similarityService.getReferenceScores(g.getAnswerWord());
+            return GameResponse.fromWithSim(g, refs);
+        }
         return GameResponse.from(g);
     }
 

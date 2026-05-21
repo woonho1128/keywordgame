@@ -9,6 +9,18 @@ import { JamoInputCells } from '@/components/wordguess/JamoInputCells';
 import { ShareButton } from '@/components/common/ShareButton';
 import { GuessHistory, WordSimGuess } from '@/components/wordsim/GuessHistory';
 
+/** WordSim 참고 점수 표시 (1위/10위/100위/1000위 유사도) */
+function ReferenceScoreCell({ label, sim }: { label: string; sim: number | null }) {
+  return (
+    <div className="text-center">
+      <div className="text-gray-400">{label}</div>
+      <div className="font-bold text-gray-700 text-sm">
+        {sim != null ? (sim * 100).toFixed(2) : '-'}
+      </div>
+    </div>
+  );
+}
+
 type GameInfo = {
   gameId: string;
   gameType: GameType;
@@ -18,6 +30,11 @@ type GameInfo = {
   creatorNick: string | null;
   playCount: number;
   solvedCount: number;
+  // WordSim 참고 점수
+  top1Similarity: number | null;
+  top10Similarity: number | null;
+  top100Similarity: number | null;
+  top1000Similarity: number | null;
 };
 
 type StartResp = {
@@ -267,7 +284,7 @@ export default function PlayPage() {
         </div>
       </div>
 
-      <div className="flex flex-wrap gap-3 mb-6">
+      <div className="flex flex-wrap gap-3 mb-3">
         {game.gameType === 'WORDGUESS' && game.jamoCount != null && (
           <div className="inline-flex items-center gap-2 bg-gray-50 rounded-lg px-3 py-2 text-sm">
             <span className="text-gray-500">정답 자모</span>
@@ -280,6 +297,16 @@ export default function PlayPage() {
           </div>
         )}
       </div>
+
+      {/* WordSim 참고 점수 */}
+      {game.gameType === 'WORDSIM' && game.top1Similarity != null && (
+        <div className="mb-6 bg-gray-50 rounded-lg p-3 text-xs grid grid-cols-4 gap-2">
+          <ReferenceScoreCell label="1위" sim={game.top1Similarity} />
+          <ReferenceScoreCell label="10위" sim={game.top10Similarity} />
+          <ReferenceScoreCell label="100위" sim={game.top100Similarity} />
+          <ReferenceScoreCell label="1000위" sim={game.top1000Similarity} />
+        </div>
+      )}
 
       {game.gameType === 'WORDGUESS' ? (
         <HangulBoard history={history} />
