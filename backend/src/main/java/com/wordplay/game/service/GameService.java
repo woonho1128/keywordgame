@@ -12,6 +12,7 @@ import com.wordplay.game.dto.RecentGameItem;
 import com.wordplay.game.entity.Game;
 import com.wordplay.game.entity.GameType;
 import com.wordplay.game.repository.GameRepository;
+import com.wordplay.similarity.SimilarityService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.Page;
@@ -24,6 +25,7 @@ import org.springframework.transaction.annotation.Transactional;
 public class GameService {
 
     private final GameRepository gameRepository;
+    private final SimilarityService similarityService;
 
     @Value("${app.game.id-length:8}")
     private int gameIdLength;
@@ -40,10 +42,16 @@ public class GameService {
             throw new BusinessException(ErrorCode.INVALID_HANGUL);
         }
 
-        // TODO Phase 3: WordSim일 경우 TB_SIMILARITY 사전 존재 확인
-        // if (req.gameType() == GameType.WORDSIM && !similarityRepository.existsByWordA(answer)) {
-        //     throw new BusinessException(ErrorCode.WORD_NOT_IN_DICTIONARY);
-        // }
+        // WordSim: 정답이 사전에 있는지 확인
+        if (req.gameType() == GameType.WORDSIM) {
+            if (!similarityService.isLoaded()) {
+                throw new BusinessException(ErrorCode.INTERNAL_ERROR, "WordSim 사전이 로드되지 않았습니다");
+            }
+            if (!similarityService.contains(answer)) {
+                throw new BusinessException(ErrorCode.WORD_NOT_IN_DICTIONARY,
+                        "사전에 없는 단어입니다. 다른 단어를 시도해주세요");
+            }
+        }
 
         Game game = Game.builder()
                 .gameId(generateUniqueId())

@@ -46,6 +46,9 @@ app:
   game:
     id-length: 8
     max-word-length: 20
+  wordsim:
+    # WordSim 벡터 사전 위치 (없으면 WordSim 모드 자동 비활성화)
+    vectors-path: ${WORDSIM_VECTORS_PATH:/etc/wordplay/word_vectors.bin}
 
 ---
 # 로컬 개발 프로필

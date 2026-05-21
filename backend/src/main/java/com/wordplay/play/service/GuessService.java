@@ -17,6 +17,7 @@ import com.wordplay.play.entity.PlayRecord;
 import com.wordplay.play.entity.PlayStatus;
 import com.wordplay.play.repository.GuessLogRepository;
 import com.wordplay.play.repository.PlayRecordRepository;
+import com.wordplay.similarity.SimilarityService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -34,6 +35,7 @@ public class GuessService {
     private final GameRepository gameRepository;
     private final PlayRecordRepository playRecordRepository;
     private final GuessLogRepository guessLogRepository;
+    private final SimilarityService similarityService;
     private final ObjectMapper objectMapper;
 
     @Transactional
@@ -108,18 +110,28 @@ public class GuessService {
     }
 
     // ------------------------------------------------------------------
-    // WordSim — Phase 3에서 TB_SIMILARITY 조회로 채울 자리
+    // WordSim — 메모리 임베딩 사전 기반 유사도/순위 계산
     // ------------------------------------------------------------------
     private GuessResponse guessWordSim(Game game, PlayRecord record, String guess) {
+        if (!similarityService.isLoaded()) {
+            throw new BusinessException(ErrorCode.INTERNAL_ERROR, "WordSim 사전이 로드되지 않았습니다");
+        }
+
         boolean correct = guess.equals(game.getAnswerWord());
         int order = record.getAttemptCount() + 1;
 
-        // TODO Phase 3: similarityRepository로 TB_SIMILARITY 조회
-        // SELECT similarity, rank_value FROM TB_SIMILARITY
-        // WHERE word_a = :answer AND word_b = :guess
-        boolean inDict = correct;       // stub
-        Float similarity = correct ? 1.0f : null;
-        Integer rank = correct ? 1 : null;
+        boolean inDict = similarityService.contains(guess);
+        Float similarity = null;
+        Integer rank = null;
+
+        if (correct) {
+            similarity = 1.0f;
+            rank = 0;
+        } else if (inDict) {
+            similarity = similarityService.cosine(game.getAnswerWord(), guess);
+            rank = similarityService.rank(game.getAnswerWord(), guess);
+        }
+        // inDict=false → similarity/rank null → 프론트에서 "사전에 없는 단어" 메시지
 
         guessLogRepository.save(GuessLog.builder()
                 .recordId(record.getRecordId())

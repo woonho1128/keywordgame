@@ -15,18 +15,13 @@ export default function HomePage() {
           <p className="text-gray-600">꼬들형 한글 워들. 정답 자모수에 맞춰 보드가 자동 조정됩니다.</p>
         </Link>
 
-        <div
-          className="border-2 border-gray-200 rounded-xl p-8 opacity-50 cursor-not-allowed bg-gray-50"
-          title="준비중 — 곧 출시 예정"
+        <Link
+          href="/create/wordsim"
+          className="border-2 border-gray-200 rounded-xl p-8 hover:border-move transition"
         >
-          <h2 className="text-2xl font-bold mb-2 flex items-center gap-2">
-            🔤 WordSim
-            <span className="text-xs font-normal bg-gray-300 text-gray-700 px-2 py-0.5 rounded-full">
-              준비중
-            </span>
-          </h2>
+          <h2 className="text-2xl font-bold mb-2">🔤 WordSim</h2>
           <p className="text-gray-600">꼬맨틀형 의미 유사도 게임. 추측 단어가 정답과 얼마나 가까운지 점수로 표시.</p>
-        </div>
+        </Link>
       </div>
     </main>
   );

@@ -7,6 +7,7 @@ import { SyllableResult } from '@/lib/hangul';
 import { HangulBoard } from '@/components/wordguess/HangulBoard';
 import { JamoInputCells } from '@/components/wordguess/JamoInputCells';
 import { ShareButton } from '@/components/common/ShareButton';
+import { GuessHistory, WordSimGuess } from '@/components/wordsim/GuessHistory';
 
 type GameInfo = {
   gameId: string;
@@ -33,7 +34,13 @@ type GuessResp = {
   guessWord: string;
   guessOrder: number;
   isCorrect: boolean;
+  // WordGuess
   letterResult: SyllableResult[] | null;
+  // WordSim
+  inDictionary: boolean | null;
+  similarity: number | null;
+  similarityScore: number | null;
+  rank: number | null;
 };
 
 type GuessHistoryItem = {
@@ -52,6 +59,8 @@ export default function PlayPage() {
   const [status, setStatus] = useState<'IN_PROGRESS' | 'SOLVED' | 'GAVE_UP'>('IN_PROGRESS');
   const [guessInput, setGuessInput] = useState('');
   const [history, setHistory] = useState<GuessHistoryItem[]>([]);
+  const [simHistory, setSimHistory] = useState<WordSimGuess[]>([]);
+  const [lastSimGuess, setLastSimGuess] = useState<WordSimGuess | undefined>();
   const [error, setError] = useState<string | null>(null);
   const [revealedAnswer, setRevealedAnswer] = useState<string | null>(null);
 
@@ -92,6 +101,8 @@ export default function PlayPage() {
         body: JSON.stringify({ guessWord: word }),
         gameId: params.gameId,
       });
+
+      // WordGuess 응답
       if (res.letterResult) {
         setHistory((h) => [...h, {
           guessWord: res.guessWord,
@@ -99,6 +110,27 @@ export default function PlayPage() {
           isCorrect: res.isCorrect,
         }]);
       }
+
+      // WordSim 응답
+      if (game?.gameType === 'WORDSIM') {
+        if (res.inDictionary === false) {
+          setError('사전에 없는 단어입니다');
+        } else if (res.similarity != null) {
+          const entry: WordSimGuess = {
+            guessWord: res.guessWord,
+            similarity: res.similarity,
+            rank: res.rank,
+            isCorrect: res.isCorrect,
+          };
+          setSimHistory((h) => {
+            // 같은 단어 재추측 방지
+            if (h.some(x => x.guessWord === entry.guessWord)) return h;
+            return [...h, entry];
+          });
+          setLastSimGuess(entry);
+        }
+      }
+
       if (res.isCorrect) setStatus('SOLVED');
       setGuessInput('');
     } catch (e) {
@@ -249,7 +281,11 @@ export default function PlayPage() {
         )}
       </div>
 
-      <HangulBoard history={history} />
+      {game.gameType === 'WORDGUESS' ? (
+        <HangulBoard history={history} />
+      ) : (
+        <GuessHistory history={simHistory} lastGuess={lastSimGuess} />
+      )}
 
       {status === 'IN_PROGRESS' && (
         <div className="mt-8 space-y-3">
@@ -270,23 +306,33 @@ export default function PlayPage() {
               </button>
             </>
           ) : (
-            // Fallback (WORDSIM 또는 jamoCount 없는 경우)
-            <form onSubmit={(e) => { e.preventDefault(); handleGuess(); }} className="flex gap-2">
-              <input
-                type="text"
-                value={guessInput}
-                onChange={(e) => setGuessInput(e.target.value)}
-                placeholder="한글로 추측"
-                maxLength={20}
-                className="flex-1 border border-gray-300 rounded-lg px-3 py-2"
-              />
-              <button type="submit" className="bg-hit text-white font-bold px-6 rounded-lg">
-                추측
-              </button>
-              <button type="button" onClick={handleGiveUp} className="border border-gray-300 px-4 rounded-lg text-gray-500">
+            // WordSim: 단어를 자유롭게 입력
+            <>
+              <form onSubmit={(e) => { e.preventDefault(); handleGuess(); }} className="flex gap-2">
+                <input
+                  type="text"
+                  value={guessInput}
+                  onChange={(e) => setGuessInput(e.target.value)}
+                  placeholder="한국어 명사 (예: 사과)"
+                  maxLength={20}
+                  className="flex-1 border border-gray-300 rounded-lg px-3 py-2"
+                />
+                <button
+                  type="submit"
+                  disabled={!guessInput.trim()}
+                  className="bg-move text-white font-bold px-6 rounded-lg disabled:opacity-40"
+                >
+                  추측
+                </button>
+              </form>
+              <button
+                type="button"
+                onClick={handleGiveUp}
+                className="w-full border border-gray-300 py-2 rounded-lg text-gray-500 hover:text-red-500"
+              >
                 포기
               </button>
-            </form>
+            </>
           )}
         </div>
       )}
