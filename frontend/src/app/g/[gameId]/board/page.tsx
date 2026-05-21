@@ -35,10 +35,15 @@ export default function LeaderboardPage() {
   return (
     <main className="min-h-screen p-8 max-w-2xl mx-auto">
       <div className="flex items-baseline justify-between mb-6">
-        <h1 className="text-2xl font-bold">리더보드</h1>
-        <Link href={`/g/${params.gameId}`} className="text-sm text-gray-500 underline">
-          ← 게임으로
-        </Link>
+        <h1 className="text-2xl font-bold">🏆 리더보드</h1>
+        <div className="flex gap-4 items-baseline text-sm text-gray-500">
+          <Link href="/" className="underline hover:text-hit">
+            🏠 홈
+          </Link>
+          <Link href={`/g/${params.gameId}`} className="underline hover:text-hit">
+            ← 게임으로
+          </Link>
+        </div>
       </div>
 
       <p className="text-sm text-gray-500 mb-4">총 {data.totalPlayers}명이 정답을 맞췄습니다.</p>

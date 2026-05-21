@@ -139,12 +139,21 @@ export default function PlayPage() {
           <h1 className="text-2xl font-bold">
             {game.gameType === 'WORDGUESS' ? '🟩 WordGuess' : '🔤 WordSim'}
           </h1>
-          <button
-            onClick={() => router.push(`/g/${params.gameId}/board`)}
-            className="text-sm text-gray-500 underline hover:text-hit"
-          >
-            🏆 리더보드 →
-          </button>
+          <div className="flex gap-4 items-baseline text-sm text-gray-500">
+            <button
+              onClick={() => router.push('/')}
+              className="underline hover:text-hit"
+              title="홈으로 (다른 게임 만들기 / 다른 게임 찾기)"
+            >
+              🏠 홈
+            </button>
+            <button
+              onClick={() => router.push(`/g/${params.gameId}/board`)}
+              className="underline hover:text-hit"
+            >
+              🏆 리더보드 →
+            </button>
+          </div>
         </div>
         <div className="bg-gray-50 rounded-lg p-4 mb-4">
           <p className="text-sm text-gray-500">출제자: {game.creatorNick || '익명'}</p>
@@ -191,7 +200,14 @@ export default function PlayPage() {
     <main className="min-h-screen p-8 max-w-2xl mx-auto">
       <div className="flex items-baseline justify-between mb-6">
         <h1 className="text-2xl font-bold">{game.gameType === 'WORDGUESS' ? '🟩 WordGuess' : '🔤 WordSim'}</h1>
-        <div className="flex gap-4 items-baseline">
+        <div className="flex gap-4 items-baseline text-sm text-gray-500">
+          <button
+            onClick={() => router.push('/')}
+            className="underline hover:text-hit"
+            title="홈으로"
+          >
+            🏠 홈
+          </button>
           <button
             onClick={async () => {
               try {
@@ -202,16 +218,16 @@ export default function PlayPage() {
                 }
               } catch {}
             }}
-            className="text-sm text-gray-500 underline hover:text-hit"
+            className="underline hover:text-hit"
             title="이 게임 URL 복사"
           >
             🔗 공유
           </button>
           <button
             onClick={() => router.push(`/g/${params.gameId}/board`)}
-            className="text-sm text-gray-500 underline"
+            className="underline hover:text-hit"
           >
-            리더보드 →
+            🏆 리더보드 →
           </button>
         </div>
       </div>
