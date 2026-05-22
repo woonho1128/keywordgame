@@ -1,14 +1,21 @@
 package com.wordplay.play.service;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.wordplay.common.exception.BusinessException;
 import com.wordplay.common.exception.ErrorCode;
+import com.wordplay.common.util.HangulUtil.SyllableResult;
 import com.wordplay.game.entity.Game;
 import com.wordplay.game.repository.GameRepository;
 import com.wordplay.play.dto.GiveUpResponse;
+import com.wordplay.play.dto.PlayStateResponse;
 import com.wordplay.play.dto.StartPlayRequest;
 import com.wordplay.play.dto.StartPlayResponse;
+import com.wordplay.play.entity.GuessLog;
 import com.wordplay.play.entity.PlayRecord;
 import com.wordplay.play.entity.PlayStatus;
+import com.wordplay.play.repository.GuessLogRepository;
 import com.wordplay.play.repository.PlayRecordRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -16,6 +23,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.util.List;
 
 @Service
 @RequiredArgsConstructor
@@ -23,6 +31,8 @@ public class PlayService {
 
     private final GameRepository gameRepository;
     private final PlayRecordRepository playRecordRepository;
+    private final GuessLogRepository guessLogRepository;
+    private final ObjectMapper objectMapper;
 
     @Transactional
     public StartPlayResponse start(String gameId, StartPlayRequest req, String sessionKey) {
@@ -81,5 +91,58 @@ public class PlayService {
         playRecordRepository.save(record);
 
         return new GiveUpResponse(game.getAnswerWord(), record.getAttemptCount());
+    }
+
+    /**
+     * 세션이 살아있는 플레이어의 현재 플레이 상태 + 추측 기록 전체를 반환.
+     * 페이지 재진입 시 닉네임 입력 없이 진행 상황을 복구하는 데 쓰인다.
+     */
+    @Transactional(readOnly = true)
+    public PlayStateResponse getState(String gameId, String sessionKey) {
+        PlayRecord record = playRecordRepository
+                .findByGameIdAndSessionKey(gameId, sessionKey)
+                .orElseThrow(() -> new BusinessException(ErrorCode.SESSION_NOT_FOUND));
+
+        Game game = gameRepository.findById(gameId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.GAME_NOT_FOUND));
+
+        List<PlayStateResponse.GuessItem> guesses = guessLogRepository
+                .findByRecordIdOrderByGuessOrderAsc(record.getRecordId())
+                .stream()
+                .map(this::toGuessItem)
+                .toList();
+
+        String revealedAnswer = (record.getStatus() == PlayStatus.GAVE_UP)
+                ? game.getAnswerWord() : null;
+
+        return new PlayStateResponse(
+                game.getGameType(),
+                record.getStatus().name(),
+                record.getAttemptCount(),
+                record.getPlayerNick(),
+                record.getTimeSpentSec(),
+                revealedAnswer,
+                guesses
+        );
+    }
+
+    private PlayStateResponse.GuessItem toGuessItem(GuessLog log) {
+        List<SyllableResult> letterResult = null;
+        if (log.getLetterResult() != null) {
+            try {
+                letterResult = objectMapper.readValue(
+                        log.getLetterResult(), new TypeReference<List<SyllableResult>>() {});
+            } catch (JsonProcessingException e) {
+                throw new BusinessException(ErrorCode.INTERNAL_ERROR, "Failed to parse letterResult");
+            }
+        }
+        return new PlayStateResponse.GuessItem(
+                log.getGuessWord(),
+                log.getGuessOrder(),
+                log.getIsCorrect(),
+                letterResult,
+                log.getSimilarity(),
+                log.getRankValue()
+        );
     }
 }

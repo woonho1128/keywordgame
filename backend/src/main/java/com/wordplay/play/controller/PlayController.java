@@ -7,6 +7,7 @@ import com.wordplay.common.util.SessionManager;
 import com.wordplay.play.dto.GiveUpResponse;
 import com.wordplay.play.dto.GuessRequest;
 import com.wordplay.play.dto.GuessResponse;
+import com.wordplay.play.dto.PlayStateResponse;
 import com.wordplay.play.dto.StartPlayRequest;
 import com.wordplay.play.dto.StartPlayResponse;
 import com.wordplay.play.service.GuessService;
@@ -35,6 +36,18 @@ public class PlayController {
     ) {
         String sessionKey = sessionManager.getOrCreate(request, response);
         return ApiResponse.success(playService.start(gameId, req, sessionKey));
+    }
+
+    @GetMapping("/state")
+    public ApiResponse<PlayStateResponse> state(
+            @PathVariable String gameId,
+            HttpServletRequest request
+    ) {
+        String sessionKey = sessionManager.extract(request);
+        if (sessionKey == null) {
+            throw new BusinessException(ErrorCode.SESSION_NOT_FOUND);
+        }
+        return ApiResponse.success(playService.getState(gameId, sessionKey));
     }
 
     @PostMapping("/guess")

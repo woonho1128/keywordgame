@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { api, GameType, setSessionKey } from '@/lib/api';
+import { api, GameType, setSessionKey, getSessionKey } from '@/lib/api';
 import { SyllableResult } from '@/lib/hangul';
 import { HangulBoard } from '@/components/wordguess/HangulBoard';
 import { JamoInputCells } from '@/components/wordguess/JamoInputCells';
@@ -73,6 +73,23 @@ type GuessHistoryItem = {
   isCorrect: boolean;
 };
 
+type PlayState = {
+  gameType: GameType;
+  status: 'IN_PROGRESS' | 'SOLVED' | 'GAVE_UP';
+  attemptCount: number;
+  playerNick: string;
+  timeSpentSec: number | null;
+  revealedAnswer: string | null;
+  guesses: {
+    guessWord: string;
+    guessOrder: number;
+    isCorrect: boolean;
+    letterResult: SyllableResult[] | null;
+    similarity: number | null;
+    rank: number | null;
+  }[];
+};
+
 export default function PlayPage() {
   const params = useParams<{ gameId: string }>();
   const router = useRouter();
@@ -89,12 +106,56 @@ export default function PlayPage() {
   const [revealedAnswer, setRevealedAnswer] = useState<string | null>(null);
   const [timeSpentSec, setTimeSpentSec] = useState<number | null>(null);
   const [attemptCount, setAttemptCount] = useState(0);
+  // 저장된 세션으로 진행 상황을 복구하는 중인지 (true 동안 닉네임 화면 대신 로딩 표시)
+  const [restoring, setRestoring] = useState(false);
 
   // 1) 게임 메타 로드
   useEffect(() => {
     api<GameInfo>(`/api/v1/games/${params.gameId}`)
       .then(setGame)
       .catch((e) => setError(e.message));
+  }, [params.gameId]);
+
+  // 2) 저장된 세션이 있으면 진행 상황 자동 복구 (재진입 시 닉네임 재입력 방지)
+  useEffect(() => {
+    if (!getSessionKey(params.gameId)) return;
+    setRestoring(true);
+    api<PlayState>(`/api/v1/games/${params.gameId}/state`, { gameId: params.gameId })
+      .then((st) => {
+        setStarted(true);
+        setStatus(st.status);
+        setAttemptCount(st.attemptCount);
+        setNick(st.playerNick);
+        if (st.timeSpentSec != null) setTimeSpentSec(st.timeSpentSec);
+        if (st.revealedAnswer) setRevealedAnswer(st.revealedAnswer);
+
+        if (st.gameType === 'WORDGUESS') {
+          setHistory(
+            st.guesses
+              .filter((g) => g.letterResult != null)
+              .map((g) => ({
+                guessWord: g.guessWord,
+                letterResult: g.letterResult!,
+                isCorrect: g.isCorrect,
+              }))
+          );
+        } else {
+          const sims: WordSimGuess[] = st.guesses
+            .filter((g) => g.similarity != null)
+            .map((g) => ({
+              guessWord: g.guessWord,
+              similarity: g.similarity!,
+              rank: g.rank,
+              isCorrect: g.isCorrect,
+            }));
+          setSimHistory(sims);
+          if (sims.length) setLastSimGuess(sims[sims.length - 1]);
+        }
+      })
+      .catch(() => {
+        // 세션 만료/없음 → 그냥 닉네임 화면 표시
+      })
+      .finally(() => setRestoring(false));
   }, [params.gameId]);
 
   // 게임 시작
@@ -201,6 +262,11 @@ export default function PlayPage() {
 
   // 현재 페이지 URL (브라우저 환경에서만 정확)
   const shareUrl = typeof window !== 'undefined' ? window.location.href : '';
+
+  // 저장된 세션 복구 중 — 닉네임 화면이 잠깐 보이지 않도록 로딩 표시
+  if (!started && restoring) {
+    return <main className="p-8 text-gray-400">이어서 불러오는 중...</main>;
+  }
 
   // ----- 닉네임 입력 화면 -----
   if (!started) {
