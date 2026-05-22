@@ -26,6 +26,7 @@ function ReferenceScoreCell({ label, sim }: { label: string; sim: number | null 
 type GameInfo = {
   gameId: string;
   gameType: GameType;
+  title: string | null;
   wordLength: number;
   jamoCount: number | null;       // WordGuess만 채워짐
   hintText: string | null;
@@ -293,6 +294,9 @@ export default function PlayPage() {
           </div>
         </div>
         <div className="bg-gray-50 rounded-lg p-4 mb-4">
+          {game.title && (
+            <p className="text-base font-bold text-gray-800 mb-1">{game.title}</p>
+          )}
           <p className="text-sm text-gray-500">출제자: {game.creatorNick || '익명'}</p>
           {game.gameType === 'WORDGUESS' && game.jamoCount != null && (
             <p className="text-sm text-gray-500">정답 자모수: {game.jamoCount}개</p>
@@ -308,6 +312,12 @@ export default function PlayPage() {
         {/* 공유 URL 영역 */}
         <div className="mb-6 border border-gray-200 rounded-lg p-4 bg-yellow-50/40">
           <p className="text-xs text-gray-500 mb-2">📨 친구에게 공유</p>
+          <div className="text-sm bg-white rounded p-2 border mb-2">
+            <p className="font-bold text-gray-800">
+              {game.gameType === 'WORDGUESS' ? '🟩' : '🔤'} {game.title || '제목 없음'}
+            </p>
+            <p className="text-xs text-gray-500 mt-0.5">출제자: {game.creatorNick || '익명'}</p>
+          </div>
           <p className="text-xs text-gray-700 mb-3 break-all font-mono bg-white rounded p-2 border">
             {shareUrl}
           </p>

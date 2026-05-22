@@ -9,6 +9,7 @@
 CREATE TABLE IF NOT EXISTS TB_GAME (
     game_id         VARCHAR(12)   PRIMARY KEY,
     game_type       VARCHAR(20)   NOT NULL,
+    title           VARCHAR(60),
     answer_word     VARCHAR(100)  NOT NULL,
     word_length     INTEGER       NOT NULL,
     hint_text       VARCHAR(500),
@@ -96,6 +97,7 @@ CREATE INDEX IF NOT EXISTS idx_sim_lookup
 -- 코멘트
 -- ---------------------------------------------------------------------
 COMMENT ON TABLE TB_GAME IS '게임 방 - 정답/힌트/모드';
+COMMENT ON COLUMN TB_GAME.title IS '게임 제목 (구분용, 신규 게임은 필수)';
 COMMENT ON COLUMN TB_GAME.answer_word IS '정답 단어 (NFC 정규화, 평문 저장)';
 COMMENT ON COLUMN TB_PLAY_RECORD.status IS 'IN_PROGRESS | SOLVED | GAVE_UP';
 COMMENT ON COLUMN TB_GUESS_LOG.letter_result IS 'WordGuess 자모 비교 결과 (Wordle 표준 H/M/S)';

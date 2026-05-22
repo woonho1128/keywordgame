@@ -7,12 +7,15 @@ import { api, GameType } from '@/lib/api';
 type CreateResp = {
   gameId: string;
   shareUrl: string;
+  title: string;
+  creatorNick: string;
   gameType: GameType;
   wordLength: number;
 };
 
 export default function CreateWordSimPage() {
   const router = useRouter();
+  const [title, setTitle] = useState('');
   const [answerWord, setAnswerWord] = useState('');
   const [hintText, setHintText] = useState('');
   const [creatorNick, setCreatorNick] = useState('');
@@ -22,6 +25,9 @@ export default function CreateWordSimPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
+
+    if (!title.trim()) return setError('게임 제목을 입력해주세요');
+    if (!creatorNick.trim()) return setError('출제자 닉네임을 입력해주세요');
 
     const normalized = answerWord.trim();
     if (!normalized) return setError('정답을 입력해주세요');
@@ -33,9 +39,10 @@ export default function CreateWordSimPage() {
         method: 'POST',
         body: JSON.stringify({
           gameType: 'WORDSIM',
+          title: title.trim(),
           answerWord: normalized,
           hintText: hintText.trim() || null,
-          creatorNick: creatorNick.trim() || null,
+          creatorNick: creatorNick.trim(),
           isPublic: true,
         }),
       });
@@ -55,6 +62,19 @@ export default function CreateWordSimPage() {
       </p>
 
       <form onSubmit={handleSubmit} className="space-y-6">
+        <div>
+          <label className="block text-sm font-medium mb-1">게임 제목 *</label>
+          <input
+            type="text"
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            placeholder="예: 점심 내기 1차"
+            maxLength={60}
+            className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:border-move"
+          />
+          <p className="text-xs text-gray-400 mt-1">공유 시 어떤 게임인지 구분하는 이름입니다</p>
+        </div>
+
         <div>
           <label className="block text-sm font-medium mb-1">정답 단어 *</label>
           <input
@@ -81,7 +101,7 @@ export default function CreateWordSimPage() {
         </div>
 
         <div>
-          <label className="block text-sm font-medium mb-1">출제자 닉네임 (선택)</label>
+          <label className="block text-sm font-medium mb-1">출제자 닉네임 *</label>
           <input
             type="text"
             value={creatorNick}

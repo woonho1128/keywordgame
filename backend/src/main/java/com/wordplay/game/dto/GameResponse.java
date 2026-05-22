@@ -10,6 +10,7 @@ import java.time.Instant;
 public record GameResponse(
         String gameId,
         GameType gameType,
+        String title,
         Integer wordLength,
         Integer jamoCount,            // WordGuess: 정답 자모 수
         String hintText,
@@ -26,7 +27,7 @@ public record GameResponse(
 ) {
     public static GameResponse from(Game g, Integer wordGuessMaxAttempts) {
         return new GameResponse(
-                g.getGameId(), g.getGameType(), g.getWordLength(),
+                g.getGameId(), g.getGameType(), g.getTitle(), g.getWordLength(),
                 computeJamoCount(g),
                 g.getHintText(), g.getCreatorNick(), g.getCreatedAt(),
                 g.getPlayCount(), g.getSolvedCount(),
@@ -37,7 +38,7 @@ public record GameResponse(
 
     public static GameResponse fromWithSim(Game g, ReferenceScores refs) {
         return new GameResponse(
-                g.getGameId(), g.getGameType(), g.getWordLength(),
+                g.getGameId(), g.getGameType(), g.getTitle(), g.getWordLength(),
                 computeJamoCount(g),
                 g.getHintText(), g.getCreatorNick(), g.getCreatedAt(),
                 g.getPlayCount(), g.getSolvedCount(),

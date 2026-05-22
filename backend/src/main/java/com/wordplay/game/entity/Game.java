@@ -22,6 +22,10 @@ public class Game {
     @Column(name = "game_type", nullable = false, length = 20)
     private GameType gameType;
 
+    /** 게임 제목 — 구분용. 신규 게임은 필수, 제목 도입 이전 게임은 null일 수 있음. */
+    @Column(name = "title", length = 60)
+    private String title;
+
     @Column(name = "answer_word", nullable = false, length = 100)
     private String answerWord;
 

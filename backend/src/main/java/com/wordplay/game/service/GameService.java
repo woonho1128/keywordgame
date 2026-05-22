@@ -61,10 +61,11 @@ public class GameService {
         Game game = Game.builder()
                 .gameId(generateUniqueId())
                 .gameType(req.gameType())
+                .title(req.title().trim())
                 .answerWord(answer)
                 .wordLength(answer.length())
                 .hintText(req.hintText())
-                .creatorNick(req.creatorNick())
+                .creatorNick(req.creatorNick().trim())
                 .isPublic(req.isPublic() == null ? Boolean.TRUE : req.isPublic())
                 .build();
 
@@ -73,6 +74,8 @@ public class GameService {
         return new CreateGameResponse(
                 game.getGameId(),
                 "/g/" + game.getGameId(),
+                game.getTitle(),
+                game.getCreatorNick(),
                 game.getGameType(),
                 game.getWordLength()
         );
