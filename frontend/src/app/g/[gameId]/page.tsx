@@ -350,6 +350,9 @@ export default function PlayPage() {
           {game.hintText && <p className="mt-2"><span className="font-bold">힌트:</span> {game.hintText}</p>}
           {game.gameType === 'LIE_HINT' && (
             <div className="mt-3 space-y-2">
+              <p className="text-sm text-gray-600">
+                힌트 3개 중 하나는 거짓입니다. 정답 단어를 맞힌 뒤, 어떤 힌트가 거짓인지까지 골라야 성공입니다.
+              </p>
               {hints.map((hint, index) => (
                 <div key={index} className="rounded-lg bg-white border px-3 py-2 text-sm">
                   <span className="font-bold text-gray-500">{index + 1}.</span> {hint}
@@ -420,27 +423,37 @@ export default function PlayPage() {
       )}
 
       {game.gameType === 'LIE_HINT' && (
-        <div className="mb-6 space-y-2">
-          {hints.map((hint, index) => {
-            const revealed = status === 'GAVE_UP' && revealedLieIndex === index;
-            return (
-              <div
-                key={index}
-                className={`rounded-lg border px-4 py-3 text-sm ${
-                  revealed ? 'border-red-300 bg-red-50 text-red-700' : 'border-gray-200 bg-gray-50'
-                }`}
-              >
-                <span className="font-bold">{index + 1}.</span> {hint}
-                {revealed && <span className="ml-2 font-bold">거짓 힌트</span>}
-              </div>
-            );
-          })}
+        <div className="mb-6 space-y-3">
+          <div className="rounded-lg bg-yellow-50 border border-yellow-200 px-4 py-3 text-sm text-gray-700">
+            <p className="font-bold mb-1">게임 방법</p>
+            <p>
+              아래 힌트 3개 중 <span className="font-bold">하나는 거짓</span>입니다.
+              먼저 정답 단어를 추측해 맞히고, 이어서 어떤 힌트가 거짓인지 고르세요.
+              정답 단어와 거짓 힌트를 <span className="font-bold">모두</span> 맞혀야 성공입니다.
+            </p>
+          </div>
+          <div className="space-y-2">
+            {hints.map((hint, index) => {
+              const revealed = status === 'GAVE_UP' && revealedLieIndex === index;
+              return (
+                <div
+                  key={index}
+                  className={`rounded-lg border px-4 py-3 text-sm ${
+                    revealed ? 'border-red-300 bg-red-50 text-red-700' : 'border-gray-200 bg-gray-50'
+                  }`}
+                >
+                  <span className="font-bold">{index + 1}.</span> {hint}
+                  {revealed && <span className="ml-2 font-bold">거짓 힌트</span>}
+                </div>
+              );
+            })}
+          </div>
         </div>
       )}
 
-      {game.gameType === 'WORDGUESS' ? (
-        <HangulBoard history={history} />
-      ) : game.gameType === 'WORDSIM' ? (
+      {game.gameType === 'WORDGUESS' && <HangulBoard history={history} />}
+
+      {game.gameType === 'WORDSIM' && (
         <GuessHistory
           history={simHistory}
           lastGuess={lastSimGuess}
@@ -462,21 +475,6 @@ export default function PlayPage() {
             ) : undefined
           }
         />
-      ) : (
-        <div className="space-y-3">
-          {lieHistory.length === 0 ? (
-            <div className="text-center text-gray-400 py-8">아직 시도가 없습니다.</div>
-          ) : (
-            lieHistory.map((item, index) => (
-              <div key={`${item.guessWord}-${index}`} className="flex items-center justify-between border-b py-2">
-                <span><span className="text-gray-400 mr-2">{index + 1}</span>{item.guessWord}</span>
-                <span className={item.isCorrect ? 'font-bold text-hit' : 'text-gray-400'}>
-                  {item.isCorrect ? '정답' : '아님'}
-                </span>
-              </div>
-            ))
-          )}
-        </div>
       )}
 
       {status === 'IN_PROGRESS' && (
@@ -531,6 +529,26 @@ export default function PlayPage() {
           >
             포기
           </button>
+        </div>
+      )}
+
+      {game.gameType === 'LIE_HINT' && (
+        <div className="mt-8">
+          <p className="text-sm font-medium text-gray-500 mb-2">시도 내용</p>
+          {lieHistory.length === 0 ? (
+            <div className="text-center text-gray-400 py-6">아직 시도가 없습니다.</div>
+          ) : (
+            <div>
+              {lieHistory.map((item, index) => (
+                <div key={`${item.guessWord}-${index}`} className="flex items-center justify-between border-b py-2">
+                  <span><span className="text-gray-400 mr-2">{index + 1}</span>{item.guessWord}</span>
+                  <span className={item.isCorrect ? 'font-bold text-hit' : 'text-gray-400'}>
+                    {item.isCorrect ? '정답' : '아님'}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
 
