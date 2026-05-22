@@ -420,31 +420,16 @@ export default function PlayPage() {
       {game.gameType === 'WORDGUESS' ? (
         <HangulBoard history={history} />
       ) : (
-        <GuessHistory history={simHistory} lastGuess={lastSimGuess} />
-      )}
-
-      {status === 'IN_PROGRESS' && (
-        <div className="mt-8 space-y-3">
-          {game.gameType === 'WORDGUESS' && game.jamoCount ? (
-            <>
-              <JamoInputCells
-                jamoCount={game.jamoCount}
-                value={guessInput}
-                onChange={setGuessInput}
-                onSubmit={handleGuess}
-              />
-              <button
-                type="button"
-                onClick={handleGiveUp}
-                className="w-full border border-gray-300 py-2 rounded-lg text-gray-500 hover:text-red-500"
+        <GuessHistory
+          history={simHistory}
+          lastGuess={lastSimGuess}
+          inputSlot={
+            status === 'IN_PROGRESS' ? (
+              // WordSim: 입력창을 '방금 시도'와 단어 리스트 사이에 고정
+              <form
+                onSubmit={(e) => { e.preventDefault(); handleGuess(); }}
+                className="sticky top-0 z-10 bg-white py-2 flex gap-2"
               >
-                포기
-              </button>
-            </>
-          ) : (
-            // WordSim: 단어를 자유롭게 입력
-            <>
-              <form onSubmit={(e) => { e.preventDefault(); handleGuess(); }} className="flex gap-2">
                 <input
                   type="text"
                   value={guessInput}
@@ -461,15 +446,28 @@ export default function PlayPage() {
                   추측
                 </button>
               </form>
-              <button
-                type="button"
-                onClick={handleGiveUp}
-                className="w-full border border-gray-300 py-2 rounded-lg text-gray-500 hover:text-red-500"
-              >
-                포기
-              </button>
-            </>
+            ) : undefined
+          }
+        />
+      )}
+
+      {status === 'IN_PROGRESS' && (
+        <div className="mt-8 space-y-3">
+          {game.gameType === 'WORDGUESS' && game.jamoCount && (
+            <JamoInputCells
+              jamoCount={game.jamoCount}
+              value={guessInput}
+              onChange={setGuessInput}
+              onSubmit={handleGuess}
+            />
           )}
+          <button
+            type="button"
+            onClick={handleGiveUp}
+            className="w-full border border-gray-300 py-2 rounded-lg text-gray-500 hover:text-red-500"
+          >
+            포기
+          </button>
         </div>
       )}
 
