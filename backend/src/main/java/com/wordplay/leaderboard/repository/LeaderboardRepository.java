@@ -24,4 +24,12 @@ public interface LeaderboardRepository extends JpaRepository<PlayRecord, Long> {
           AND p.status = com.wordplay.play.entity.PlayStatus.SOLVED
     """)
     long countSolvers(@Param("gameId") String gameId);
+
+    @Query("""
+        SELECT p FROM PlayRecord p
+        WHERE p.gameId = :gameId
+          AND p.status = com.wordplay.play.entity.PlayStatus.GAVE_UP
+        ORDER BY p.finishedAt DESC NULLS LAST
+    """)
+    List<PlayRecord> findFailures(@Param("gameId") String gameId, Pageable pageable);
 }
