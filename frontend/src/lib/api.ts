@@ -12,7 +12,7 @@ export type ApiResponse<T> = {
   error: { code: string; message: string } | null;
 };
 
-export type GameType = 'WORDSIM' | 'WORDGUESS';
+export type GameType = 'WORDSIM' | 'WORDGUESS' | 'LIE_HINT';
 
 const SESSION_KEY_PREFIX = 'wp_session_';
 

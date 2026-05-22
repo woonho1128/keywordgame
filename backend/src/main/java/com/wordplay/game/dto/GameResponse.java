@@ -6,24 +6,28 @@ import com.wordplay.game.entity.GameType;
 import com.wordplay.similarity.SimilarityService.ReferenceScores;
 
 import java.time.Instant;
+import java.util.List;
 
 public record GameResponse(
         String gameId,
         GameType gameType,
         String title,
         Integer wordLength,
-        Integer jamoCount,            // WordGuess: 정답 자모 수
+        Integer jamoCount,
         String hintText,
         String creatorNick,
         Instant createdAt,
         Integer playCount,
         Integer solvedCount,
-        Integer maxAttempts,          // WordGuess 최대 시도 횟수 (WordSim은 null)
-        // WordSim 참고 점수 (정답과의 유사도 분포)
+        Integer maxAttempts,
+
         Float top1Similarity,
         Float top10Similarity,
         Float top100Similarity,
-        Float top1000Similarity
+        Float top1000Similarity,
+
+        List<String> lieHints,
+        Integer lieHintCount
 ) {
     public static GameResponse from(Game g, Integer wordGuessMaxAttempts) {
         return new GameResponse(
@@ -32,7 +36,8 @@ public record GameResponse(
                 g.getHintText(), g.getCreatorNick(), g.getCreatedAt(),
                 g.getPlayCount(), g.getSolvedCount(),
                 g.getGameType() == GameType.WORDGUESS ? wordGuessMaxAttempts : null,
-                null, null, null, null
+                null, null, null, null,
+                null, null
         );
     }
 
@@ -42,8 +47,21 @@ public record GameResponse(
                 computeJamoCount(g),
                 g.getHintText(), g.getCreatorNick(), g.getCreatedAt(),
                 g.getPlayCount(), g.getSolvedCount(),
-                null,   // WordSim은 시도 제한 없음
-                refs.top1(), refs.top10(), refs.top100(), refs.top1000()
+                null,
+                refs.top1(), refs.top10(), refs.top100(), refs.top1000(),
+                null, null
+        );
+    }
+
+    public static GameResponse fromLieHint(Game g, List<String> hints) {
+        return new GameResponse(
+                g.getGameId(), g.getGameType(), g.getTitle(), g.getWordLength(),
+                null,
+                g.getHintText(), g.getCreatorNick(), g.getCreatedAt(),
+                g.getPlayCount(), g.getSolvedCount(),
+                null,
+                null, null, null, null,
+                hints, hints == null ? null : hints.size()
         );
     }
 

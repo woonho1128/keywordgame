@@ -44,7 +44,6 @@ public class GuessService {
 
     @Transactional
     public GuessResponse guess(String gameId, GuessRequest req, String sessionKey) {
-        // 1. 세션 → PlayRecord
         PlayRecord record = playRecordRepository
                 .findByGameIdAndSessionKey(gameId, sessionKey)
                 .orElseThrow(() -> new BusinessException(ErrorCode.SESSION_NOT_FOUND));
@@ -53,31 +52,27 @@ public class GuessService {
             throw new BusinessException(ErrorCode.GAME_ALREADY_FINISHED);
         }
 
-        // 2. 게임 정보
         Game game = gameRepository.findById(gameId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.GAME_NOT_FOUND));
 
-        // 3. 추측 정규화 + 검증
         String guessWord = TextNormalizer.normalize(req.guessWord());
         if (guessWord == null || guessWord.isEmpty()) {
-            throw new BusinessException(ErrorCode.INVALID_INPUT, "추측 단어를 입력해주세요");
+            throw new BusinessException(ErrorCode.INVALID_INPUT, "Enter a guess word");
         }
 
         if (game.getGameType() == GameType.WORDGUESS) {
             return guessWordGuess(game, record, guessWord);
-        } else {
+        }
+        if (game.getGameType() == GameType.WORDSIM) {
             return guessWordSim(game, record, guessWord);
         }
+        return guessLieHint(game, record, guessWord);
     }
 
-    // ------------------------------------------------------------------
-    // WordGuess — HangulUtil로 자모 비교
-    // ------------------------------------------------------------------
     private GuessResponse guessWordGuess(Game game, PlayRecord record, String guess) {
         if (!HangulUtil.isAllHangulSyllables(guess)) {
             throw new BusinessException(ErrorCode.INVALID_HANGUL);
         }
-        // 자모 수 일치만 확인 (음절 수는 자유 — 꼬들 표준)
         int answerJamos = HangulUtil.countJamos(game.getAnswerWord());
         int guessJamos = HangulUtil.countJamos(guess);
         if (answerJamos != guessJamos) {
@@ -88,7 +83,6 @@ public class GuessService {
         List<SyllableResult> result = HangulUtil.compareWords(game.getAnswerWord(), guess);
         int order = record.getAttemptCount() + 1;
 
-        // 로그 저장
         String letterResultJson;
         try {
             letterResultJson = objectMapper.writeValueAsString(result);
@@ -110,7 +104,6 @@ public class GuessService {
         if (correct) {
             finalizeSolved(game, record);
         } else if (order >= wordGuessMaxAttempts) {
-            // 최대 시도 초과 → 자동 실패 (정답 공개)
             finalizeGaveUp(record);
             revealedAnswer = game.getAnswerWord();
         }
@@ -123,20 +116,15 @@ public class GuessService {
         );
     }
 
-    // ------------------------------------------------------------------
-    // WordSim — 메모리 임베딩 사전 기반 유사도/순위 계산
-    // ------------------------------------------------------------------
     private GuessResponse guessWordSim(Game game, PlayRecord record, String guess) {
         if (!similarityService.isAvailable()) {
             throw new BusinessException(ErrorCode.INTERNAL_ERROR,
-                    "WordSim 사용 불가 — 사전/OpenAI 키 모두 미설정");
+                    "WordSim is unavailable because no dictionary or OpenAI key is configured");
         }
 
         boolean correct = guess.equals(game.getAnswerWord());
         int order = record.getAttemptCount() + 1;
 
-        // OpenAI 통합 후엔 거의 모든 한국어 단어 처리 가능
-        // contains() 호출 자체가 (필요하면) OpenAI API 호출 + 캐싱을 수행
         boolean inDict = similarityService.contains(guess);
         Float similarity = null;
         Integer rank = null;
@@ -148,7 +136,6 @@ public class GuessService {
             similarity = similarityService.cosine(game.getAnswerWord(), guess);
             rank = similarityService.rank(game.getAnswerWord(), guess);
         }
-        // inDict=false → 정말 처리 불가한 단어 (예: 알 수 없는 외계어)
 
         guessLogRepository.save(GuessLog.builder()
                 .recordId(record.getRecordId())
@@ -172,6 +159,30 @@ public class GuessService {
         );
     }
 
+    private GuessResponse guessLieHint(Game game, PlayRecord record, String guess) {
+        if (guessLogRepository.findFirstByRecordIdAndIsCorrectTrueOrderByGuessOrderAsc(record.getRecordId()).isPresent()) {
+            throw new BusinessException(ErrorCode.INVALID_INPUT, "Choose the lie hint to finish this game");
+        }
+
+        boolean correct = guess.equals(game.getAnswerWord());
+        int order = record.getAttemptCount() + 1;
+
+        guessLogRepository.save(GuessLog.builder()
+                .recordId(record.getRecordId())
+                .guessWord(guess)
+                .guessOrder(order)
+                .isCorrect(correct)
+                .build());
+
+        record.setAttemptCount(order);
+        playRecordRepository.save(record);
+
+        return GuessResponse.lieHint(
+                guess, order, correct, correct,
+                record.getStatus().name(), null, null
+        );
+    }
+
     private void finalizeSolved(Game game, PlayRecord record) {
         Instant now = Instant.now();
         record.setStatus(PlayStatus.SOLVED);
@@ -182,7 +193,6 @@ public class GuessService {
         gameRepository.save(game);
     }
 
-    /** 5회 초과 등으로 자동 실패 처리. */
     private void finalizeGaveUp(PlayRecord record) {
         Instant now = Instant.now();
         record.setStatus(PlayStatus.GAVE_UP);

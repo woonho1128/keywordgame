@@ -2,6 +2,8 @@ package com.wordplay.game.entity;
 
 import jakarta.persistence.*;
 import lombok.*;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 
 import java.time.Instant;
 
@@ -34,6 +36,10 @@ public class Game {
 
     @Column(name = "hint_text", length = 500)
     private String hintText;
+
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "game_config", columnDefinition = "jsonb")
+    private String gameConfig;
 
     @Column(name = "creator_nick", length = 50)
     private String creatorNick;

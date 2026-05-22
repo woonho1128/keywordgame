@@ -1,5 +1,7 @@
 package com.wordplay.game.service;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.wordplay.common.exception.BusinessException;
 import com.wordplay.common.exception.ErrorCode;
 import com.wordplay.common.util.HangulUtil;
@@ -8,6 +10,7 @@ import com.wordplay.common.util.TextNormalizer;
 import com.wordplay.game.dto.CreateGameRequest;
 import com.wordplay.game.dto.CreateGameResponse;
 import com.wordplay.game.dto.GameResponse;
+import com.wordplay.game.dto.LieHintConfig;
 import com.wordplay.game.dto.RecentGameItem;
 import com.wordplay.game.entity.Game;
 import com.wordplay.game.entity.GameType;
@@ -20,12 +23,16 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.HashSet;
+import java.util.List;
+
 @Service
 @RequiredArgsConstructor
 public class GameService {
 
     private final GameRepository gameRepository;
     private final SimilarityService similarityService;
+    private final ObjectMapper objectMapper;
 
     @Value("${app.game.id-length:8}")
     private int gameIdLength;
@@ -37,25 +44,27 @@ public class GameService {
     public CreateGameResponse createGame(CreateGameRequest req) {
         String answer = TextNormalizer.normalize(req.answerWord());
         if (answer == null || answer.isEmpty()) {
-            throw new BusinessException(ErrorCode.INVALID_INPUT, "정답 단어를 입력해주세요");
+            throw new BusinessException(ErrorCode.INVALID_INPUT, "Enter an answer word");
         }
 
-        // WordGuess: 모든 글자가 한글 음절인지 검증
         if (req.gameType() == GameType.WORDGUESS && !HangulUtil.isAllHangulSyllables(answer)) {
             throw new BusinessException(ErrorCode.INVALID_HANGUL);
         }
 
-        // WordSim: 정답에 대해 벡터 확보 가능한지 확인
-        // (사전 또는 OpenAI 둘 중 하나에서)
         if (req.gameType() == GameType.WORDSIM) {
             if (!similarityService.isAvailable()) {
                 throw new BusinessException(ErrorCode.INTERNAL_ERROR,
-                        "WordSim 사용 불가 — 사전/OpenAI 키 모두 미설정");
+                        "WordSim is unavailable because no dictionary or OpenAI key is configured");
             }
             if (!similarityService.contains(answer)) {
                 throw new BusinessException(ErrorCode.WORD_NOT_IN_DICTIONARY,
-                        "처리할 수 없는 단어입니다. 다른 단어를 시도해주세요");
+                        "This word cannot be processed. Try another word");
             }
+        }
+
+        String gameConfig = null;
+        if (req.gameType() == GameType.LIE_HINT) {
+            gameConfig = serializeLieHintConfig(validateLieHintConfig(req));
         }
 
         Game game = Game.builder()
@@ -65,6 +74,7 @@ public class GameService {
                 .answerWord(answer)
                 .wordLength(answer.length())
                 .hintText(req.hintText())
+                .gameConfig(gameConfig)
                 .creatorNick(req.creatorNick().trim())
                 .isPublic(req.isPublic() == null ? Boolean.TRUE : req.isPublic())
                 .build();
@@ -89,6 +99,9 @@ public class GameService {
             var refs = similarityService.getReferenceScores(g.getAnswerWord());
             return GameResponse.fromWithSim(g, refs);
         }
+        if (g.getGameType() == GameType.LIE_HINT) {
+            return GameResponse.fromLieHint(g, parseLieHintConfig(g).hints());
+        }
         return GameResponse.from(g, wordGuessMaxAttempts);
     }
 
@@ -99,6 +112,43 @@ public class GameService {
                 ? gameRepository.findByIsPublicTrueOrderByCreatedAtDesc(pageable)
                 : gameRepository.findByIsPublicTrueAndGameTypeOrderByCreatedAtDesc(type, pageable);
         return games.map(RecentGameItem::from);
+    }
+
+    private LieHintConfig validateLieHintConfig(CreateGameRequest req) {
+        List<String> rawHints = req.lieHints();
+        if (rawHints == null || rawHints.size() != 3) {
+            throw new BusinessException(ErrorCode.INVALID_INPUT, "Lie Hint requires exactly 3 hints");
+        }
+        if (req.lieIndex() == null || req.lieIndex() < 0 || req.lieIndex() >= rawHints.size()) {
+            throw new BusinessException(ErrorCode.INVALID_INPUT, "Choose one lie hint");
+        }
+
+        List<String> hints = rawHints.stream()
+                .map(h -> h == null ? "" : h.trim())
+                .toList();
+        if (hints.stream().anyMatch(h -> h.isEmpty() || h.length() > 120)) {
+            throw new BusinessException(ErrorCode.INVALID_INPUT, "Each hint must be 1 to 120 characters");
+        }
+        if (new HashSet<>(hints).size() != hints.size()) {
+            throw new BusinessException(ErrorCode.INVALID_INPUT, "Hints must not be duplicated");
+        }
+        return new LieHintConfig(hints, req.lieIndex());
+    }
+
+    private String serializeLieHintConfig(LieHintConfig config) {
+        try {
+            return objectMapper.writeValueAsString(config);
+        } catch (JsonProcessingException e) {
+            throw new BusinessException(ErrorCode.INTERNAL_ERROR, "Failed to serialize Lie Hint config");
+        }
+    }
+
+    private LieHintConfig parseLieHintConfig(Game game) {
+        try {
+            return objectMapper.readValue(game.getGameConfig(), LieHintConfig.class);
+        } catch (Exception e) {
+            throw new BusinessException(ErrorCode.INTERNAL_ERROR, "Failed to parse Lie Hint config");
+        }
     }
 
     private String generateUniqueId() {

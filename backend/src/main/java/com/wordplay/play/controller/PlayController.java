@@ -7,6 +7,8 @@ import com.wordplay.common.util.SessionManager;
 import com.wordplay.play.dto.GiveUpResponse;
 import com.wordplay.play.dto.GuessRequest;
 import com.wordplay.play.dto.GuessResponse;
+import com.wordplay.play.dto.LieHintRequest;
+import com.wordplay.play.dto.LieHintResponse;
 import com.wordplay.play.dto.PlayStateResponse;
 import com.wordplay.play.dto.StartPlayRequest;
 import com.wordplay.play.dto.StartPlayResponse;
@@ -73,5 +75,18 @@ public class PlayController {
             throw new BusinessException(ErrorCode.SESSION_NOT_FOUND);
         }
         return ApiResponse.success(playService.giveUp(gameId, sessionKey));
+    }
+
+    @PostMapping("/lie-hint")
+    public ApiResponse<LieHintResponse> chooseLieHint(
+            @PathVariable String gameId,
+            @Valid @RequestBody LieHintRequest req,
+            HttpServletRequest request
+    ) {
+        String sessionKey = sessionManager.extract(request);
+        if (sessionKey == null) {
+            throw new BusinessException(ErrorCode.SESSION_NOT_FOUND);
+        }
+        return ApiResponse.success(playService.chooseLieHint(gameId, req, sessionKey));
     }
 }

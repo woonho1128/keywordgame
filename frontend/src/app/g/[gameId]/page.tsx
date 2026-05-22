@@ -2,16 +2,20 @@
 
 import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { api, GameType, setSessionKey, getSessionKey } from '@/lib/api';
+import { api, GameType, getSessionKey, setSessionKey } from '@/lib/api';
 import { SyllableResult } from '@/lib/hangul';
-import { HangulBoard } from '@/components/wordguess/HangulBoard';
-import { JamoInputCells } from '@/components/wordguess/JamoInputCells';
 import { ShareButton } from '@/components/common/ShareButton';
 import { ShareResultButton } from '@/components/common/ShareResultButton';
+import { HangulBoard } from '@/components/wordguess/HangulBoard';
+import { JamoInputCells } from '@/components/wordguess/JamoInputCells';
 import { GuessHistory, WordSimGuess } from '@/components/wordsim/GuessHistory';
-import { buildWordGuessShareText, buildWordSimShareText, formatTime } from '@/lib/share';
+import {
+  buildLieHintShareText,
+  buildWordGuessShareText,
+  buildWordSimShareText,
+  formatTime,
+} from '@/lib/share';
 
-/** WordSim 참고 점수 표시 (1위/10위/100위/1000위 유사도) */
 function ReferenceScoreCell({ label, sim }: { label: string; sim: number | null }) {
   return (
     <div className="text-center">
@@ -28,17 +32,18 @@ type GameInfo = {
   gameType: GameType;
   title: string | null;
   wordLength: number;
-  jamoCount: number | null;       // WordGuess만 채워짐
+  jamoCount: number | null;
   hintText: string | null;
   creatorNick: string | null;
   playCount: number;
   solvedCount: number;
-  maxAttempts: number | null;     // WordGuess만 채워짐 (현재 5)
-  // WordSim 참고 점수
+  maxAttempts: number | null;
   top1Similarity: number | null;
   top10Similarity: number | null;
   top100Similarity: number | null;
   top1000Similarity: number | null;
+  lieHints: string[] | null;
+  lieHintCount: number | null;
 };
 
 type StartResp = {
@@ -55,22 +60,33 @@ type GuessResp = {
   guessWord: string;
   guessOrder: number;
   isCorrect: boolean;
-  // WordGuess
   letterResult: SyllableResult[] | null;
-  // WordSim
   inDictionary: boolean | null;
   similarity: number | null;
   similarityScore: number | null;
   rank: number | null;
-  // 게임 종료 시점 정보
+  liePhase: boolean | null;
   status: 'IN_PROGRESS' | 'SOLVED' | 'GAVE_UP';
   revealedAnswer: string | null;
+  timeSpentSec: number | null;
+};
+
+type LieHintResp = {
+  lieCorrect: boolean;
+  status: 'IN_PROGRESS' | 'SOLVED' | 'GAVE_UP';
+  revealedAnswer: string | null;
+  revealedLieIndex: number | null;
   timeSpentSec: number | null;
 };
 
 type GuessHistoryItem = {
   guessWord: string;
   letterResult: SyllableResult[];
+  isCorrect: boolean;
+};
+
+type LieGuessItem = {
+  guessWord: string;
   isCorrect: boolean;
 };
 
@@ -81,6 +97,8 @@ type PlayState = {
   playerNick: string;
   timeSpentSec: number | null;
   revealedAnswer: string | null;
+  revealedLieIndex: number | null;
+  liePhase: boolean | null;
   guesses: {
     guessWord: string;
     guessOrder: number;
@@ -88,8 +106,15 @@ type PlayState = {
     letterResult: SyllableResult[] | null;
     similarity: number | null;
     rank: number | null;
+    extraResult: string | null;
   }[];
 };
+
+function gameLabel(type: GameType) {
+  if (type === 'WORDGUESS') return 'WordGuess';
+  if (type === 'WORDSIM') return 'WordSim';
+  return 'Lie Hint';
+}
 
 export default function PlayPage() {
   const params = useParams<{ gameId: string }>();
@@ -103,21 +128,21 @@ export default function PlayPage() {
   const [history, setHistory] = useState<GuessHistoryItem[]>([]);
   const [simHistory, setSimHistory] = useState<WordSimGuess[]>([]);
   const [lastSimGuess, setLastSimGuess] = useState<WordSimGuess | undefined>();
+  const [lieHistory, setLieHistory] = useState<LieGuessItem[]>([]);
+  const [liePhase, setLiePhase] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [revealedAnswer, setRevealedAnswer] = useState<string | null>(null);
+  const [revealedLieIndex, setRevealedLieIndex] = useState<number | null>(null);
   const [timeSpentSec, setTimeSpentSec] = useState<number | null>(null);
   const [attemptCount, setAttemptCount] = useState(0);
-  // 저장된 세션으로 진행 상황을 복구하는 중인지 (true 동안 닉네임 화면 대신 로딩 표시)
   const [restoring, setRestoring] = useState(false);
 
-  // 1) 게임 메타 로드
   useEffect(() => {
     api<GameInfo>(`/api/v1/games/${params.gameId}`)
       .then(setGame)
       .catch((e) => setError(e.message));
   }, [params.gameId]);
 
-  // 2) 저장된 세션이 있으면 진행 상황 자동 복구 (재진입 시 닉네임 재입력 방지)
   useEffect(() => {
     if (!getSessionKey(params.gameId)) return;
     setRestoring(true);
@@ -127,8 +152,10 @@ export default function PlayPage() {
         setStatus(st.status);
         setAttemptCount(st.attemptCount);
         setNick(st.playerNick);
+        setLiePhase(Boolean(st.liePhase));
         if (st.timeSpentSec != null) setTimeSpentSec(st.timeSpentSec);
         if (st.revealedAnswer) setRevealedAnswer(st.revealedAnswer);
+        if (st.revealedLieIndex != null) setRevealedLieIndex(st.revealedLieIndex);
 
         if (st.gameType === 'WORDGUESS') {
           setHistory(
@@ -140,7 +167,7 @@ export default function PlayPage() {
                 isCorrect: g.isCorrect,
               }))
           );
-        } else {
+        } else if (st.gameType === 'WORDSIM') {
           const sims: WordSimGuess[] = st.guesses
             .filter((g) => g.similarity != null)
             .map((g) => ({
@@ -151,33 +178,34 @@ export default function PlayPage() {
             }));
           setSimHistory(sims);
           if (sims.length) setLastSimGuess(sims[sims.length - 1]);
+        } else {
+          setLieHistory(st.guesses.map((g) => ({
+            guessWord: g.guessWord,
+            isCorrect: g.isCorrect,
+          })));
         }
       })
-      .catch(() => {
-        // 세션 만료/없음 → 그냥 닉네임 화면 표시
-      })
+      .catch(() => {})
       .finally(() => setRestoring(false));
   }, [params.gameId]);
 
-  // 게임 시작
   const handleStart = async () => {
     setError(null);
-    if (!nick.trim()) return setError('닉네임을 입력해주세요');
+    if (!nick.trim()) return setError('닉네임을 입력해주세요.');
     try {
       const res = await api<StartResp>(`/api/v1/games/${params.gameId}/start`, {
         method: 'POST',
         body: JSON.stringify({ playerNick: nick.trim() }),
       });
-      // sessionKey를 localStorage에 저장하여 이후 호출에 헤더로 첨부
       setSessionKey(params.gameId, res.sessionKey);
       setStarted(true);
       setStatus(res.status);
+      setAttemptCount(res.attemptCount);
     } catch (e) {
-      setError(e instanceof Error ? e.message : '게임 시작 실패');
+      setError(e instanceof Error ? e.message : '게임 시작에 실패했습니다.');
     }
   };
 
-  // 단어 추측
   const handleGuess = async () => {
     setError(null);
     const word = guessInput.trim();
@@ -190,7 +218,6 @@ export default function PlayPage() {
         gameId: params.gameId,
       });
 
-      // WordGuess 응답
       if (res.letterResult) {
         setHistory((h) => [...h, {
           guessWord: res.guessWord,
@@ -199,10 +226,9 @@ export default function PlayPage() {
         }]);
       }
 
-      // WordSim 응답
       if (game?.gameType === 'WORDSIM') {
         if (res.inDictionary === false) {
-          setError('사전에 없는 단어입니다');
+          setError('사전에 없는 단어입니다.');
         } else if (res.similarity != null) {
           const entry: WordSimGuess = {
             guessWord: res.guessWord,
@@ -210,21 +236,21 @@ export default function PlayPage() {
             rank: res.rank,
             isCorrect: res.isCorrect,
           };
-          setSimHistory((h) => {
-            if (h.some(x => x.guessWord === entry.guessWord)) return h;
-            return [...h, entry];
-          });
+          setSimHistory((h) => h.some((x) => x.guessWord === entry.guessWord) ? h : [...h, entry]);
           setLastSimGuess(entry);
         }
       }
 
-      // 공통 상태 갱신
+      if (game?.gameType === 'LIE_HINT') {
+        setLieHistory((h) => [...h, { guessWord: res.guessWord, isCorrect: res.isCorrect }]);
+        if (res.liePhase) setLiePhase(true);
+      }
+
       setAttemptCount(res.guessOrder);
       if (res.status === 'SOLVED') {
         setStatus('SOLVED');
         if (res.timeSpentSec != null) setTimeSpentSec(res.timeSpentSec);
       } else if (res.status === 'GAVE_UP') {
-        // 5회 초과 자동 실패
         setStatus('GAVE_UP');
         if (res.revealedAnswer) setRevealedAnswer(res.revealedAnswer);
         if (res.timeSpentSec != null) setTimeSpentSec(res.timeSpentSec);
@@ -232,96 +258,111 @@ export default function PlayPage() {
 
       setGuessInput('');
     } catch (e) {
-      setError(e instanceof Error ? e.message : '추측 실패');
+      setError(e instanceof Error ? e.message : '추측에 실패했습니다.');
     }
   };
 
-  // 포기
+  const handleLieHint = async (selectedLieIndex: number) => {
+    setError(null);
+    try {
+      const res = await api<LieHintResp>(`/api/v1/games/${params.gameId}/lie-hint`, {
+        method: 'POST',
+        body: JSON.stringify({ selectedLieIndex }),
+        gameId: params.gameId,
+      });
+      setLiePhase(false);
+      setStatus(res.status);
+      if (res.revealedAnswer) setRevealedAnswer(res.revealedAnswer);
+      if (res.revealedLieIndex != null) setRevealedLieIndex(res.revealedLieIndex);
+      if (res.timeSpentSec != null) setTimeSpentSec(res.timeSpentSec);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : '거짓 힌트 선택에 실패했습니다.');
+    }
+  };
+
   const handleGiveUp = async () => {
     if (!confirm('정말 포기하시겠습니까?')) return;
     try {
-      const res = await api<{ answerWord: string; totalAttempts: number }>(
+      const res = await api<{ answerWord: string; totalAttempts: number; revealedLieIndex: number | null }>(
         `/api/v1/games/${params.gameId}/giveup`,
         { method: 'POST', gameId: params.gameId }
       );
       setStatus('GAVE_UP');
+      setLiePhase(false);
       setRevealedAnswer(res.answerWord);
+      setRevealedLieIndex(res.revealedLieIndex);
       setAttemptCount(res.totalAttempts);
-      // /giveup은 timeSpent를 안 줘서 클라이언트에서 계산 안 함 (공유 텍스트엔 빈칸)
     } catch (e) {
-      setError(e instanceof Error ? e.message : '포기 실패');
+      setError(e instanceof Error ? e.message : '포기에 실패했습니다.');
     }
   };
 
-  if (error && !game) {
-    return <main className="p-8 text-red-500">{error}</main>;
-  }
+  if (error && !game) return <main className="p-8 text-red-500">{error}</main>;
+  if (!game) return <main className="p-8 text-gray-400">불러오는 중...</main>;
+  if (!started && restoring) return <main className="p-8 text-gray-400">이어하기 정보를 불러오는 중...</main>;
 
-  if (!game) {
-    return <main className="p-8 text-gray-400">불러오는 중...</main>;
-  }
-
-  // 현재 페이지 URL (브라우저 환경에서만 정확)
   const shareUrl = typeof window !== 'undefined' ? window.location.href : '';
+  const hints = game.lieHints ?? [];
 
-  // 저장된 세션 복구 중 — 닉네임 화면이 잠깐 보이지 않도록 로딩 표시
-  if (!started && restoring) {
-    return <main className="p-8 text-gray-400">이어서 불러오는 중...</main>;
-  }
+  const resultShareText = game.gameType === 'WORDGUESS'
+    ? buildWordGuessShareText({
+        solved: status === 'SOLVED',
+        attempts: attemptCount,
+        maxAttempts: game.maxAttempts ?? 5,
+        timeSpentSec,
+        history,
+        url: shareUrl,
+      })
+    : game.gameType === 'WORDSIM'
+      ? buildWordSimShareText({
+          solved: status === 'SOLVED',
+          attempts: attemptCount,
+          timeSpentSec,
+          url: shareUrl,
+        })
+      : buildLieHintShareText({
+          solved: status === 'SOLVED',
+          attempts: attemptCount,
+          timeSpentSec,
+          url: shareUrl,
+        });
 
-  // ----- 닉네임 입력 화면 -----
   if (!started) {
     return (
       <main className="min-h-screen p-8 max-w-xl mx-auto">
         <div className="flex items-baseline justify-between mb-4">
-          <h1 className="text-2xl font-bold">
-            {game.gameType === 'WORDGUESS' ? '🟩 WordGuess' : '🔤 WordSim'}
-          </h1>
+          <h1 className="text-2xl font-bold">{gameLabel(game.gameType)}</h1>
           <div className="flex gap-4 items-baseline text-sm text-gray-500">
-            <button
-              onClick={() => router.push('/')}
-              className="underline hover:text-hit"
-              title="홈으로 (다른 게임 만들기 / 다른 게임 찾기)"
-            >
-              🏠 홈
-            </button>
-            <button
-              onClick={() => router.push(`/g/${params.gameId}/board`)}
-              className="underline hover:text-hit"
-            >
-              🏆 리더보드 →
+            <button onClick={() => router.push('/')} className="underline hover:text-hit">홈</button>
+            <button onClick={() => router.push(`/g/${params.gameId}/board`)} className="underline hover:text-hit">
+              리더보드
             </button>
           </div>
         </div>
+
         <div className="bg-gray-50 rounded-lg p-4 mb-4">
-          {game.title && (
-            <p className="text-base font-bold text-gray-800 mb-1">{game.title}</p>
-          )}
+          {game.title && <p className="text-base font-bold text-gray-800 mb-1">{game.title}</p>}
           <p className="text-sm text-gray-500">출제자: {game.creatorNick || '익명'}</p>
           {game.gameType === 'WORDGUESS' && game.jamoCount != null && (
-            <p className="text-sm text-gray-500">정답 자모수: {game.jamoCount}개</p>
+            <p className="text-sm text-gray-500">정답 자모 수: {game.jamoCount}개</p>
           )}
-          <p className="text-sm text-gray-500">
-            플레이 {game.playCount}회 · 정답자 {game.solvedCount}명
-          </p>
-          {game.hintText && (
-            <p className="mt-2"><span className="font-bold">힌트:</span> {game.hintText}</p>
+          <p className="text-sm text-gray-500">플레이 {game.playCount}회 · 성공 {game.solvedCount}명</p>
+          {game.hintText && <p className="mt-2"><span className="font-bold">힌트:</span> {game.hintText}</p>}
+          {game.gameType === 'LIE_HINT' && (
+            <div className="mt-3 space-y-2">
+              {hints.map((hint, index) => (
+                <div key={index} className="rounded-lg bg-white border px-3 py-2 text-sm">
+                  <span className="font-bold text-gray-500">{index + 1}.</span> {hint}
+                </div>
+              ))}
+            </div>
           )}
         </div>
 
-        {/* 공유 URL 영역 */}
         <div className="mb-6 border border-gray-200 rounded-lg p-4 bg-yellow-50/40">
-          <p className="text-xs text-gray-500 mb-2">📨 친구에게 공유</p>
-          <div className="text-sm bg-white rounded p-2 border mb-2">
-            <p className="font-bold text-gray-800">
-              {game.gameType === 'WORDGUESS' ? '🟩' : '🔤'} {game.title || '제목 없음'}
-            </p>
-            <p className="text-xs text-gray-500 mt-0.5">출제자: {game.creatorNick || '익명'}</p>
-          </div>
-          <p className="text-xs text-gray-700 mb-3 break-all font-mono bg-white rounded p-2 border">
-            {shareUrl}
-          </p>
-          <ShareButton url={shareUrl} />
+          <p className="text-xs text-gray-500 mb-2">친구에게 공유</p>
+          <p className="text-xs text-gray-700 mb-3 break-all font-mono bg-white rounded p-2 border">{shareUrl}</p>
+          <ShareButton url={shareUrl} label="URL 복사" />
         </div>
 
         <label className="block text-sm font-medium mb-1">닉네임</label>
@@ -329,54 +370,26 @@ export default function PlayPage() {
           type="text"
           value={nick}
           onChange={(e) => setNick(e.target.value)}
-          placeholder="재진"
+          placeholder="플레이어"
           maxLength={50}
           className="w-full border border-gray-300 rounded-lg px-3 py-2 mb-4"
         />
         {error && <p className="text-red-500 text-sm mb-2">{error}</p>}
-        <button
-          onClick={handleStart}
-          className="w-full bg-hit text-white font-bold py-3 rounded-lg hover:opacity-90"
-        >
+        <button onClick={handleStart} className="w-full bg-hit text-white font-bold py-3 rounded-lg hover:opacity-90">
           게임 시작
         </button>
       </main>
     );
   }
 
-  // ----- 플레이 화면 -----
   return (
     <main className="min-h-screen p-8 max-w-2xl mx-auto">
       <div className="flex items-baseline justify-between mb-6">
-        <h1 className="text-2xl font-bold">{game.gameType === 'WORDGUESS' ? '🟩 WordGuess' : '🔤 WordSim'}</h1>
+        <h1 className="text-2xl font-bold">{gameLabel(game.gameType)}</h1>
         <div className="flex gap-4 items-baseline text-sm text-gray-500">
-          <button
-            onClick={() => router.push('/')}
-            className="underline hover:text-hit"
-            title="홈으로"
-          >
-            🏠 홈
-          </button>
-          <button
-            onClick={async () => {
-              try {
-                if (navigator.clipboard && window.isSecureContext) {
-                  await navigator.clipboard.writeText(shareUrl);
-                } else {
-                  window.prompt('URL을 복사하세요:', shareUrl);
-                }
-              } catch {}
-            }}
-            className="underline hover:text-hit"
-            title="이 게임 URL 복사"
-          >
-            🔗 공유
-          </button>
-          <button
-            onClick={() => router.push(`/g/${params.gameId}/board`)}
-            className="underline hover:text-hit"
-          >
-            🏆 리더보드 →
+          <button onClick={() => router.push('/')} className="underline hover:text-hit">홈</button>
+          <button onClick={() => router.push(`/g/${params.gameId}/board`)} className="underline hover:text-hit">
+            리더보드
           </button>
         </div>
       </div>
@@ -391,23 +404,12 @@ export default function PlayPage() {
         {game.gameType === 'WORDGUESS' && game.maxAttempts != null && (
           <div className="inline-flex items-center gap-2 bg-gray-50 rounded-lg px-3 py-2 text-sm">
             <span className="text-gray-500">남은 시도</span>
-            <span className={`font-bold ${
-              game.maxAttempts - attemptCount <= 1 ? 'text-red-500'
-              : game.maxAttempts - attemptCount <= 2 ? 'text-orange-500'
-              : 'text-gray-800'
-            }`}>
-              {Math.max(0, game.maxAttempts - attemptCount)}/{game.maxAttempts}
-            </span>
+            <span className="font-bold text-gray-800">{Math.max(0, game.maxAttempts - attemptCount)}/{game.maxAttempts}</span>
           </div>
         )}
-        {game.hintText && (
-          <div className="flex-1 min-w-0 bg-yellow-50 rounded-lg px-3 py-2 text-sm">
-            💡 {game.hintText}
-          </div>
-        )}
+        {game.hintText && <div className="flex-1 min-w-0 bg-yellow-50 rounded-lg px-3 py-2 text-sm">{game.hintText}</div>}
       </div>
 
-      {/* WordSim 참고 점수 */}
       {game.gameType === 'WORDSIM' && game.top1Similarity != null && (
         <div className="mb-6 bg-gray-50 rounded-lg p-3 text-xs grid grid-cols-4 gap-2">
           <ReferenceScoreCell label="1위" sim={game.top1Similarity} />
@@ -417,38 +419,64 @@ export default function PlayPage() {
         </div>
       )}
 
+      {game.gameType === 'LIE_HINT' && (
+        <div className="mb-6 space-y-2">
+          {hints.map((hint, index) => {
+            const revealed = status === 'GAVE_UP' && revealedLieIndex === index;
+            return (
+              <div
+                key={index}
+                className={`rounded-lg border px-4 py-3 text-sm ${
+                  revealed ? 'border-red-300 bg-red-50 text-red-700' : 'border-gray-200 bg-gray-50'
+                }`}
+              >
+                <span className="font-bold">{index + 1}.</span> {hint}
+                {revealed && <span className="ml-2 font-bold">거짓 힌트</span>}
+              </div>
+            );
+          })}
+        </div>
+      )}
+
       {game.gameType === 'WORDGUESS' ? (
         <HangulBoard history={history} />
-      ) : (
+      ) : game.gameType === 'WORDSIM' ? (
         <GuessHistory
           history={simHistory}
           lastGuess={lastSimGuess}
           inputSlot={
             status === 'IN_PROGRESS' ? (
-              // WordSim: 입력창을 '방금 시도'와 단어 리스트 사이에 고정
-              <form
-                onSubmit={(e) => { e.preventDefault(); handleGuess(); }}
-                className="sticky top-0 z-10 bg-white py-2 flex gap-2"
-              >
+              <form onSubmit={(e) => { e.preventDefault(); handleGuess(); }} className="sticky top-0 z-10 bg-white py-2 flex gap-2">
                 <input
                   type="text"
                   value={guessInput}
                   onChange={(e) => setGuessInput(e.target.value)}
-                  placeholder="한국어 명사 (예: 사과)"
+                  placeholder="단어 입력"
                   maxLength={20}
                   className="flex-1 border border-gray-300 rounded-lg px-3 py-2"
                 />
-                <button
-                  type="submit"
-                  disabled={!guessInput.trim()}
-                  className="bg-move text-white font-bold px-6 rounded-lg disabled:opacity-40"
-                >
+                <button type="submit" disabled={!guessInput.trim()} className="bg-move text-white font-bold px-6 rounded-lg disabled:opacity-40">
                   추측
                 </button>
               </form>
             ) : undefined
           }
         />
+      ) : (
+        <div className="space-y-3">
+          {lieHistory.length === 0 ? (
+            <div className="text-center text-gray-400 py-8">아직 시도가 없습니다.</div>
+          ) : (
+            lieHistory.map((item, index) => (
+              <div key={`${item.guessWord}-${index}`} className="flex items-center justify-between border-b py-2">
+                <span><span className="text-gray-400 mr-2">{index + 1}</span>{item.guessWord}</span>
+                <span className={item.isCorrect ? 'font-bold text-hit' : 'text-gray-400'}>
+                  {item.isCorrect ? '정답' : '아님'}
+                </span>
+              </div>
+            ))
+          )}
+        </div>
       )}
 
       {status === 'IN_PROGRESS' && (
@@ -461,6 +489,41 @@ export default function PlayPage() {
               onSubmit={handleGuess}
             />
           )}
+
+          {game.gameType === 'LIE_HINT' && !liePhase && (
+            <form onSubmit={(e) => { e.preventDefault(); handleGuess(); }} className="flex gap-2">
+              <input
+                type="text"
+                value={guessInput}
+                onChange={(e) => setGuessInput(e.target.value)}
+                placeholder="정답 단어 입력"
+                maxLength={20}
+                className="flex-1 border border-gray-300 rounded-lg px-3 py-2"
+              />
+              <button type="submit" disabled={!guessInput.trim()} className="bg-move text-white font-bold px-6 rounded-lg disabled:opacity-40">
+                추측
+              </button>
+            </form>
+          )}
+
+          {game.gameType === 'LIE_HINT' && liePhase && (
+            <div className="border-2 border-move rounded-lg p-4 bg-yellow-50 space-y-3">
+              <p className="font-bold text-gray-800">정답입니다. 이제 거짓 힌트를 고르세요.</p>
+              <div className="grid grid-cols-1 gap-2">
+                {hints.map((hint, index) => (
+                  <button
+                    key={index}
+                    type="button"
+                    onClick={() => handleLieHint(index)}
+                    className="text-left border border-gray-300 bg-white rounded-lg px-4 py-3 hover:border-move"
+                  >
+                    <span className="font-bold">{index + 1}.</span> {hint}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
           <button
             type="button"
             onClick={handleGiveUp}
@@ -474,67 +537,31 @@ export default function PlayPage() {
       {status === 'SOLVED' && (
         <div className="mt-8 space-y-3">
           <div className="bg-green-50 rounded-lg p-4 text-center">
-            🎉 <span className="font-bold">정답입니다!</span>
+            <span className="font-bold">성공!</span>
             {' · '}
             {game.gameType === 'WORDGUESS' && game.maxAttempts
               ? `${attemptCount}/${game.maxAttempts}`
               : `${attemptCount}번 시도`}
             {timeSpentSec != null && ` · ${formatTime(timeSpentSec)}`}
           </div>
-          <ShareResultButton
-            text={
-              game.gameType === 'WORDGUESS'
-                ? buildWordGuessShareText({
-                    solved: true,
-                    attempts: attemptCount,
-                    maxAttempts: game.maxAttempts ?? 5,
-                    timeSpentSec,
-                    history,
-                    url: shareUrl,
-                  })
-                : buildWordSimShareText({
-                    solved: true,
-                    attempts: attemptCount,
-                    timeSpentSec,
-                    url: shareUrl,
-                  })
-            }
-          />
+          <ShareResultButton text={resultShareText} label="결과 복사" />
         </div>
       )}
 
       {status === 'GAVE_UP' && (
         <div className="mt-8 space-y-3">
           <div className="bg-gray-50 rounded-lg p-4 text-center">
-            <div>
-              정답은 <span className="font-bold text-hit">{revealedAnswer}</span> 였습니다.
-            </div>
+            <div>정답은 <span className="font-bold text-hit">{revealedAnswer}</span> 입니다.</div>
+            {game.gameType === 'LIE_HINT' && revealedLieIndex != null && (
+              <div className="text-sm text-gray-600 mt-1">
+                거짓 힌트는 {revealedLieIndex + 1}번입니다.
+              </div>
+            )}
             <div className="text-sm text-gray-500 mt-1">
-              {game.gameType === 'WORDGUESS' && game.maxAttempts
-                ? `${attemptCount}/${game.maxAttempts} 시도`
-                : `${attemptCount}번 시도`}
-              {timeSpentSec != null && ` · ${formatTime(timeSpentSec)}`}
+              {attemptCount}번 시도{timeSpentSec != null && ` · ${formatTime(timeSpentSec)}`}
             </div>
           </div>
-          <ShareResultButton
-            text={
-              game.gameType === 'WORDGUESS'
-                ? buildWordGuessShareText({
-                    solved: false,
-                    attempts: attemptCount,
-                    maxAttempts: game.maxAttempts ?? 5,
-                    timeSpentSec,
-                    history,
-                    url: shareUrl,
-                  })
-                : buildWordSimShareText({
-                    solved: false,
-                    attempts: attemptCount,
-                    timeSpentSec,
-                    url: shareUrl,
-                  })
-            }
-          />
+          <ShareResultButton text={resultShareText} label="결과 복사" />
         </div>
       )}
 

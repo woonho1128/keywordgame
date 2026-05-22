@@ -1,4 +1,4 @@
-import { SyllableResult, Mark } from './hangul';
+import { Mark, SyllableResult } from './hangul';
 
 const MARK_EMOJI: Record<Mark, string> = {
   H: '🟩',
@@ -14,15 +14,6 @@ export function formatTime(seconds: number | null | undefined): string {
   return s === 0 ? `${m}분` : `${m}분 ${s}초`;
 }
 
-/**
- * WordGuess 결과를 Wordle 스타일 이모지 그리드로 변환.
- * 각 줄 = 한 번의 추측. 음절은 공백으로 구분.
- *
- * 예: 정답 "사과" (5 자모) 에서:
- *   🟩🟩 ⬜🟨🟨
- *   🟩🟩 🟨🟨🟨
- *   🟩🟩 🟩🟩🟩
- */
 export function buildWordGuessGrid(history: Array<{ letterResult: SyllableResult[] }>): string {
   return history.map(h =>
     h.letterResult.map(syl =>
@@ -42,12 +33,12 @@ interface WordGuessShareParams {
 
 export function buildWordGuessShareText(p: WordGuessShareParams): string {
   const statusLine = p.solved
-    ? `✅ ${p.attempts}/${p.maxAttempts} 시도에 정답!`
-    : `❌ ${p.maxAttempts}회 시도 실패`;
-  const timeLine = p.timeSpentSec != null ? ` · ⏱ ${formatTime(p.timeSpentSec)}` : '';
+    ? `${p.attempts}/${p.maxAttempts} 시도 만에 정답`
+    : `${p.maxAttempts}회 시도 실패`;
+  const timeLine = p.timeSpentSec != null ? ` · ${formatTime(p.timeSpentSec)}` : '';
   const grid = buildWordGuessGrid(p.history);
 
-  return `🟩 WordGuess
+  return `WordGuess
 ${statusLine}${timeLine}
 
 ${grid}
@@ -64,11 +55,30 @@ interface WordSimShareParams {
 
 export function buildWordSimShareText(p: WordSimShareParams): string {
   const statusLine = p.solved
-    ? `✅ ${p.attempts}번 만에 정답!`
-    : `❌ ${p.attempts}번 시도 후 포기`;
-  const timeLine = p.timeSpentSec != null ? ` · ⏱ ${formatTime(p.timeSpentSec)}` : '';
+    ? `${p.attempts}번 만에 정답`
+    : `${p.attempts}번 시도 후 포기`;
+  const timeLine = p.timeSpentSec != null ? ` · ${formatTime(p.timeSpentSec)}` : '';
 
-  return `🔤 WordSim
+  return `WordSim
+${statusLine}${timeLine}
+
+${p.url}`;
+}
+
+interface LieHintShareParams {
+  solved: boolean;
+  attempts: number;
+  timeSpentSec: number | null;
+  url: string;
+}
+
+export function buildLieHintShareText(p: LieHintShareParams): string {
+  const statusLine = p.solved
+    ? `${p.attempts}번 만에 정답과 거짓 힌트까지 성공`
+    : `${p.attempts}번 시도 후 실패`;
+  const timeLine = p.timeSpentSec != null ? ` · ${formatTime(p.timeSpentSec)}` : '';
+
+  return `Lie Hint
 ${statusLine}${timeLine}
 
 ${p.url}`;

@@ -44,6 +44,10 @@ public class GuessLog {
     @Column(name = "letter_result", columnDefinition = "jsonb")
     private String letterResult;
 
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "extra_result", columnDefinition = "jsonb")
+    private String extraResult;
+
     @Column(name = "is_correct", nullable = false)
     private Boolean isCorrect;
 
