@@ -144,6 +144,25 @@ class HangulUtilTest {
     }
 
     @Test
+    void compareWords_계란vs캔디_다른자리받침은_H아님_M() {
+        // 정답 "계란" = ㄱㅕㅣ(계) + ㄹㅏㄴ(란, ㄴ은 받침)
+        // 추측 "캔디" = ㅋㅏㅣㄴ(캔, ㄴ은 받침) + ㄷㅣ(디)
+        // 캔의 받침 ㄴ은 계란에 존재하지만(란의 받침) 위치가 달라
+        // H(초록)가 아니라 M(노랑)이어야 한다. (회귀 테스트)
+        List<SyllableResult> r = HangulUtil.compareWords("계란", "캔디");
+        // 음절 0: 캔 → ㅋ:S, ㅏ:M, ㅣ:H, ㄴ:M
+        assertThat(r.get(0).marks()).extracting(JamoMark::jamo)
+                .containsExactly("ㅋ", "ㅏ", "ㅣ", "ㄴ");
+        assertThat(r.get(0).marks()).extracting(JamoMark::mark)
+                .containsExactly("S", "M", "H", "M");
+        // 음절 1: 디 → ㄷ:S, ㅣ:S
+        assertThat(r.get(1).marks()).extracting(JamoMark::jamo)
+                .containsExactly("ㄷ", "ㅣ");
+        assertThat(r.get(1).marks()).extracting(JamoMark::mark)
+                .containsExactly("S", "S");
+    }
+
+    @Test
     void compareWords_음절수다름_자모수같음() {
         // 정답 "닭" (1음절, ㄷㅏㄹㄱ=4자모) vs 추측 "다리" (2음절, ㄷㅏㄹㅣ=4자모)
         List<SyllableResult> r = HangulUtil.compareWords("닭", "다리");

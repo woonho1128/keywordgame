@@ -120,8 +120,7 @@ public class HangulUtil {
      *
      * 매칭 규칙:
      *   - 정답/추측을 평탄화 (flat jamo list)
-     *   - 같은 kind(CHO/JUNG/JONG) 안에서만 비교
-     *   - 1단계: 같은 kind 안 같은 position에 같은 jamo → H
+     *   - 1단계: 같은 절대 위치(flat index)에서 종류·자모가 모두 일치 → H
      *   - 2단계: 남은 자모는 같은 kind pool에서 매칭하면 M, 없으면 S
      *   - 결과는 추측의 음절 구조에 맞춰 그룹화하여 반환 (시각화용)
      */
@@ -134,24 +133,20 @@ public class HangulUtil {
                     "Jamo count mismatch: answer=" + aFlat.size() + " guess=" + gFlat.size());
         }
 
-        // kind별 인덱스 묶기
-        Map<Kind, List<Integer>> aIdx = groupByKind(aFlat);
-        Map<Kind, List<Integer>> gIdx = groupByKind(gFlat);
-
         String[] gMarks = new String[gFlat.size()];
         boolean[] aTaken = new boolean[aFlat.size()];
 
-        // ---- 1단계: Hit ----
-        for (Kind k : Kind.values()) {
-            List<Integer> a = aIdx.getOrDefault(k, List.of());
-            List<Integer> g = gIdx.getOrDefault(k, List.of());
-            int len = Math.min(a.size(), g.size());
-            for (int p = 0; p < len; p++) {
-                int ai = a.get(p), gi = g.get(p);
-                if (aFlat.get(ai).jamo().equals(gFlat.get(gi).jamo())) {
-                    gMarks[gi] = "H";
-                    aTaken[ai] = true;
-                }
+        // ---- 1단계: Hit — 단어 전체의 같은 절대 위치(flat index)에서
+        //   종류(CHO/JUNG/JONG)와 자모가 모두 일치할 때만 H.
+        //   kind 내 상대 위치가 아니라 절대 위치로 비교해야
+        //   예) 정답 "계란"의 받침 ㄴ(란)과 추측 "캔디"의 받침 ㄴ(캔)이
+        //   서로 다른 자리인데도 H로 잘못 매칭되는 일이 없다.
+        for (int i = 0; i < gFlat.size(); i++) {
+            Jamo a = aFlat.get(i);
+            Jamo g = gFlat.get(i);
+            if (a.kind() == g.kind() && a.jamo().equals(g.jamo())) {
+                gMarks[i] = "H";
+                aTaken[i] = true;
             }
         }
 
@@ -190,14 +185,5 @@ public class HangulUtil {
             out.add(new SyllableResult(String.valueOf(c), marks));
         }
         return out;
-    }
-
-    private static Map<Kind, List<Integer>> groupByKind(List<Jamo> jamos) {
-        Map<Kind, List<Integer>> m = new HashMap<>();
-        for (Kind k : Kind.values()) m.put(k, new ArrayList<>());
-        for (int i = 0; i < jamos.size(); i++) {
-            m.get(jamos.get(i).kind()).add(i);
-        }
-        return m;
     }
 }
