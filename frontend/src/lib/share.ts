@@ -15,10 +15,12 @@ export function formatTime(seconds: number | null | undefined): string {
 }
 
 export function buildWordGuessGrid(history: Array<{ letterResult: SyllableResult[] }>): string {
+  // 음절 경계를 드러내지 않도록 음절 구분(공백) 없이 모든 자모를 이어붙인다.
   return history.map(h =>
-    h.letterResult.map(syl =>
-      syl.marks.map(m => MARK_EMOJI[m.mark] ?? '⬜').join('')
-    ).join(' ')
+    h.letterResult
+      .flatMap(syl => syl.marks)
+      .map(m => MARK_EMOJI[m.mark] ?? '⬜')
+      .join('')
   ).join('\n');
 }
 
