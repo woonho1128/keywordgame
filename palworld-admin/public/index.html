@@ -84,7 +84,7 @@
         <input id="bcMsg" placeholder="공지 내용 (영문/숫자 권장)" />
         <button type="submit">보내기</button>
       </form>
-      <p class="mut" style="margin:8px 0 0;">※ 팰월드 RCON 특성상 공백은 _ 로, 한글은 깨질 수 있어요.</p>
+      <p class="mut" style="margin:8px 0 0;">※ 공백은 _ 로 전송돼요. 한글 공지는 팰월드 자체 한계로 깨지니 <b>영문/숫자</b>를 권장해요.</p>
     </div>
 
     <div class="card">
@@ -197,8 +197,8 @@ window.ban = async (steamid, name) => {
 function escapeHtml(s){ return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 function escapeAttr(s){ return String(s).replace(/['\\]/g, "\\$&").replace(/"/g,'&quot;'); }
 
-// 자동 새로고침 (접속자 목록)
-setInterval(() => { if (!$("#dashView").classList.contains("hidden")) loadPlayers(); }, 15000);
+// 자동 새로고침 (상태 + 접속자 목록) — 백엔드에서 RCON을 직렬화하므로 동시 호출 안전
+setInterval(() => { if (!$("#dashView").classList.contains("hidden")) refreshAll(); }, 15000);
 
 // 시작 시 세션 확인
 api("/api/session").then(d => d.authed ? showDash() : showLogin()).catch(showLogin);

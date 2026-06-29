@@ -45,7 +45,16 @@ app.use(
 // rcon-client 는 응답 종료를 감지하려고 "추가 빈 패킷"을 보내고 그 답을 기다리는데,
 // 팰월드 RCON 은 그 답을 안 보내서 timeout 이 납니다(AUTH 는 되는데 send 가 멈춤).
 // 그래서 표준 Source RCON 패킷을 직접 주고받되, 응답 패킷이 오면 짧은 유휴 후 종료합니다.
+//
+// 팰월드 RCON 은 동시 연결에 약해서(상태+접속자를 한꺼번에 부르면 한쪽이 실패),
+// 모든 명령을 큐로 직렬화해 한 번에 하나씩만 처리한다.
+let rconQueue = Promise.resolve();
 function rcon(command) {
+  const result = rconQueue.then(() => rconExec(command), () => rconExec(command));
+  rconQueue = result.catch(() => {});
+  return result;
+}
+function rconExec(command) {
   return new Promise((resolve, reject) => {
     const socket = net.connect({ host: RCON_HOST, port: Number(RCON_PORT) });
     socket.setNoDelay(true);
