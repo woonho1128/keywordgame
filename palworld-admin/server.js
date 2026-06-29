@@ -1,6 +1,6 @@
 import express from "express";
 import session from "express-session";
-import { Rcon } from "rcon-client";
+import net from "net";
 import { fileURLToPath } from "url";
 import path from "path";
 
@@ -41,19 +41,78 @@ app.use(
   })
 );
 
-// ---- RCON 헬퍼: 명령마다 새 연결 (가장 안정적) ----
-async function rcon(command) {
-  const conn = await Rcon.connect({
-    host: RCON_HOST,
-    port: Number(RCON_PORT),
-    password: RCON_PASSWORD,
-    timeout: 5000,
+// ---- 팰월드 호환 최소 RCON 클라이언트 ----
+// rcon-client 는 응답 종료를 감지하려고 "추가 빈 패킷"을 보내고 그 답을 기다리는데,
+// 팰월드 RCON 은 그 답을 안 보내서 timeout 이 납니다(AUTH 는 되는데 send 가 멈춤).
+// 그래서 표준 Source RCON 패킷을 직접 주고받되, 응답 패킷이 오면 짧은 유휴 후 종료합니다.
+function rcon(command) {
+  return new Promise((resolve, reject) => {
+    const socket = net.connect({ host: RCON_HOST, port: Number(RCON_PORT) });
+    socket.setNoDelay(true);
+
+    const AUTH_ID = 1;
+    const CMD_ID = 2;
+    let stage = "auth";
+    let buf = Buffer.alloc(0);
+    let body = "";
+    let got = false;
+    let settled = false;
+    let idle = null;
+
+    const overall = setTimeout(() => finish(reject, new Error("RCON timeout")), 8000);
+
+    function finish(fn, arg) {
+      if (settled) return;
+      settled = true;
+      clearTimeout(overall);
+      if (idle) clearTimeout(idle);
+      socket.destroy();
+      fn(arg);
+    }
+    const ok = () => finish(resolve, body);
+    const fail = (e) => finish(reject, e);
+
+    // Source RCON 패킷 만들기: [length][id][type][body\0][\0]
+    function packet(id, type, str) {
+      const b = Buffer.from(str, "utf8");
+      const out = Buffer.alloc(14 + b.length);
+      out.writeInt32LE(10 + b.length, 0); // length = id+type+body+2null
+      out.writeInt32LE(id, 4);
+      out.writeInt32LE(type, 8);
+      b.copy(out, 12);
+      return out; // 마지막 2바이트는 alloc 으로 이미 0
+    }
+
+    socket.on("connect", () => socket.write(packet(AUTH_ID, 3, RCON_PASSWORD))); // SERVERDATA_AUTH
+    socket.on("error", fail);
+    socket.on("end", () => { if (got) ok(); });
+
+    socket.on("data", (chunk) => {
+      buf = Buffer.concat([buf, chunk]);
+      while (buf.length >= 4) {
+        const size = buf.readInt32LE(0);
+        if (buf.length < 4 + size) break; // 패킷이 덜 도착
+        const id = buf.readInt32LE(4);
+        const type = buf.readInt32LE(8);
+        const payload = buf.subarray(12, 4 + size - 2).toString("utf8");
+        buf = buf.subarray(4 + size);
+
+        if (stage === "auth") {
+          if (type === 2) { // SERVERDATA_AUTH_RESPONSE
+            if (id === -1) return fail(new Error("Authentication failed"));
+            stage = "command";
+            socket.write(packet(CMD_ID, 2, command)); // SERVERDATA_EXECCOMMAND
+          }
+          // auth 단계의 다른 패킷(빈 RESPONSE_VALUE 등)은 무시
+        } else if (type === 0) { // SERVERDATA_RESPONSE_VALUE
+          body += payload;
+          got = true;
+          if (idle) clearTimeout(idle);
+          idle = setTimeout(ok, 250); // 응답이 여러 패킷이면 마지막 후 250ms 뒤 종료
+        }
+      }
+    });
   });
-  try {
-    return await conn.send(command);
-  } finally {
-    conn.end().catch(() => {});
-  }
 }
 
 // ShowPlayers 응답(CSV)을 파싱: 첫 줄은 헤더(name,playeruid,steamid)

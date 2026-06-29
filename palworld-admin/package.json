@@ -9,7 +9,6 @@
   },
   "dependencies": {
     "express": "^4.19.2",
-    "express-session": "^1.18.0",
-    "rcon-client": "^4.2.5"
+    "express-session": "^1.18.0"
   }
 }
