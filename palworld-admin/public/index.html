@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#0f172a" />
+  <title>팰월드 서버 관리</title>
+  <style>
+    :root { --bg:#0f172a; --card:#1e293b; --line:#334155; --txt:#e2e8f0; --mut:#94a3b8;
+            --accent:#38bdf8; --danger:#f87171; --warn:#fbbf24; --ok:#34d399; }
+    * { box-sizing: border-box; }
+    body { margin:0; font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Apple SD Gothic Neo","Noto Sans KR",sans-serif;
+           background:var(--bg); color:var(--txt); line-height:1.5; }
+    .wrap { max-width:760px; margin:0 auto; padding:16px; }
+    h1 { font-size:1.25rem; margin:8px 0 16px; display:flex; align-items:center; gap:8px; }
+    .card { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:16px; margin-bottom:16px; }
+    .row { display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
+    input, button { font-size:1rem; border-radius:8px; border:1px solid var(--line); }
+    input { background:#0b1220; color:var(--txt); padding:10px 12px; flex:1; min-width:0; }
+    input:focus { outline:2px solid var(--accent); }
+    button { background:var(--accent); color:#04263a; font-weight:700; padding:10px 14px; border:none; cursor:pointer; }
+    button:hover { filter:brightness(1.08); }
+    button:disabled { opacity:.5; cursor:not-allowed; }
+    button.ghost { background:#0b1220; color:var(--txt); border:1px solid var(--line); }
+    button.danger { background:var(--danger); color:#3b0a0a; }
+    button.warn { background:var(--warn); color:#3b2a05; }
+    button.sm { padding:6px 10px; font-size:.85rem; }
+    .mut { color:var(--mut); font-size:.85rem; }
+    .hidden { display:none !important; }
+    table { width:100%; border-collapse:collapse; }
+    th, td { text-align:left; padding:8px 6px; border-bottom:1px solid var(--line); font-size:.9rem; vertical-align:middle; }
+    th { color:var(--mut); font-weight:600; }
+    .steam { font-family:ui-monospace,monospace; color:var(--mut); font-size:.78rem; word-break:break-all; }
+    .toast { position:fixed; left:50%; bottom:20px; transform:translateX(-50%);
+             background:#020617; border:1px solid var(--line); padding:10px 16px; border-radius:10px;
+             max-width:90%; box-shadow:0 8px 30px rgba(0,0,0,.5); opacity:0; transition:opacity .2s; pointer-events:none; }
+    .toast.show { opacity:1; }
+    .toast.err { border-color:var(--danger); }
+    .toast.ok { border-color:var(--ok); }
+    .head { display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; }
+    .badge { font-size:.75rem; padding:3px 8px; border-radius:999px; background:#0b1220; border:1px solid var(--line); color:var(--mut); }
+    .grid2 { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+    @media (max-width:520px){ .grid2 { grid-template-columns:1fr; } }
+    .secrow { display:flex; gap:8px; }
+    .secrow input { flex:1; }
+    h2 { font-size:1rem; margin:0 0 10px; }
+  </style>
+</head>
+<body>
+<div class="wrap">
+
+  <!-- 로그인 -->
+  <div id="loginView">
+    <h1>🎮 팰월드 서버 관리</h1>
+    <div class="card">
+      <h2>로그인</h2>
+      <form id="loginForm" class="secrow">
+        <input id="pw" type="password" placeholder="관리 패널 비밀번호" autocomplete="current-password" />
+        <button type="submit">입장</button>
+      </form>
+      <p class="mut" id="loginMsg" style="margin:10px 0 0;"></p>
+    </div>
+  </div>
+
+  <!-- 대시보드 -->
+  <div id="dashView" class="hidden">
+    <div class="head">
+      <h1 style="margin:0;">🎮 팰월드 서버 관리</h1>
+      <button class="ghost sm" id="logoutBtn">로그아웃</button>
+    </div>
+
+    <div class="card">
+      <div class="head"><h2>서버 상태</h2><span class="badge" id="infoBadge">조회 중…</span></div>
+      <div class="row">
+        <button class="ghost sm" id="saveBtn">💾 수동 저장</button>
+        <button class="warn sm" id="shutdownBtn">🔁 안전 재시작(종료)</button>
+        <button class="ghost sm" id="refreshBtn">🔄 새로고침</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>📢 전체 공지</h2>
+      <form id="bcForm" class="secrow">
+        <input id="bcMsg" placeholder="공지 내용 (영문/숫자 권장)" />
+        <button type="submit">보내기</button>
+      </form>
+      <p class="mut" style="margin:8px 0 0;">※ 팰월드 RCON 특성상 공백은 _ 로, 한글은 깨질 수 있어요.</p>
+    </div>
+
+    <div class="card">
+      <div class="head"><h2>👥 접속자 <span class="badge" id="cnt">0</span></h2></div>
+      <table>
+        <thead><tr><th>이름</th><th>SteamID</th><th style="text-align:right;">관리</th></tr></thead>
+        <tbody id="players"><tr><td colspan="3" class="mut">불러오는 중…</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+
+</div>
+
+<div id="toast" class="toast"></div>
+
+<script>
+const $ = s => document.querySelector(s);
+let toastTimer;
+function toast(msg, kind) {
+  const t = $("#toast");
+  t.textContent = msg;
+  t.className = "toast show " + (kind || "");
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => (t.className = "toast"), 3000);
+}
+
+async function api(path, opts) {
+  const res = await fetch(path, Object.assign({ headers: { "Content-Type": "application/json" } }, opts));
+  let data = {};
+  try { data = await res.json(); } catch (_) {}
+  if (res.status === 401 && path !== "/api/login") { showLogin(); throw new Error(data.error || "로그인이 필요합니다."); }
+  if (!res.ok) throw new Error(data.error || ("오류 " + res.status));
+  return data;
+}
+
+function showLogin() { $("#loginView").classList.remove("hidden"); $("#dashView").classList.add("hidden"); }
+function showDash() { $("#loginView").classList.add("hidden"); $("#dashView").classList.remove("hidden"); refreshAll(); }
+
+$("#loginForm").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  try {
+    await api("/api/login", { method: "POST", body: JSON.stringify({ password: $("#pw").value }) });
+    $("#pw").value = "";
+    $("#loginMsg").textContent = "";
+    showDash();
+  } catch (err) { $("#loginMsg").textContent = err.message; }
+});
+
+$("#logoutBtn").addEventListener("click", async () => { await api("/api/logout", { method: "POST" }); showLogin(); });
+
+async function loadInfo() {
+  try { const d = await api("/api/info"); $("#infoBadge").textContent = d.info || "온라인"; $("#infoBadge").style.color = "var(--ok)"; }
+  catch (e) { $("#infoBadge").textContent = "오프라인/오류"; $("#infoBadge").style.color = "var(--danger)"; }
+}
+
+async function loadPlayers() {
+  const tb = $("#players");
+  try {
+    const d = await api("/api/players");
+    $("#cnt").textContent = d.players.length;
+    if (!d.players.length) { tb.innerHTML = '<tr><td colspan="3" class="mut">접속자 없음</td></tr>'; return; }
+    tb.innerHTML = d.players.map(p => `
+      <tr>
+        <td>${escapeHtml(p.name)}</td>
+        <td class="steam">${escapeHtml(p.steamid || "-")}</td>
+        <td style="text-align:right; white-space:nowrap;">
+          <button class="warn sm" onclick="kick('${escapeAttr(p.steamid)}','${escapeAttr(p.name)}')">강퇴</button>
+          <button class="danger sm" onclick="ban('${escapeAttr(p.steamid)}','${escapeAttr(p.name)}')">밴</button>
+        </td>
+      </tr>`).join("");
+  } catch (e) { tb.innerHTML = `<tr><td colspan="3" class="mut">불러오기 실패: ${escapeHtml(e.message)}</td></tr>`; }
+}
+
+function refreshAll() { loadInfo(); loadPlayers(); }
+
+$("#refreshBtn").addEventListener("click", refreshAll);
+
+$("#bcForm").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const msg = $("#bcMsg").value.trim();
+  if (!msg) return;
+  try { await api("/api/broadcast", { method: "POST", body: JSON.stringify({ message: msg }) }); $("#bcMsg").value = ""; toast("공지를 보냈어요.", "ok"); }
+  catch (e) { toast(e.message, "err"); }
+});
+
+$("#saveBtn").addEventListener("click", async () => {
+  try { await api("/api/save", { method: "POST" }); toast("저장 완료.", "ok"); }
+  catch (e) { toast(e.message, "err"); }
+});
+
+$("#shutdownBtn").addEventListener("click", async () => {
+  if (!confirm("30초 뒤 서버를 종료합니다.\n(restart 정책으로 자동 재시작됩니다) 진행할까요?")) return;
+  try { await api("/api/shutdown", { method: "POST", body: JSON.stringify({ seconds: 30, message: "Server_restarting_in_30s" }) }); toast("30초 뒤 재시작합니다.", "ok"); }
+  catch (e) { toast(e.message, "err"); }
+});
+
+window.kick = async (steamid, name) => {
+  if (!steamid) return toast("SteamID를 못 읽었어요.", "err");
+  if (!confirm(`${name} 님을 강퇴할까요?`)) return;
+  try { await api("/api/kick", { method: "POST", body: JSON.stringify({ steamid }) }); toast(`${name} 강퇴됨.`, "ok"); loadPlayers(); }
+  catch (e) { toast(e.message, "err"); }
+};
+window.ban = async (steamid, name) => {
+  if (!steamid) return toast("SteamID를 못 읽었어요.", "err");
+  if (!confirm(`${name} 님을 영구 밴할까요?`)) return;
+  try { await api("/api/ban", { method: "POST", body: JSON.stringify({ steamid }) }); toast(`${name} 밴됨.`, "ok"); loadPlayers(); }
+  catch (e) { toast(e.message, "err"); }
+};
+
+function escapeHtml(s){ return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function escapeAttr(s){ return String(s).replace(/['\\]/g, "\\$&").replace(/"/g,'&quot;'); }
+
+// 자동 새로고침 (접속자 목록)
+setInterval(() => { if (!$("#dashView").classList.contains("hidden")) loadPlayers(); }, 15000);
+
+// 시작 시 세션 확인
+api("/api/session").then(d => d.authed ? showDash() : showLogin()).catch(showLogin);
+</script>
+</body>
+</html>

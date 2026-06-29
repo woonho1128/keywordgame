@@ -1,0 +1,15 @@
+{
+  "name": "palworld-admin",
+  "version": "1.0.0",
+  "description": "Palworld dedicated server RCON web admin panel",
+  "type": "module",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "express-session": "^1.18.0",
+    "rcon-client": "^4.2.5"
+  }
+}

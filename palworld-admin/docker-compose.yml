@@ -1,0 +1,43 @@
+# 팰월드 관리 패널 + Cloudflare Tunnel
+#
+# 이 스택은 "이미 돌고 있는 팰월드 서버"의 도커 네트워크에 합류해서
+# 컨테이너 이름(palworld-server)으로 RCON(25575)에 직접 붙습니다.
+# → RCON 포트를 외부에 열 필요가 전혀 없습니다(보안).
+#
+# 사전 확인: 팰월드 서버 컨테이너가 만든 네트워크 이름 확인
+#   docker network ls   →  보통 'palworld-server_default'
+#   다르면 아래 networks.palworld.name 을 그 이름으로 바꾸세요.
+
+services:
+  palworld-admin:
+    build: .
+    container_name: palworld-admin
+    restart: unless-stopped
+    env_file: .env
+    networks:
+      - palworld
+    # 호스트로 포트를 열지 않습니다 — cloudflared 만 내부에서 접근(외부 노출 0)
+
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    container_name: palworld-cloudflared
+    restart: unless-stopped
+    networks:
+      - palworld
+    depends_on:
+      - palworld-admin
+    # === 기본: 임시 터널(무료, 계정 불필요, 랜덤 URL) ===
+    # 시작 후 로그에 https://....trycloudflare.com 주소가 찍힙니다.
+    command: tunnel --no-autoupdate --url http://palworld-admin:3000
+    #
+    # === 명명 터널로 바꾸려면(고정 주소/내 도메인): ===
+    # 1) .env 에 TUNNEL_TOKEN 채우고
+    # 2) 위 command 줄을 주석 처리한 뒤 아래 두 줄의 주석을 해제
+    # command: tunnel --no-autoupdate run
+    # environment:
+    #   - TUNNEL_TOKEN=${TUNNEL_TOKEN}
+
+networks:
+  palworld:
+    external: true
+    name: palworld-server_default
