@@ -54,9 +54,14 @@
     <h1>🎮 팰월드 서버 관리</h1>
     <div class="card">
       <h2>로그인</h2>
-      <form id="loginForm" class="secrow">
-        <input id="pw" type="password" placeholder="관리 패널 비밀번호" autocomplete="current-password" />
-        <button type="submit">입장</button>
+      <form id="loginForm">
+        <div class="row" style="flex-direction:column; align-items:stretch;">
+          <input id="user" placeholder="아이디" autocomplete="username" style="margin-bottom:8px;" />
+          <div class="secrow">
+            <input id="pw" type="password" placeholder="비밀번호" autocomplete="current-password" />
+            <button type="submit">입장</button>
+          </div>
+        </div>
       </form>
       <p class="mut" id="loginMsg" style="margin:10px 0 0;"></p>
     </div>
@@ -66,7 +71,10 @@
   <div id="dashView" class="hidden">
     <div class="head">
       <h1 style="margin:0;">🎮 팰월드 서버 관리</h1>
-      <button class="ghost sm" id="logoutBtn">로그아웃</button>
+      <div class="row">
+        <span class="badge" id="whoami"></span>
+        <button class="ghost sm" id="logoutBtn">로그아웃</button>
+      </div>
     </div>
 
     <div class="card">
@@ -92,6 +100,18 @@
       <table>
         <thead><tr><th>이름</th><th>SteamID</th><th style="text-align:right;">관리</th></tr></thead>
         <tbody id="players"><tr><td colspan="3" class="mut">불러오는 중…</td></tr></tbody>
+      </table>
+    </div>
+
+    <!-- 작업 로그 (슈퍼관리자 전용) -->
+    <div class="card hidden" id="logCard">
+      <div class="head">
+        <h2>📋 작업 로그 <span class="badge">슈퍼관리자 전용</span></h2>
+        <button class="ghost sm" id="logRefreshBtn">🔄</button>
+      </div>
+      <table>
+        <thead><tr><th>시각</th><th>관리자</th><th>작업</th><th>대상 / 결과</th></tr></thead>
+        <tbody id="logs"><tr><td colspan="4" class="mut">불러오는 중…</td></tr></tbody>
       </table>
     </div>
   </div>
@@ -121,15 +141,23 @@ async function api(path, opts) {
 }
 
 function showLogin() { $("#loginView").classList.remove("hidden"); $("#dashView").classList.add("hidden"); }
-function showDash() { $("#loginView").classList.add("hidden"); $("#dashView").classList.remove("hidden"); refreshAll(); }
+function showDash(user, role) {
+  $("#loginView").classList.add("hidden");
+  $("#dashView").classList.remove("hidden");
+  const isSuper = role === "super";
+  $("#whoami").textContent = (user || "") + (isSuper ? " · 슈퍼관리자" : " · 관리자");
+  $("#logCard").classList.toggle("hidden", !isSuper); // 슈퍼관리자만 로그 보임
+  refreshAll();
+  if (isSuper) loadLogs();
+}
 
 $("#loginForm").addEventListener("submit", async (e) => {
   e.preventDefault();
   try {
-    await api("/api/login", { method: "POST", body: JSON.stringify({ password: $("#pw").value }) });
+    const d = await api("/api/login", { method: "POST", body: JSON.stringify({ username: $("#user").value, password: $("#pw").value }) });
     $("#pw").value = "";
     $("#loginMsg").textContent = "";
-    showDash();
+    showDash(d.user, d.role);
   } catch (err) { $("#loginMsg").textContent = err.message; }
 });
 
@@ -184,15 +212,34 @@ $("#shutdownBtn").addEventListener("click", async () => {
 window.kick = async (steamid, name) => {
   if (!steamid) return toast("SteamID를 못 읽었어요.", "err");
   if (!confirm(`${name} 님을 강퇴할까요?`)) return;
-  try { await api("/api/kick", { method: "POST", body: JSON.stringify({ steamid }) }); toast(`${name} 강퇴됨.`, "ok"); loadPlayers(); }
+  try { await api("/api/kick", { method: "POST", body: JSON.stringify({ steamid, name }) }); toast(`${name} 강퇴됨.`, "ok"); loadPlayers(); maybeRefreshLogs(); }
   catch (e) { toast(e.message, "err"); }
 };
 window.ban = async (steamid, name) => {
   if (!steamid) return toast("SteamID를 못 읽었어요.", "err");
   if (!confirm(`${name} 님을 영구 밴할까요?`)) return;
-  try { await api("/api/ban", { method: "POST", body: JSON.stringify({ steamid }) }); toast(`${name} 밴됨.`, "ok"); loadPlayers(); }
+  try { await api("/api/ban", { method: "POST", body: JSON.stringify({ steamid, name }) }); toast(`${name} 밴됨.`, "ok"); loadPlayers(); maybeRefreshLogs(); }
   catch (e) { toast(e.message, "err"); }
 };
+
+// ---- 작업 로그 (슈퍼관리자) ----
+function maybeRefreshLogs() { if (!$("#logCard").classList.contains("hidden")) loadLogs(); }
+async function loadLogs() {
+  const tb = $("#logs");
+  try {
+    const d = await api("/api/logs");
+    if (!d.logs.length) { tb.innerHTML = '<tr><td colspan="4" class="mut">기록 없음</td></tr>'; return; }
+    tb.innerHTML = d.logs.map(l => `
+      <tr>
+        <td class="steam">${escapeHtml(fmtTime(l.time))}</td>
+        <td>${escapeHtml(l.user)}</td>
+        <td>${escapeHtml(l.action)}</td>
+        <td class="mut">${escapeHtml([l.target, l.result].filter(Boolean).join(" · "))}</td>
+      </tr>`).join("");
+  } catch (e) { tb.innerHTML = `<tr><td colspan="4" class="mut">불러오기 실패: ${escapeHtml(e.message)}</td></tr>`; }
+}
+$("#logRefreshBtn").addEventListener("click", loadLogs);
+function fmtTime(iso){ try { return new Date(iso).toLocaleString("ko-KR", { timeZone: "Asia/Seoul", hour12: false }); } catch(_) { return iso; } }
 
 function escapeHtml(s){ return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 function escapeAttr(s){ return String(s).replace(/['\\]/g, "\\$&").replace(/"/g,'&quot;'); }
@@ -201,7 +248,7 @@ function escapeAttr(s){ return String(s).replace(/['\\]/g, "\\$&").replace(/"/g,
 setInterval(() => { if (!$("#dashView").classList.contains("hidden")) refreshAll(); }, 15000);
 
 // 시작 시 세션 확인
-api("/api/session").then(d => d.authed ? showDash() : showLogin()).catch(showLogin);
+api("/api/session").then(d => d.authed ? showDash(d.user, d.role) : showLogin()).catch(showLogin);
 </script>
 </body>
 </html>

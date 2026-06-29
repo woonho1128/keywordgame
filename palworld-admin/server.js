@@ -1,6 +1,7 @@
 import express from "express";
 import session from "express-session";
 import net from "net";
+import fs from "fs";
 import { fileURLToPath } from "url";
 import path from "path";
 
@@ -9,19 +10,46 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const {
   PORT = 3000,
   PANEL_PASSWORD,
+  ADMINS,
   SESSION_SECRET = "change-this-session-secret",
   RCON_HOST = "palworld-server",
   RCON_PORT = 25575,
   RCON_PASSWORD,
+  LOG_FILE = "/data/actions.log",
 } = process.env;
 
-if (!PANEL_PASSWORD) {
-  console.error("[FATAL] PANEL_PASSWORD 환경변수가 필요합니다 (.env 확인)");
+// ---- 관리자 계정 로드 ----
+// ADMINS 는 JSON 배열: [{"user":"이름","pass":"비번","role":"super|admin"}]
+// super = 모든 기능 + 작업 로그 열람 / admin = 관리 기능만(로그 못 봄)
+let accounts = [];
+if (ADMINS) {
+  try {
+    accounts = JSON.parse(ADMINS);
+    if (!Array.isArray(accounts)) throw new Error("배열이 아님");
+  } catch (e) {
+    console.error("[FATAL] ADMINS 파싱 실패 — JSON 형식을 확인하세요:", e.message);
+    process.exit(1);
+  }
+}
+// 하위호환: ADMINS 없으면 PANEL_PASSWORD 를 단일 슈퍼관리자로
+if (!accounts.length && PANEL_PASSWORD) {
+  accounts = [{ user: "admin", pass: PANEL_PASSWORD, role: "super" }];
+}
+if (!accounts.length) {
+  console.error("[FATAL] 관리자 계정이 없습니다 — .env 의 ADMINS 또는 PANEL_PASSWORD 를 설정하세요.");
   process.exit(1);
 }
 if (!RCON_PASSWORD) {
   console.error("[FATAL] RCON_PASSWORD 환경변수가 필요합니다 (팰월드 AdminPassword)");
   process.exit(1);
+}
+
+// ---- 작업 로그 (누가/언제/뭘 했는지, 파일에 영구 기록) ----
+function logAction(user, action, target, result) {
+  const entry = { time: new Date().toISOString(), user, action, target, result };
+  fs.appendFile(LOG_FILE, JSON.stringify(entry) + "\n", (err) => {
+    if (err) console.error("[log] 기록 실패:", err.message);
+  });
 }
 
 const app = express();
@@ -144,12 +172,16 @@ function parsePlayers(raw) {
 
 // ---- 인증 ----
 app.post("/api/login", (req, res) => {
-  const { password } = req.body || {};
-  if (password && password === PANEL_PASSWORD) {
-    req.session.authed = true;
-    return res.json({ ok: true });
+  const { username, password } = req.body || {};
+  const acc = accounts.find((a) => a.user === username && a.pass === password);
+  if (acc) {
+    req.session.user = acc.user;
+    req.session.role = acc.role === "super" ? "super" : "admin";
+    logAction(acc.user, "로그인", "", "성공");
+    return res.json({ ok: true, user: acc.user, role: req.session.role });
   }
-  return res.status(401).json({ ok: false, error: "비밀번호가 틀렸습니다." });
+  logAction(String(username || "?"), "로그인", "", "실패");
+  return res.status(401).json({ ok: false, error: "아이디 또는 비밀번호가 틀렸습니다." });
 });
 
 app.post("/api/logout", (req, res) => {
@@ -157,13 +189,34 @@ app.post("/api/logout", (req, res) => {
 });
 
 app.get("/api/session", (req, res) => {
-  res.json({ authed: !!req.session.authed });
+  res.json({ authed: !!req.session.user, user: req.session.user || null, role: req.session.role || null });
 });
 
 function requireAuth(req, res, next) {
-  if (req.session.authed) return next();
+  if (req.session.user) return next();
   return res.status(401).json({ ok: false, error: "로그인이 필요합니다." });
 }
+
+function requireSuper(req, res, next) {
+  if (req.session.user && req.session.role === "super") return next();
+  return res.status(403).json({ ok: false, error: "슈퍼관리자만 접근할 수 있습니다." });
+}
+
+// 작업 로그 조회 (슈퍼관리자 전용)
+app.get("/api/logs", requireSuper, (req, res) => {
+  fs.readFile(LOG_FILE, "utf8", (err, data) => {
+    if (err) return res.json({ ok: true, logs: [] });
+    const logs = data
+      .trim()
+      .split("\n")
+      .filter(Boolean)
+      .map((l) => { try { return JSON.parse(l); } catch { return null; } })
+      .filter(Boolean)
+      .slice(-300)
+      .reverse();
+    res.json({ ok: true, logs });
+  });
+});
 
 // ---- 관리 API ----
 app.get("/api/players", requireAuth, async (req, res) => {
@@ -190,30 +243,38 @@ app.post("/api/broadcast", requireAuth, async (req, res) => {
   try {
     // 팰월드 Broadcast는 공백을 만나면 잘리는 버그가 있어 공백을 _ 로 치환
     const raw = await rcon(`Broadcast ${message.replace(/\s+/g, "_")}`);
+    logAction(req.session.user, "공지", message, "성공");
     res.json({ ok: true, raw: String(raw).trim() });
   } catch (e) {
+    logAction(req.session.user, "공지", message, "실패: " + rconErr(e));
     res.status(500).json({ ok: false, error: rconErr(e) });
   }
 });
 
 app.post("/api/kick", requireAuth, async (req, res) => {
   const steamid = String((req.body && req.body.steamid) || "").trim();
+  const name = String((req.body && req.body.name) || "").trim();
   if (!steamid) return res.status(400).json({ ok: false, error: "steamid가 필요합니다." });
   try {
     const raw = await rcon(`KickPlayer ${steamid}`);
+    logAction(req.session.user, "강퇴", `${name || "?"}(${steamid})`, "성공");
     res.json({ ok: true, raw: String(raw).trim() });
   } catch (e) {
+    logAction(req.session.user, "강퇴", `${name || "?"}(${steamid})`, "실패: " + rconErr(e));
     res.status(500).json({ ok: false, error: rconErr(e) });
   }
 });
 
 app.post("/api/ban", requireAuth, async (req, res) => {
   const steamid = String((req.body && req.body.steamid) || "").trim();
+  const name = String((req.body && req.body.name) || "").trim();
   if (!steamid) return res.status(400).json({ ok: false, error: "steamid가 필요합니다." });
   try {
     const raw = await rcon(`BanPlayer ${steamid}`);
+    logAction(req.session.user, "밴", `${name || "?"}(${steamid})`, "성공");
     res.json({ ok: true, raw: String(raw).trim() });
   } catch (e) {
+    logAction(req.session.user, "밴", `${name || "?"}(${steamid})`, "실패: " + rconErr(e));
     res.status(500).json({ ok: false, error: rconErr(e) });
   }
 });
@@ -221,8 +282,10 @@ app.post("/api/ban", requireAuth, async (req, res) => {
 app.post("/api/save", requireAuth, async (req, res) => {
   try {
     const raw = await rcon("Save");
+    logAction(req.session.user, "수동 저장", "", "성공");
     res.json({ ok: true, raw: String(raw).trim() });
   } catch (e) {
+    logAction(req.session.user, "수동 저장", "", "실패: " + rconErr(e));
     res.status(500).json({ ok: false, error: rconErr(e) });
   }
 });
@@ -232,8 +295,10 @@ app.post("/api/shutdown", requireAuth, async (req, res) => {
   const message = String((req.body && req.body.message) || "ServerShutdown").trim().replace(/\s+/g, "_");
   try {
     const raw = await rcon(`Shutdown ${seconds} ${message}`);
+    logAction(req.session.user, "안전 재시작", `${seconds}초 후`, "성공");
     res.json({ ok: true, raw: String(raw).trim() });
   } catch (e) {
+    logAction(req.session.user, "안전 재시작", `${seconds}초 후`, "실패: " + rconErr(e));
     res.status(500).json({ ok: false, error: rconErr(e) });
   }
 });

@@ -57,10 +57,16 @@ nano .env
 ```
 
 채울 값:
-- `PANEL_PASSWORD` — 웹 패널 로그인 비번 (직접 정함)
+- `ADMINS` — 관리자 계정 JSON 배열. 각 계정은 `user`/`pass`/`role`.
+  - `role: "super"` = 모든 기능 + **작업 로그 열람**
+  - `role: "admin"` = 관리 기능만 (로그 못 봄)
+  - 예: `ADMINS=[{"user":"woonho","pass":"...","role":"super"},{"user":"teru","pass":"...","role":"admin"}]`
+  - ⚠️ 비밀번호엔 `"` 와 `\` 는 쓰지 마세요(JSON 깨짐).
 - `SESSION_SECRET` — 긴 랜덤 문자열 (`openssl rand -hex 32` 결과 붙여넣기)
 - `RCON_PASSWORD` — 팰월드 `AdminPassword` 와 동일하게
 - `RCON_HOST=palworld-server`, `RCON_PORT=25575` (그대로 두면 됨)
+
+> 단일 관리자만 쓸 거면 `ADMINS` 대신 `PANEL_PASSWORD` 하나만 넣어도 됩니다(슈퍼관리자로 동작).
 
 ### 3) 팰월드 네트워크 이름 확인
 
@@ -116,6 +122,12 @@ docker compose down                # 패널 + 터널 종료(팰월드 서버는 
 ```
 
 ---
+
+## 관리자 역할 & 작업 로그
+
+- **슈퍼관리자(super)**: 모든 관리 기능 + **작업 로그 탭** 열람. 누가/언제/무엇을 했는지(로그인·공지·강퇴·밴·저장·재시작) 전부 기록됩니다.
+- **일반관리자(admin)**: 관리 기능은 쓰되 로그 탭은 안 보입니다.
+- 로그는 `./data/actions.log` 에 JSON Lines 로 영구 저장됩니다(컨테이너 재시작/재배포에도 유지).
 
 ## 보안 메모
 

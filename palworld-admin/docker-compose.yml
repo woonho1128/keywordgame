@@ -14,6 +14,8 @@ services:
     container_name: palworld-admin
     restart: unless-stopped
     env_file: .env
+    volumes:
+      - ./data:/data        # 작업 로그(actions.log) 영구 저장
     networks:
       - palworld
     # 호스트로 포트를 열지 않습니다 — cloudflared 만 내부에서 접근(외부 노출 0)
@@ -26,16 +28,14 @@ services:
       - palworld
     depends_on:
       - palworld-admin
-    # === 기본: 임시 터널(무료, 계정 불필요, 랜덤 URL) ===
-    # 시작 후 로그에 https://....trycloudflare.com 주소가 찍힙니다.
-    command: tunnel --no-autoupdate --url http://palworld-admin:3000
+    # === 명명 터널(고정 주소/내 도메인) — .env 의 TUNNEL_TOKEN 사용 ===
+    command: tunnel --no-autoupdate run
+    environment:
+      - TUNNEL_TOKEN=${TUNNEL_TOKEN}
     #
-    # === 명명 터널로 바꾸려면(고정 주소/내 도메인): ===
-    # 1) .env 에 TUNNEL_TOKEN 채우고
-    # 2) 위 command 줄을 주석 처리한 뒤 아래 두 줄의 주석을 해제
-    # command: tunnel --no-autoupdate run
-    # environment:
-    #   - TUNNEL_TOKEN=${TUNNEL_TOKEN}
+    # === 임시 터널(무료, 계정 불필요, 랜덤 URL)로 쓰려면: ===
+    # 위 command/environment 두 줄을 주석 처리하고 아래 한 줄로 교체
+    # command: tunnel --no-autoupdate --url http://palworld-admin:3000
 
 networks:
   palworld:
