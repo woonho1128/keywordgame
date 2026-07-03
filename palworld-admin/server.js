@@ -152,6 +152,21 @@ function rconExec(command) {
   });
 }
 
+// RCON 재시도 래퍼: 팰월드 RCON 이 FEX 부하로 간헐적으로 느려/끊길 때 대비.
+// 조회(Info/ShowPlayers)처럼 여러 번 해도 안전한 명령에만 사용.
+async function rconRetry(command, tries = 3) {
+  let lastErr;
+  for (let i = 0; i < tries; i++) {
+    try {
+      return await rcon(command);
+    } catch (e) {
+      lastErr = e;
+      if (i < tries - 1) await new Promise((r) => setTimeout(r, 400));
+    }
+  }
+  throw lastErr;
+}
+
 // ShowPlayers 응답(CSV)을 파싱: 첫 줄은 헤더(name,playeruid,steamid)
 function parsePlayers(raw) {
   const lines = String(raw || "").trim().split(/\r?\n/).filter(Boolean);
@@ -221,7 +236,7 @@ app.get("/api/logs", requireSuper, (req, res) => {
 // ---- 관리 API ----
 app.get("/api/players", requireAuth, async (req, res) => {
   try {
-    const raw = await rcon("ShowPlayers");
+    const raw = await rconRetry("ShowPlayers");
     res.json({ ok: true, players: parsePlayers(raw), raw });
   } catch (e) {
     res.status(500).json({ ok: false, error: rconErr(e) });
@@ -230,7 +245,7 @@ app.get("/api/players", requireAuth, async (req, res) => {
 
 app.get("/api/info", requireAuth, async (req, res) => {
   try {
-    const raw = await rcon("Info");
+    const raw = await rconRetry("Info");
     res.json({ ok: true, info: String(raw).trim() });
   } catch (e) {
     res.status(500).json({ ok: false, error: rconErr(e) });
