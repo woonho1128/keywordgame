@@ -85,8 +85,9 @@ class JobMafiaServiceTest {
         int protect = svc.me(doctor).selectable().stream().filter(s -> s != killSeat).findFirst().orElseThrow();
         svc.nightAction(doctor, protect);
 
-        // 나머지 생존자도 지목 완료 → 밤 종료
+        // 나머지 생존자도 지목 완료 → 밤 종료 (마피아·의사는 이미 정한 대상 유지)
         for (String c : clients) {
+            if (c.equals(mafia) || c.equals(doctor)) continue;
             JobMafiaStateResponse st = svc.me(c);
             if (st.status().equals("NIGHT") && st.alive() && !st.selectable().isEmpty()) {
                 svc.nightAction(c, st.selectable().get(0));

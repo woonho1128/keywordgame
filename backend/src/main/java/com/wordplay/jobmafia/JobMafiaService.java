@@ -60,7 +60,6 @@ public class JobMafiaService {
 
     // 밤 상태
     private final Map<Integer, Integer> nightTargetBySeat = new HashMap<>(); // 각자 이번 밤 지목(표시용)
-    private int doctorTarget = -1;            // 진짜 의사의 보호 대상(효과 있음)
     private final List<String> copLog = new ArrayList<>();       // 진짜 경찰 조사 기록
     private final List<String> psychoCopLog = new ArrayList<>(); // 가짜 경찰(정신병자) 기록
     private final Set<Integer> nightActed = new HashSet<>();
@@ -158,23 +157,9 @@ public class JobMafiaService {
         if (!selectableSeats(seat, acting).contains(t))
             throw new BusinessException(ErrorCode.INVALID_INPUT, "지목할 수 없는 대상입니다");
 
+        // 밤엔 '지목'만 기록한다(각자 한 명). 실제 판정(살해·치료·조사)은 아침에 한 번에.
+        // → 클릭마다 결과가 뜨지 않고, 조사 결과는 아침에 딱 한 줄만 남는다.
         nightTargetBySeat.put(seat, t);
-        switch (acting) {
-            case POLICE -> {
-                boolean isMafia = players.get(t).role == Role.MAFIA;
-                if (me.role == Role.PSYCHO) {
-                    // 가짜 경찰: 결과가 랜덤(효과 없음)
-                    boolean fake = ThreadLocalRandom.current().nextBoolean();
-                    psychoCopLog.add(round + "일차: " + players.get(t).nick + " → " + (fake ? "마피아 O" : "마피아 X"));
-                } else {
-                    copLog.add(round + "일차: " + players.get(t).nick + " → " + (isMafia ? "마피아 O" : "마피아 X"));
-                }
-            }
-            case DOCTOR -> {
-                if (me.role != Role.PSYCHO) doctorTarget = t; // 가짜 의사는 효과 없음
-            }
-            default -> { } // 마피아/시민/관종은 지목만 기록(마피아 결과는 다수결로 판정)
-        }
         nightActed.add(seat);
         maybeAdvanceNight();
         return me(clientId);
@@ -252,12 +237,13 @@ public class JobMafiaService {
 
     private void prepareNight() {
         nightTargetBySeat.clear();
-        doctorTarget = -1;
         nightActed.clear();
     }
 
+    /** 아침 판정: 조사·치료·살해를 이번 밤 지목으로 한 번에 처리. */
     private void resolveNight() {
         nightDeadSeat = -1;
+        int doctorTarget = roleTarget(Role.DOCTOR); // 진짜 의사의 보호 대상(없으면 -1)
         int mafiaTarget = mafiaPlurality();
         if (mafiaTarget >= 0 && mafiaTarget != doctorTarget && players.get(mafiaTarget).alive) {
             players.get(mafiaTarget).alive = false;
@@ -266,6 +252,38 @@ public class JobMafiaService {
         } else {
             nightMessage = "평화로운 밤이었습니다. 아무도 죽지 않았습니다.";
         }
+
+        // 경찰 조사(진짜: 정확) — 아침에 결과 1줄
+        int copSeat = aliveSeatOfRole(Role.POLICE);
+        if (copSeat >= 0) {
+            Integer t = nightTargetBySeat.get(copSeat);
+            if (t != null && t >= 0) {
+                boolean isMafia = players.get(t).role == Role.MAFIA;
+                copLog.add(round + "일차: " + players.get(t).nick + " → " + (isMafia ? "마피아 O" : "마피아 X"));
+            }
+        }
+        // 정신병자 가짜 조사(진위 무관 완전 랜덤)
+        if (psychoSeat >= 0 && players.get(psychoSeat).alive && psychoFakeRole == Role.POLICE) {
+            Integer t = nightTargetBySeat.get(psychoSeat);
+            if (t != null && t >= 0) {
+                boolean fake = ThreadLocalRandom.current().nextBoolean();
+                psychoCopLog.add(round + "일차: " + players.get(t).nick + " → " + (fake ? "마피아 O" : "마피아 X"));
+            }
+        }
+    }
+
+    private int aliveSeatOfRole(Role r) {
+        for (int i = 0; i < players.size(); i++)
+            if (players.get(i).alive && players.get(i).role == r) return i;
+        return -1;
+    }
+
+    /** 해당 직업(생존)의 이번 밤 지목 대상(0-based), 없으면 -1. */
+    private int roleTarget(Role r) {
+        int s = aliveSeatOfRole(r);
+        if (s < 0) return -1;
+        Integer t = nightTargetBySeat.get(s);
+        return t == null ? -1 : t;
     }
 
     /** 살아있는 마피아들의 지목 다수결(동수는 낮은 좌석). 없으면 -1. */
@@ -375,9 +393,11 @@ public class JobMafiaService {
                 mafiaPickTally = mp;
             }
         }
-        // 경찰 조사 기록(진짜 경찰은 진짜, 정신병자는 가짜 기록)
-        if (joined && me.role == Role.POLICE) myCopLog = List.copyOf(copLog);
-        else if (joined && me.role == Role.PSYCHO && psychoFakeRole == Role.POLICE) myCopLog = List.copyOf(psychoCopLog);
+        // 경찰 조사 기록은 '밤엔 숨기고 아침부터' 공개(진짜 경찰=정확, 정신병자=가짜).
+        if (joined && phase != Phase.NIGHT) {
+            if (me.role == Role.POLICE) myCopLog = List.copyOf(copLog);
+            else if (me.role == Role.PSYCHO && psychoFakeRole == Role.POLICE) myCopLog = List.copyOf(psychoCopLog);
+        }
 
         List<VoteView> tally = new ArrayList<>();
         if (phase == Phase.VOTE || phase == Phase.EXECUTE) {
@@ -475,7 +495,6 @@ public class JobMafiaService {
         cfgMafia = 0; cfgPsycho = null; cfgAttention = null;
         revealOnDeath = true;
         nightTargetBySeat.clear();
-        doctorTarget = -1;
         copLog.clear();
         psychoCopLog.clear();
         nightActed.clear();

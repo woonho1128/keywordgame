@@ -496,14 +496,22 @@ export default function MafiaJobsPage() {
           </div>
         )}
 
-        {kind === 'POLICE_CHECK' && st!.copLog.length > 0 && (
-          <div className="bg-blue-50 rounded-lg p-3 text-sm text-blue-700 space-y-1">
-            {st!.copLog.map((l, i) => <div key={i}>{l}</div>)}
-          </div>
+        {kind === 'POLICE_CHECK' && (
+          <p className="text-center text-xs text-blue-400">🔎 한 명만 조사할 수 있어요. 결과는 아침에 공개됩니다</p>
         )}
         {st!.myTarget > 0 && (
           <p className="text-center text-xs text-gray-400">내 선택: <b>{nickOf(st!.myTarget)}</b> · 시간 내 변경 가능</p>
         )}
+      </div>
+    );
+  }
+
+  function copLogPanel() {
+    if (!st!.copLog || st!.copLog.length === 0) return null;
+    return (
+      <div className="mt-4 bg-blue-50 rounded-lg p-3 text-sm text-blue-700 space-y-1 text-left">
+        <p className="text-xs text-blue-400 font-medium">🔎 조사 결과</p>
+        {st!.copLog.map((l, i) => <div key={i}>{l}</div>)}
       </div>
     );
   }
@@ -513,6 +521,7 @@ export default function MafiaJobsPage() {
       <div className="text-center mt-8 space-y-3">
         <p className="text-5xl">☀️</p>
         <p className="text-lg font-bold text-gray-800">{st!.nightMessage}</p>
+        {copLogPanel()}
         {aliveBoard()}
       </div>
     );
@@ -524,6 +533,7 @@ export default function MafiaJobsPage() {
         <p className="text-5xl">💬</p>
         <p className="text-gray-600">자유롭게 토론하세요. 곧 투표가 시작됩니다.</p>
         {st!.nightMessage && <p className="text-sm text-gray-400">{st!.nightMessage}</p>}
+        {copLogPanel()}
         {aliveBoard()}
       </div>
     );
@@ -545,6 +555,7 @@ export default function MafiaJobsPage() {
         ) : (
           <p className="text-center text-gray-500 text-sm">관전 중 — 투표할 수 없습니다.</p>
         )}
+        {copLogPanel()}
         {tally.length > 0 && (
           <div className="space-y-1">
             <p className="text-xs text-gray-400">현재 득표</p>
