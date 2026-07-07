@@ -54,6 +54,14 @@ export default function HomePage() {
           <h2 className="text-2xl font-bold mb-2">🕵️‍♂️ 직업 마피아</h2>
           <p className="text-gray-600">경찰·의사·정신병자·관종 등 직업이 있는 마피아 (5~12인).</p>
         </Link>
+
+        <Link
+          href="/avalon"
+          className="border-2 border-gray-200 rounded-xl p-8 hover:border-hit transition"
+        >
+          <h2 className="text-2xl font-bold mb-2">🏰 아발론</h2>
+          <p className="text-gray-600">선과 악으로 나뉘어 원정을 다투는 추리 게임 (5~10인).</p>
+        </Link>
       </div>
     </main>
   );
