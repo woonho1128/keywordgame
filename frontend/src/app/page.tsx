@@ -30,6 +30,14 @@ export default function HomePage() {
           <h2 className="text-2xl font-bold mb-2">Lie Hint</h2>
           <p className="text-gray-600">힌트 3개 중 하나의 거짓말까지 찾아야 성공하는 게임.</p>
         </Link>
+
+        <Link
+          href="/spyfall"
+          className="border-2 border-gray-200 rounded-xl p-8 hover:border-hit transition"
+        >
+          <h2 className="text-2xl font-bold mb-2">🕵️ 스파이폴</h2>
+          <p className="text-gray-600">각자 폰으로 접속해 역할을 확인하고, 숨은 스파이를 찾는 게임 (3~12인).</p>
+        </Link>
       </div>
     </main>
   );
