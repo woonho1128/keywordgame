@@ -367,11 +367,14 @@ export default function MafiaPage() {
         <div className="rounded-xl border border-gray-200 p-4">
           <p className="text-sm font-bold mb-2">참가자 ({st!.playerCount}/12)</p>
           <div className="flex flex-wrap gap-2">
-            {st!.players.map((p) => (
-              <span key={p.seat} className="bg-gray-100 rounded-full px-3 py-1 text-sm">
-                {p.nick}
-              </span>
-            ))}
+            {st!.players.map((p) => {
+              const me = p.seat === st!.seat;
+              return (
+                <span key={p.seat} className={`bg-gray-100 rounded-full px-3 py-1 text-sm ${me ? 'ring-2 ring-hit font-bold' : ''}`}>
+                  {p.nick}{me && ' (나)'}
+                </span>
+              );
+            })}
             {st!.players.length === 0 && <span className="text-gray-400 text-sm">아직 없음</span>}
           </div>
         </div>
@@ -436,17 +439,20 @@ export default function MafiaPage() {
       <div className="mt-6">
         <p className="text-xs text-gray-400 mb-2">생존 {st!.aliveCount}명 / 전체 {st!.playerCount}명</p>
         <div className="flex flex-wrap gap-2">
-          {st!.players.map((p) => (
-            <span
-              key={p.seat}
-              className={`rounded-full px-3 py-1 text-sm ${
-                p.alive ? 'bg-gray-100 text-gray-700' : 'bg-gray-50 text-gray-300 line-through'
-              }`}
-            >
-              {p.nick}
-              {p.role && <span className="ml-1">{ROLE_META[p.role]?.emoji}</span>}
-            </span>
-          ))}
+          {st!.players.map((p) => {
+            const me = p.seat === st!.seat;
+            return (
+              <span
+                key={p.seat}
+                className={`rounded-full px-3 py-1 text-sm ${
+                  p.alive ? 'bg-gray-100 text-gray-700' : 'bg-gray-50 text-gray-300 line-through'
+                } ${me ? 'ring-2 ring-hit font-bold' : ''}`}
+              >
+                {p.nick}{me && ' (나)'}
+                {p.role && <span className="ml-1">{ROLE_META[p.role]?.emoji}</span>}
+              </span>
+            );
+          })}
         </div>
       </div>
     );
@@ -604,14 +610,19 @@ export default function MafiaPage() {
         <div className="rounded-xl border border-gray-200 p-4 text-left">
           <p className="text-sm font-bold mb-2">전체 정체 공개</p>
           <div className="space-y-1">
-            {st!.players.map((p) => (
-              <div key={p.seat} className="flex justify-between text-sm">
-                <span className={p.alive ? '' : 'text-gray-400 line-through'}>{p.nick}</span>
-                <span className={`font-medium ${p.role ? ROLE_META[p.role]?.color : ''}`}>
-                  {p.role ? `${ROLE_META[p.role]?.emoji} ${ROLE_META[p.role]?.label}` : '-'}
-                </span>
-              </div>
-            ))}
+            {st!.players.map((p) => {
+              const me = p.seat === st!.seat;
+              return (
+                <div key={p.seat} className="flex justify-between text-sm">
+                  <span className={`${p.alive ? '' : 'text-gray-400 line-through'} ${me ? 'font-bold' : ''}`}>
+                    {p.nick}{me && ' (나)'}
+                  </span>
+                  <span className={`font-medium ${p.role ? ROLE_META[p.role]?.color : ''}`}>
+                    {p.role ? `${ROLE_META[p.role]?.emoji} ${ROLE_META[p.role]?.label}` : '-'}
+                  </span>
+                </div>
+              );
+            })}
           </div>
         </div>
         <button
