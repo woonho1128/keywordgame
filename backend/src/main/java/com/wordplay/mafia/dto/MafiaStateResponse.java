@@ -44,11 +44,10 @@ public record MafiaStateResponse(
         int aliveCount,
         int totalMafia,
         int playerCount,
-        List<ChatView> mafiaChat  // 마피아에게만: 밤 채팅
+        List<VoteView> mafiaPickTally // 마피아에게만: 동료들의 실시간 지목 현황
 ) {
     public record PlayerView(int seat, String nick, boolean alive, String role) {}
     public record VoteView(int targetSeat, int count) {}
-    public record ChatView(long round, String nick, String text) {}
 
     public static MafiaStateResponse notStarted(long now) {
         return new MafiaStateResponse(

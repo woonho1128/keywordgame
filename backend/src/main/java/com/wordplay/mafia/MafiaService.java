@@ -3,7 +3,6 @@ package com.wordplay.mafia;
 import com.wordplay.common.exception.BusinessException;
 import com.wordplay.common.exception.ErrorCode;
 import com.wordplay.mafia.dto.MafiaStateResponse;
-import com.wordplay.mafia.dto.MafiaStateResponse.ChatView;
 import com.wordplay.mafia.dto.MafiaStateResponse.PlayerView;
 import com.wordplay.mafia.dto.MafiaStateResponse.VoteView;
 import com.wordplay.mafia.dto.NewMafiaRequest;
@@ -56,15 +55,12 @@ public class MafiaService {
     private boolean revealOnDeath = true;
 
     // 밤 행동
-    private int mafiaTarget = -1, copTarget = -1, doctorTarget = -1;
+    private int copTarget = -1, doctorTarget = -1;
     private int lastDoctorTarget = -1;       // 직전 밤 의사 보호 대상(연속 보호 금지)
     private final List<String> copLog = new ArrayList<>();
+    private final Map<Integer, Integer> mafiaPicks = new HashMap<>();   // 마피아 seat -> 지목(실시간 공유·다수결)
     private final Map<Integer, Integer> citizenPicks = new HashMap<>(); // 시민 위장 지목(결과 무관)
     private final Set<Integer> nightActed = new HashSet<>();            // 이번 밤 지목을 마친 좌석
-
-    // 마피아 밤 채팅
-    private record ChatMsg(long round, String nick, String text) {}
-    private final List<ChatMsg> mafiaChat = new ArrayList<>();
 
     // 낮 투표: 투표자 seat -> 대상 seat(-1 기권)
     private final Map<Integer, Integer> votes = new HashMap<>();
@@ -144,7 +140,7 @@ public class MafiaService {
             throw new BusinessException(ErrorCode.INVALID_INPUT, "지목할 수 없는 대상입니다");
 
         switch (me.role) {
-            case MAFIA -> mafiaTarget = t;
+            case MAFIA -> mafiaPicks.put(seatOf(me), t);
             case POLICE -> {
                 copTarget = t;
                 boolean isMafia = players.get(t).role == Role.MAFIA;
@@ -155,21 +151,6 @@ public class MafiaService {
         }
         nightActed.add(seatOf(me));
         maybeAdvanceNight(); // 살아있는 전원이 지목을 마쳤을 때만 조기 진행
-        return me(clientId);
-    }
-
-    /** 마피아 밤 채팅. */
-    public synchronized MafiaStateResponse chat(String clientId, String text) {
-        tick();
-        Player me = requirePlayer(clientId);
-        if (me.role != Role.MAFIA) throw new BusinessException(ErrorCode.INVALID_INPUT, "마피아만 사용할 수 있습니다");
-        if (!me.alive) throw new BusinessException(ErrorCode.INVALID_INPUT, "사망한 플레이어입니다");
-        if (phase != Phase.NIGHT) throw new BusinessException(ErrorCode.INVALID_INPUT, "밤에만 대화할 수 있습니다");
-        String t = text == null ? "" : text.trim();
-        if (t.isEmpty()) throw new BusinessException(ErrorCode.INVALID_INPUT, "빈 메시지입니다");
-        if (t.length() > 200) t = t.substring(0, 200);
-        mafiaChat.add(new ChatMsg(round, me.nick, t));
-        if (mafiaChat.size() > 200) mafiaChat.remove(0);
         return me(clientId);
     }
 
@@ -244,7 +225,7 @@ public class MafiaService {
     }
 
     private void prepareNight() {
-        mafiaTarget = -1;
+        mafiaPicks.clear();
         copTarget = -1;
         doctorTarget = -1;
         citizenPicks.clear();
@@ -253,6 +234,7 @@ public class MafiaService {
 
     private void resolveNight() {
         nightDeadSeat = -1;
+        int mafiaTarget = pluralityTarget(mafiaPicks); // 마피아 다수결(동수는 낮은 좌석)
         if (mafiaTarget >= 0 && mafiaTarget != doctorTarget && players.get(mafiaTarget).alive) {
             players.get(mafiaTarget).alive = false;
             nightDeadSeat = mafiaTarget;
@@ -261,6 +243,20 @@ public class MafiaService {
             nightMessage = "평화로운 밤이었습니다. 아무도 죽지 않았습니다.";
         }
         lastDoctorTarget = doctorTarget; // 다음 밤 연속 보호 금지용
+    }
+
+    /** 지목 맵에서 최다 득표 대상(동수면 낮은 좌석). 없으면 -1. */
+    private int pluralityTarget(Map<Integer, Integer> picks) {
+        Map<Integer, Integer> counts = new HashMap<>();
+        for (int t : picks.values()) if (t >= 0) counts.merge(t, 1, Integer::sum);
+        int best = -1, bestCount = 0;
+        for (var e : counts.entrySet()) {
+            if (e.getValue() > bestCount || (e.getValue() == bestCount && e.getKey() < best)) {
+                best = e.getKey();
+                bestCount = e.getValue();
+            }
+        }
+        return best;
     }
 
     private void resolveVote() {
@@ -316,7 +312,11 @@ public class MafiaService {
         if (joined && me.alive) {
             if (phase == Phase.NIGHT && me.role != null) {
                 switch (me.role) {
-                    case MAFIA -> { actionKind = "MAFIA_KILL"; myTarget = mafiaTarget < 0 ? -1 : mafiaTarget + 1; }
+                    case MAFIA -> {
+                        actionKind = "MAFIA_KILL";
+                        Integer mp = mafiaPicks.get(seatOf(me));
+                        myTarget = mp == null || mp < 0 ? -1 : mp + 1;
+                    }
                     case POLICE -> { actionKind = "POLICE_CHECK"; myTarget = copTarget < 0 ? -1 : copTarget + 1; }
                     case DOCTOR -> { actionKind = "DOCTOR_SAVE"; myTarget = doctorTarget < 0 ? -1 : doctorTarget + 1; }
                     case CITIZEN -> {
@@ -334,20 +334,21 @@ public class MafiaService {
                 selectable = aliveSeats().stream().filter(s -> s != seatOf(me)).map(s -> s + 1).toList();
             }
         }
+        List<VoteView> mafiaPickTally = List.of();
         if (joined && me.role == Role.MAFIA) {
             fellow = new ArrayList<>();
             for (int i = 0; i < players.size(); i++)
                 if (players.get(i).role == Role.MAFIA) fellow.add(i + 1);
-            myCopLog = List.of();
+            // 밤 동안 동료들의 실시간 지목 현황(마피아에게만)
+            if (phase == Phase.NIGHT) {
+                Map<Integer, Integer> counts = new LinkedHashMap<>();
+                for (int t : mafiaPicks.values()) if (t >= 0) counts.merge(t, 1, Integer::sum);
+                List<VoteView> mp = new ArrayList<>();
+                counts.forEach((k, v) -> mp.add(new VoteView(k + 1, v)));
+                mafiaPickTally = mp;
+            }
         }
         if (joined && me.role == Role.POLICE) myCopLog = List.copyOf(copLog);
-
-        List<ChatView> chat = List.of();
-        if (joined && me.role == Role.MAFIA) {
-            chat = mafiaChat.stream()
-                    .map(m -> new ChatView(m.round(), m.nick(), m.text()))
-                    .toList();
-        }
 
         List<VoteView> tally = new ArrayList<>();
         if (phase == Phase.VOTE || phase == Phase.EXECUTE) {
@@ -385,7 +386,7 @@ public class MafiaService {
                 (int) players.stream().filter(p -> p.alive).count(),
                 totalMafia,
                 players.size(),
-                chat
+                mafiaPickTally
         );
     }
 
@@ -401,11 +402,11 @@ public class MafiaService {
         nightMs = 60_000; discussMs = 90_000; voteMs = 30_000;
         configMafiaCount = 0;
         revealOnDeath = true;
-        mafiaTarget = copTarget = doctorTarget = lastDoctorTarget = -1;
+        copTarget = doctorTarget = lastDoctorTarget = -1;
         copLog.clear();
+        mafiaPicks.clear();
         citizenPicks.clear();
         nightActed.clear();
-        mafiaChat.clear();
         votes.clear();
         nightMessage = null;
         nightDeadSeat = executedSeat = -1;

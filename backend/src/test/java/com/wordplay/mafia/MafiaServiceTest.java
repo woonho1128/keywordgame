@@ -128,18 +128,18 @@ class MafiaServiceTest {
     }
 
     @Test
-    void 마피아_밤채팅_마피아만() {
+    void 마피아_지목현황_마피아만_보임() {
         Setup s = start5();
         String mafia = clientWithRole(s.roleByClient, "MAFIA");
         String cop = clientWithRole(s.roleByClient, "POLICE");
+        int killSeat = s.svc.me(mafia).selectable().get(0);
+        s.svc.nightAction(mafia, killSeat);
 
-        s.svc.chat(mafia, "3번 죽이자");
-        assertThat(s.svc.me(mafia).mafiaChat()).anyMatch(c -> c.text().contains("3번 죽이자"));
-        // 마피아가 아닌 사람은 채팅이 보이지 않음
-        assertThat(s.svc.me(cop).mafiaChat()).isEmpty();
-        // 마피아가 아니면 채팅 불가
-        assertThatThrownBy(() -> s.svc.chat(cop, "안돼"))
-                .hasMessageContaining("마피아만");
+        // 마피아는 동료 지목 현황(자기 포함)을 봄
+        assertThat(s.svc.me(mafia).mafiaPickTally())
+                .anyMatch(v -> v.targetSeat() == killSeat && v.count() == 1);
+        // 마피아가 아니면 지목 현황이 비어 있음
+        assertThat(s.svc.me(cop).mafiaPickTally()).isEmpty();
     }
 
     @Test

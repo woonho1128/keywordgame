@@ -36,7 +36,7 @@ type MafiaState = {
   aliveCount: number;
   totalMafia: number;
   playerCount: number;
-  mafiaChat: { round: number; nick: string; text: string }[];
+  mafiaPickTally: { targetSeat: number; count: number }[];
 };
 
 const CLIENT_ID_KEY = 'mafia_client_id';
@@ -93,10 +93,6 @@ export default function MafiaPage() {
   const [discussSec, setDiscussSec] = useState(90);
   const [voteSec, setVoteSec] = useState(30);
   const [showCreate, setShowCreate] = useState(false);
-
-  // 밤 채팅 (마피아는 실제 공유, 그 외는 혼자만 보이는 미끼)
-  const [chatInput, setChatInput] = useState('');
-  const [decoyChat, setDecoyChat] = useState<{ nick: string; text: string }[]>([]);
 
   // 관리자
   const [showAdmin, setShowAdmin] = useState(false);
@@ -198,19 +194,6 @@ export default function MafiaPage() {
 
   const handleVote = (target: number) =>
     post(`/api/v1/mafia/vote?clientId=${encodeURIComponent(clientId)}`, { target });
-
-  const sendChat = async () => {
-    const text = chatInput.trim();
-    if (!text) return;
-    setChatInput('');
-    if (st?.myRole === 'MAFIA') {
-      // 실제 마피아 채팅 (동료에게 공유)
-      await post(`/api/v1/mafia/chat?clientId=${encodeURIComponent(clientId)}`, { text });
-    } else {
-      // 미끼: 나에게만 보임 (타이핑 행동을 균일하게 위장)
-      setDecoyChat((c) => [...c, { nick: st?.nick || '나', text }].slice(-50));
-    }
-  };
 
   const handleAdminReset = async () => {
     const code = adminInput.trim();
@@ -469,43 +452,6 @@ export default function MafiaPage() {
     );
   }
 
-  function nightChat() {
-    const isMafia = st!.myRole === 'MAFIA';
-    const msgs = isMafia
-      ? st!.mafiaChat.map((m) => ({ nick: m.nick, text: m.text }))
-      : decoyChat;
-    return (
-      <div className="mt-5 border border-gray-200 rounded-xl overflow-hidden">
-        <div className="bg-gray-50 px-3 py-2 text-xs font-bold text-gray-500">🌙 밤 채팅</div>
-        <div className="h-32 overflow-y-auto px-3 py-2 space-y-1 text-sm">
-          {msgs.length === 0 ? (
-            <p className="text-gray-300 text-center mt-8">메시지를 입력해 보세요</p>
-          ) : (
-            msgs.map((m, i) => (
-              <div key={i}>
-                <span className="font-bold text-gray-600">{m.nick}</span>{' '}
-                <span className="text-gray-700">{m.text}</span>
-              </div>
-            ))
-          )}
-        </div>
-        <div className="flex border-t border-gray-100">
-          <input
-            value={chatInput}
-            onChange={(e) => setChatInput(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && sendChat()}
-            maxLength={200}
-            placeholder="메시지..."
-            className="flex-1 px-3 py-2 text-sm focus:outline-none"
-          />
-          <button onClick={sendChat} className="px-4 text-sm font-medium text-hit">
-            전송
-          </button>
-        </div>
-      </div>
-    );
-  }
-
   function renderNight() {
     if (!st!.joined || !st!.alive) {
       return (
@@ -517,15 +463,33 @@ export default function MafiaPage() {
       );
     }
     const kind = st!.actionKind;
+    const isMafia = kind === 'MAFIA_KILL';
     return (
       <div className="mt-2 space-y-4">
         <p className="font-bold text-center">{ACTION_LABEL[kind] ?? '🌙 밤입니다'}</p>
-        {kind === 'MAFIA_KILL' && st!.fellowMafia.length > 1 && (
+        {isMafia && st!.fellowMafia.length > 1 && (
           <p className="text-center text-xs text-red-400">
-            동료 마피아: {st!.fellowMafia.map(nickOf).join(', ')}
+            동료 마피아: {st!.fellowMafia.map(nickOf).join(', ')} · 실시간으로 지목이 공유됩니다
           </p>
         )}
         {targetButtons(st!.selectable, handleAct, st!.myTarget)}
+
+        {/* 마피아: 동료들의 실시간 지목 현황(다수결로 최종 대상 결정) */}
+        {isMafia && st!.mafiaPickTally.length > 0 && (
+          <div className="bg-red-50 rounded-lg p-3 text-sm space-y-1">
+            <p className="text-xs text-red-400 font-medium">동료 지목 현황 (다수결)</p>
+            {st!.mafiaPickTally
+              .slice()
+              .sort((a, b) => b.count - a.count)
+              .map((v) => (
+                <div key={v.targetSeat} className="flex justify-between text-red-700">
+                  <span>{nickOf(v.targetSeat)}</span>
+                  <span className="font-bold">{v.count}표</span>
+                </div>
+              ))}
+          </div>
+        )}
+
         {kind === 'POLICE_CHECK' && st!.copLog.length > 0 && (
           <div className="bg-blue-50 rounded-lg p-3 text-sm text-blue-700 space-y-1">
             {st!.copLog.map((l, i) => (
@@ -535,10 +499,9 @@ export default function MafiaPage() {
         )}
         {st!.myTarget > 0 && (
           <p className="text-center text-xs text-gray-400">
-            선택: <b>{nickOf(st!.myTarget)}</b> · 시간 내 변경 가능
+            내 선택: <b>{nickOf(st!.myTarget)}</b> · 시간 내 변경 가능
           </p>
         )}
-        {nightChat()}
       </div>
     );
   }
