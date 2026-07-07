@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { api } from '@/lib/api';
+import { LOCATIONS } from '@/lib/spyfall';
 
 type SpyfallState = {
   status: 'OK' | 'NOT_STARTED' | 'NOT_JOINED' | 'FULL';
@@ -47,6 +48,9 @@ export default function SpyfallPage() {
   const [showSetup, setShowSetup] = useState(false);
   const [playerCount, setPlayerCount] = useState(6);
   const [spyCount, setSpyCount] = useState(1);
+
+  // 장소 목록 보기
+  const [showLocations, setShowLocations] = useState(false);
 
   // 관리자(전체 초기화)
   const [adminVerified, setAdminVerified] = useState(false);
@@ -315,11 +319,45 @@ export default function SpyfallPage() {
                 {state.joinedCount}명
               </p>
             )}
+
+            {/* 장소 목록 (스파이 추리·시민 후보 파악용, 모두 공개) */}
+            <button
+              onClick={() => setShowLocations((v) => !v)}
+              className="mt-6 text-sm font-medium text-gray-500 border border-gray-200 rounded-lg px-4 py-2 hover:bg-gray-50 active:scale-95 transition"
+            >
+              📋 장소 목록 {showLocations ? '접기' : '보기'} ({LOCATIONS.length})
+            </button>
           </>
         )}
 
         {error && <p className="text-red-500 text-sm mt-4">{error}</p>}
       </div>
+
+      {/* 장소 목록 패널 */}
+      {showLocations && (
+        <div className="w-full mt-4 border border-gray-200 rounded-xl p-4 bg-gray-50">
+          <div className="flex items-center justify-between mb-3">
+            <p className="text-sm font-bold text-gray-600">전체 장소 목록</p>
+            <button
+              onClick={() => setShowLocations(false)}
+              className="text-xs text-gray-400 hover:text-gray-600"
+            >
+              닫기 ✕
+            </button>
+          </div>
+          <div className="grid grid-cols-2 gap-x-3 gap-y-2">
+            {LOCATIONS.map((loc, i) => (
+              <div key={loc.name} className="flex items-baseline gap-1.5 text-sm">
+                <span className="text-gray-300 text-xs w-5 shrink-0 text-right">{i + 1}</span>
+                <span className="text-gray-700">{loc.name}</span>
+              </div>
+            ))}
+          </div>
+          <p className="text-xs text-gray-400 mt-3">
+            스파이는 이 목록에서 장소를 추리하고, 시민은 어떤 장소가 후보인지 확인하세요.
+          </p>
+        </div>
+      )}
 
       {/* 관리자: 전체 초기화 */}
       <div className="w-full mt-8 pt-4 border-t border-gray-100 flex flex-col items-center">
