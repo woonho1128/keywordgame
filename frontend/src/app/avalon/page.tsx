@@ -73,15 +73,15 @@ function getClientId(): string {
   }
 }
 
-const ROLE_META: Record<string, { label: string; emoji: string; team: string; desc: string }> = {
-  MERLIN: { label: '멀린', emoji: '🧙', team: 'GOOD', desc: '악을 압니다(모드레드 제외). 정체를 들키면 암살당합니다.' },
-  PERCIVAL: { label: '퍼시발', emoji: '🛡️', team: 'GOOD', desc: '멀린과 모르가나를 알지만 누가 진짜 멀린인지 모릅니다.' },
-  SERVANT: { label: '충성스러운 신하', emoji: '⚔️', team: 'GOOD', desc: '아서왕의 편. 원정을 성공시키세요.' },
-  ASSASSIN: { label: '암살자', emoji: '🗡️', team: 'EVIL', desc: '선이 이기면 멀린을 지목해 뒤집을 수 있습니다.' },
-  MORGANA: { label: '모르가나', emoji: '🧟', team: 'EVIL', desc: '퍼시발에게 멀린처럼 보입니다.' },
-  MORDRED: { label: '모드레드', emoji: '👺', team: 'EVIL', desc: '멀린이 당신을 보지 못합니다.' },
-  OBERON: { label: '오베론', emoji: '👹', team: 'EVIL', desc: '동료 악을 모르고, 동료도 당신을 모릅니다.' },
-  MINION: { label: '미니언', emoji: '😈', team: 'EVIL', desc: '모드레드의 하수인.' },
+const ROLE_META: Record<string, { label: string; emoji: string; team: string; desc: string; sub: string; num: string }> = {
+  MERLIN: { label: '멀린', emoji: '🧙', team: 'GOOD', sub: 'THE MAGE', num: 'I', desc: '악을 압니다(모드레드 제외). 정체를 들키면 암살당합니다.' },
+  PERCIVAL: { label: '퍼시발', emoji: '🛡️', team: 'GOOD', sub: 'THE GUARDIAN', num: 'II', desc: '멀린과 모르가나를 알지만 누가 진짜 멀린인지 모릅니다.' },
+  SERVANT: { label: '충성스러운 신하', emoji: '⚔️', team: 'GOOD', sub: 'THE KNIGHT', num: 'III', desc: '아서왕의 편. 원정을 성공시키세요.' },
+  ASSASSIN: { label: '암살자', emoji: '🗡️', team: 'EVIL', sub: 'DEATH', num: 'XIII', desc: '선이 이기면 멀린을 지목해 뒤집을 수 있습니다.' },
+  MORGANA: { label: '모르가나', emoji: '🧟', team: 'EVIL', sub: 'THE SORCERESS', num: 'XV', desc: '퍼시발에게 멀린처럼 보입니다.' },
+  MORDRED: { label: '모드레드', emoji: '👺', team: 'EVIL', sub: 'THE TRAITOR', num: 'XVI', desc: '멀린이 당신을 보지 못합니다.' },
+  OBERON: { label: '오베론', emoji: '👹', team: 'EVIL', sub: 'THE HERMIT', num: 'IX', desc: '동료 악을 모르고, 동료도 당신을 모릅니다.' },
+  MINION: { label: '미니언', emoji: '😈', team: 'EVIL', sub: 'THE SHADOW', num: 'X', desc: '모드레드의 하수인.' },
 };
 
 const PHASE_LABEL: Record<Phase, string> = {
@@ -114,6 +114,7 @@ export default function AvalonPage() {
 
   const [showAdmin, setShowAdmin] = useState(false);
   const [adminInput, setAdminInput] = useState('');
+  const [flipped, setFlipped] = useState(false); // REVEAL 타로카드 뒤집기
 
   const cidRef = useRef('');
   const offsetRef = useRef(0);
@@ -166,6 +167,11 @@ export default function AvalonPage() {
     }, 250);
     return () => { clearInterval(pollTimer); clearInterval(ticker); };
   }, [poll]);
+
+  // REVEAL이 아닐 땐 카드 뒤집힘 초기화(다음 판에서 다시 뒤집도록)
+  useEffect(() => {
+    if (st?.status !== 'REVEAL') setFlipped(false);
+  }, [st?.status]);
 
   const post = useCallback(async (path: string, body?: unknown) => {
     setBusy(true);
@@ -494,19 +500,71 @@ export default function AvalonPage() {
     );
   }
 
+  function tarotCard() {
+    const role = st!.myRole;
+    const m = role ? ROLE_META[role] : null;
+    const evil = st!.myTeam === 'EVIL';
+    const frontCls = evil
+      ? 'bg-gradient-to-b from-rose-950 to-red-800 text-rose-50 border-rose-400/60'
+      : 'bg-gradient-to-b from-indigo-50 to-blue-100 text-blue-900 border-amber-300';
+    const accent = evil ? 'text-rose-200/80' : 'text-amber-500';
+    return (
+      <div style={{ perspective: '1200px' }} className="w-56 mx-auto select-none">
+        <div
+          onClick={() => setFlipped(true)}
+          style={{
+            transformStyle: 'preserve-3d',
+            transition: 'transform 0.7s cubic-bezier(.2,.8,.2,1)',
+            transform: flipped ? 'rotateY(180deg)' : 'rotateY(0deg)',
+            cursor: flipped ? 'default' : 'pointer',
+          }}
+          className="relative w-full aspect-[5/8]"
+        >
+          {/* 뒷면 */}
+          <div style={{ backfaceVisibility: 'hidden' }}
+            className="absolute inset-0 rounded-2xl border-2 border-amber-300/70 bg-gradient-to-b from-slate-800 to-slate-900 text-amber-200 flex flex-col items-center justify-center shadow-xl">
+            <span className="text-5xl mb-3">🏰</span>
+            <span className="tracking-[0.3em] text-xs">AVALON</span>
+            <span className="mt-6 text-xs text-amber-200/70 animate-pulse">탭하여 확인</span>
+          </div>
+          {/* 앞면 */}
+          <div style={{ backfaceVisibility: 'hidden', transform: 'rotateY(180deg)' }}
+            className={`absolute inset-0 rounded-2xl border-2 ${frontCls} shadow-xl overflow-hidden`}>
+            <div className="absolute inset-2 rounded-xl border border-current opacity-30" />
+            <span className={`absolute top-2 left-3 text-xs font-bold ${accent}`}>{m?.num}</span>
+            <span className={`absolute top-2 right-3 text-xs ${accent}`}>{evil ? '✧' : '✦'}</span>
+            <span className={`absolute bottom-2 left-3 text-xs ${accent}`}>{evil ? '✧' : '✦'}</span>
+            <span className={`absolute bottom-2 right-3 text-xs font-bold ${accent}`}>{teamLabel(st!.myTeam)}</span>
+            <div className="h-full flex flex-col items-center justify-center px-4 text-center">
+              <div className={`text-6xl mb-3 drop-shadow`}>{m?.emoji}</div>
+              <div className="text-xl font-extrabold">{m?.label}</div>
+              <div className={`text-[10px] tracking-[0.2em] mt-1 ${accent}`}>{m?.sub}</div>
+              <div className="text-[11px] mt-3 opacity-80 leading-snug">{m?.desc}</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   function renderReveal() {
     return (
-      <div className="mt-4 space-y-4 text-center">
-        <p className="text-gray-600">역할과 정보를 확인하세요.</p>
-        {st!.knowledge.length > 0 && (
-          <div className="bg-gray-50 rounded-lg p-4 text-sm text-left space-y-1">
-            {st!.knowledge.map((k, i) => <div key={i}>🔎 {k}</div>)}
-          </div>
-        )}
-        {st!.amReady ? (
-          <p className="text-gray-500 text-sm">다른 사람 확인 대기 중... ({st!.readyCount}/{st!.playerCount})</p>
-        ) : (
-          <button onClick={handleReady} disabled={busy} className="w-full bg-blue-600 text-white font-bold py-3 rounded-lg hover:opacity-90 disabled:opacity-50">확인 완료</button>
+      <div className="mt-4 space-y-4 text-center flex flex-col items-center">
+        <p className="text-gray-600 text-sm">{flipped ? '당신의 정체입니다.' : '카드를 탭해 당신의 정체를 확인하세요.'}</p>
+        {tarotCard()}
+        {flipped && (
+          <>
+            {st!.knowledge.length > 0 && (
+              <div className="w-full bg-gray-50 rounded-lg p-4 text-sm text-left space-y-1">
+                {st!.knowledge.map((k, i) => <div key={i}>🔎 {k}</div>)}
+              </div>
+            )}
+            {st!.amReady ? (
+              <p className="text-gray-500 text-sm">다른 사람 확인 대기 중... ({st!.readyCount}/{st!.playerCount})</p>
+            ) : (
+              <button onClick={handleReady} disabled={busy} className="w-full bg-blue-600 text-white font-bold py-3 rounded-lg hover:opacity-90 disabled:opacity-50">확인 완료</button>
+            )}
+          </>
         )}
       </div>
     );
