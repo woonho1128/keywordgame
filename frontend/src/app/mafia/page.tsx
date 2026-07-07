@@ -508,6 +508,7 @@ export default function MafiaPage() {
             내 선택: <b>{nickOf(st!.myTarget)}</b> · 시간 내 변경 가능
           </p>
         )}
+        {aliveBoard()}
       </div>
     );
   }
