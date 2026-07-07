@@ -3,6 +3,7 @@ package com.wordplay.mafia;
 import com.wordplay.common.dto.ApiResponse;
 import com.wordplay.common.exception.BusinessException;
 import com.wordplay.common.exception.ErrorCode;
+import com.wordplay.mafia.dto.ChatRequest;
 import com.wordplay.mafia.dto.JoinRequest;
 import com.wordplay.mafia.dto.MafiaStateResponse;
 import com.wordplay.mafia.dto.NewMafiaRequest;
@@ -58,6 +59,14 @@ public class MafiaController {
                                                        @RequestBody TargetRequest req) {
         validateClientId(clientId);
         return ApiResponse.success(mafiaService.nightAction(clientId, req.target()));
+    }
+
+    /** 마피아 밤 채팅. */
+    @PostMapping("/chat")
+    public ApiResponse<MafiaStateResponse> chat(@RequestParam String clientId,
+                                                @Valid @RequestBody ChatRequest req) {
+        validateClientId(clientId);
+        return ApiResponse.success(mafiaService.chat(clientId, req.text()));
     }
 
     /** 낮 투표. */

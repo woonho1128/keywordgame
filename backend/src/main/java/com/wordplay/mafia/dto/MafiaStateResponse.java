@@ -43,15 +43,17 @@ public record MafiaStateResponse(
         String winner,            // ENDED에서만 MAFIA/CITIZEN
         int aliveCount,
         int totalMafia,
-        int playerCount
+        int playerCount,
+        List<ChatView> mafiaChat  // 마피아에게만: 밤 채팅
 ) {
     public record PlayerView(int seat, String nick, boolean alive, String role) {}
     public record VoteView(int targetSeat, int count) {}
+    public record ChatView(long round, String nick, String text) {}
 
     public static MafiaStateResponse notStarted(long now) {
         return new MafiaStateResponse(
                 "NOT_STARTED", 0, 0, now, false, false, 0, null, null, null, false,
                 List.of(), "NONE", List.of(), -1, List.of(), List.of(),
-                null, -1, -1, List.of(), null, 0, 0, 0);
+                null, -1, -1, List.of(), null, 0, 0, 0, List.of());
     }
 }

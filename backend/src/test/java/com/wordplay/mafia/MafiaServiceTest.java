@@ -42,6 +42,17 @@ class MafiaServiceTest {
                 .map(Map.Entry::getKey).findFirst().orElseThrow();
     }
 
+    /** 살아있는 시민들도 위장 지목을 완료시켜 밤을 조기 종료시킨다. */
+    private void citizensAct(Setup s) {
+        for (var e : s.roleByClient.entrySet()) {
+            if (!"CITIZEN".equals(e.getValue())) continue;
+            MafiaStateResponse st = s.svc.me(e.getKey());
+            if (st.status().equals("NIGHT") && st.alive() && !st.selectable().isEmpty()) {
+                s.svc.nightAction(e.getKey(), st.selectable().get(0));
+            }
+        }
+    }
+
     @Test
     void 방생성_참가_시작_역할배정() {
         Setup s = start5();
@@ -83,6 +94,7 @@ class MafiaServiceTest {
         // 의사는 킬 대상이 아닌 다른 사람 보호(사망 발생시키기)
         int docSave = s.svc.me(doctor).selectable().stream().filter(x -> x != killSeat).findFirst().orElseThrow();
         s.svc.nightAction(doctor, docSave);
+        citizensAct(s); // 전원 지목 완료 → 밤 종료
 
         MafiaStateResponse st = s.svc.me("host");
         assertThat(st.status()).isEqualTo("MORNING");
@@ -106,12 +118,28 @@ class MafiaServiceTest {
         s.svc.nightAction(cop, s.seatByClient.get(mafia));
         // 의사가 같은 대상 보호
         s.svc.nightAction(doctor, killSeat);
+        citizensAct(s); // 전원 지목 완료 → 밤 종료
 
         MafiaStateResponse st = s.svc.me("host");
         assertThat(st.status()).isEqualTo("MORNING");
         assertThat(st.players().get(killSeat - 1).alive()).isTrue();
         assertThat(st.nightMessage()).contains("평화");
         assertThat(st.aliveCount()).isEqualTo(5);
+    }
+
+    @Test
+    void 마피아_밤채팅_마피아만() {
+        Setup s = start5();
+        String mafia = clientWithRole(s.roleByClient, "MAFIA");
+        String cop = clientWithRole(s.roleByClient, "POLICE");
+
+        s.svc.chat(mafia, "3번 죽이자");
+        assertThat(s.svc.me(mafia).mafiaChat()).anyMatch(c -> c.text().contains("3번 죽이자"));
+        // 마피아가 아닌 사람은 채팅이 보이지 않음
+        assertThat(s.svc.me(cop).mafiaChat()).isEmpty();
+        // 마피아가 아니면 채팅 불가
+        assertThatThrownBy(() -> s.svc.chat(cop, "안돼"))
+                .hasMessageContaining("마피아만");
     }
 
     @Test
