@@ -197,12 +197,12 @@ export default function CodenamesPage() {
       </div>
       <div>
         <p className="font-bold">👥 구성</p>
-        <p className="text-gray-600">각 팀 = <b>스파이마스터 1명 + 요원들</b>. 스파이마스터만 25칸의 색(정답)을 봅니다. 요원은 공개된 칸만 보여요.</p>
+        <p className="text-gray-600">각 팀 = <b>팀장 1명 + 요원들</b>. <b>팀장</b>(=힌트 주는 사람)만 25칸의 색(정답)을 봅니다. 요원은 공개된 칸만 보여요.</p>
       </div>
       <div>
         <p className="font-bold">▶ 진행</p>
         <ol className="list-decimal list-inside text-gray-600 space-y-1">
-          <li>스파이마스터가 <b>한 단어 힌트 + 숫자</b>를 줍니다. (예: “과일 3” = 과일 관련 우리 단어 3개)</li>
+          <li>팀장이 <b>한 단어 힌트 + 숫자</b>를 줍니다. (예: “과일 3” = 과일 관련 우리 단어 3개)</li>
           <li>요원들이 상의해서 카드를 탭합니다. <b>숫자+1번</b>까지 추측 가능.</li>
           <li>우리 색 → 계속 / 중립·상대 색 → <b>턴 종료</b> / 💀<b>암살자 → 즉시 패배</b></li>
           <li><b>패스</b>로 턴을 넘길 수 있어요.</li>
@@ -210,7 +210,7 @@ export default function CodenamesPage() {
       </div>
       <div>
         <p className="font-bold">💡 힌트 규칙 & 팁</p>
-        <p className="text-gray-600">힌트는 <b>딱 한 단어</b>(뜻으로 연결, 보드에 있는 단어는 금지). 스파이마스터는 여러 단어를 한 힌트로 묶고, 요원은 <b>암살자</b>를 피하세요!</p>
+        <p className="text-gray-600">힌트는 <b>딱 한 단어</b>(뜻으로 연결, 보드에 있는 단어는 금지). 팀장은 여러 단어를 한 힌트로 묶고, 요원은 <b>암살자</b>를 피하세요!</p>
       </div>
     </div>
   );
@@ -328,7 +328,7 @@ export default function CodenamesPage() {
             </div>
             <button onClick={handleSpymaster} disabled={!st!.myTeam || busy}
               className={`w-full py-2 rounded-lg font-bold border-2 ${st!.amSpymaster ? 'border-amber-400 bg-amber-100 text-amber-700' : 'border-gray-200 text-gray-500'} disabled:opacity-40`}>
-              👑 스파이마스터 하기
+              👑 팀장 하기
             </button>
           </div>
         )}
@@ -341,7 +341,7 @@ export default function CodenamesPage() {
         )}
         <div className="text-center"><button onClick={() => setShowRules((v) => !v)} className="text-sm text-gray-400 underline">게임 방법 보기</button></div>
         {showRules && rulesHelp}
-        <p className="text-center text-xs text-gray-400">각 팀 최소 2명 + 스파이마스터 1명. 같은 주소를 친구들에게 공유하세요.</p>
+        <p className="text-center text-xs text-gray-400">각 팀 최소 2명 + 팀장 1명. 같은 주소를 친구들에게 공유하세요.</p>
       </div>
     );
   }
@@ -353,7 +353,7 @@ export default function CodenamesPage() {
         : c.color === 'ASSASSIN' ? 'bg-gray-900 text-white border-gray-900'
         : 'bg-amber-100 text-amber-600 border-amber-100';
     }
-    if (c.color) { // 스파이마스터 시야: 미공개 칸의 비밀 색을 옅게
+    if (c.color) { // 팀장 시야: 미공개 칸의 비밀 색을 옅게
       return c.color === 'RED' ? 'bg-red-50 border-red-300 text-gray-800'
         : c.color === 'BLUE' ? 'bg-blue-50 border-blue-300 text-gray-800'
         : c.color === 'ASSASSIN' ? 'bg-gray-200 border-gray-800 text-gray-900 font-bold'
@@ -373,7 +373,7 @@ export default function CodenamesPage() {
             <span className={`font-bold ${teamTextColor(st!.currentTeam)}`}>{teamKo(st!.currentTeam)} 팀</span>
             <span className="text-gray-500"> 차례 · </span>
             {phase === 'CLUE'
-              ? <span className="text-gray-500">스파이마스터가 힌트를 주는 중</span>
+              ? <span className="text-gray-500">팀장이 힌트를 주는 중</span>
               : <span className="text-gray-700 font-medium">힌트: {st!.clueWord} <b>{st!.clueNumber}</b> (남은 추측 {st!.guessesLeft})</span>}
           </div>
         )}
@@ -388,7 +388,7 @@ export default function CodenamesPage() {
           ))}
         </div>
 
-        {/* 스파이마스터 힌트 입력 */}
+        {/* 팀장 힌트 입력 */}
         {st!.amActiveSpymaster && (
           <div className="flex gap-2 items-center bg-gray-50 rounded-lg p-3">
             <input value={clueWord} onChange={(e) => setClueWord(e.target.value)} maxLength={20} placeholder="한 단어 힌트"
@@ -408,7 +408,7 @@ export default function CodenamesPage() {
         {/* 관전(비활성) 안내 */}
         {!ended && !st!.amActiveSpymaster && !st!.amActiveOperative && (
           <p className="text-center text-gray-400 text-sm">
-            {st!.amSpymaster ? '상대 팀 차례입니다.' : phase === 'CLUE' ? '스파이마스터의 힌트를 기다리세요.' : '지금은 상대 팀 차례입니다.'}
+            {st!.amSpymaster ? '상대 팀 차례입니다.' : phase === 'CLUE' ? '팀장의 힌트를 기다리세요.' : '지금은 상대 팀 차례입니다.'}
           </p>
         )}
 

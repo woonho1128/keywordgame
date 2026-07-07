@@ -15,7 +15,7 @@ import java.util.Map;
 import java.util.concurrent.ThreadLocalRandom;
 
 /**
- * 코드네임 한 방(인메모리). 5×5 단어판, 2팀(RED/BLUE), 스파이마스터 힌트 → 요원 추측.
+ * 코드네임 한 방(인메모리). 5×5 단어판, 2팀(RED/BLUE), 팀장 힌트 → 요원 추측.
  * 타이머 없음(행동으로만 진행).
  */
 public class CodenamesGame implements RoomGame {
@@ -72,7 +72,7 @@ public class CodenamesGame implements RoomGame {
         return me(clientId);
     }
 
-    /** 팀 선택(대기방). 팀을 바꾸면 스파이마스터 자격은 해제. */
+    /** 팀 선택(대기방). 팀을 바꾸면 팀장 자격은 해제. */
     public synchronized CodenamesStateResponse setTeam(String clientId, String team) {
         Player me = requirePlayer(clientId);
         if (phase != Phase.LOBBY) throw bad("대기방에서만 팀을 정할 수 있습니다");
@@ -82,7 +82,7 @@ public class CodenamesGame implements RoomGame {
         return me(clientId);
     }
 
-    /** 스파이마스터 지원(자기 팀에서 1명). 기존 스파이마스터는 해제. */
+    /** 팀장 지원(자기 팀에서 1명). 기존 팀장은 해제. */
     public synchronized CodenamesStateResponse claimSpymaster(String clientId) {
         Player me = requirePlayer(clientId);
         if (phase != Phase.LOBBY) throw bad("대기방에서만 정할 수 있습니다");
@@ -92,7 +92,7 @@ public class CodenamesGame implements RoomGame {
         return me(clientId);
     }
 
-    /** 랜덤 배정(방장). 인원을 두 팀으로 나누고 각 팀 첫 명을 스파이마스터로. */
+    /** 랜덤 배정(방장). 인원을 두 팀으로 나누고 각 팀 첫 명을 팀장으로. */
     public synchronized CodenamesStateResponse randomAssign(String clientId) {
         if (phase != Phase.LOBBY) throw bad("대기방에서만 배정할 수 있습니다");
         if (!clientId.equals(hostClientId)) throw bad("방장만 배정할 수 있습니다");
@@ -104,7 +104,7 @@ public class CodenamesGame implements RoomGame {
             p.team = i < half ? "RED" : "BLUE";
             p.spymaster = false;
         }
-        // 각 팀 첫 명을 스파이마스터로
+        // 각 팀 첫 명을 팀장으로
         boolean redSpy = false, blueSpy = false;
         for (Player p : shuffled) {
             if ("RED".equals(p.team) && !redSpy) { p.spymaster = true; redSpy = true; }
@@ -119,8 +119,8 @@ public class CodenamesGame implements RoomGame {
         for (String t : List.of("RED", "BLUE")) {
             long total = players.stream().filter(p -> t.equals(p.team)).count();
             long spy = players.stream().filter(p -> t.equals(p.team) && p.spymaster).count();
-            if (total < 2) throw bad((t.equals("RED") ? "레드" : "블루") + " 팀은 최소 2명(스파이마스터+요원)이 필요합니다");
-            if (spy != 1) throw bad((t.equals("RED") ? "레드" : "블루") + " 팀 스파이마스터를 1명 정하세요");
+            if (total < 2) throw bad((t.equals("RED") ? "레드" : "블루") + " 팀은 최소 2명(팀장+요원)이 필요합니다");
+            if (spy != 1) throw bad((t.equals("RED") ? "레드" : "블루") + " 팀 팀장을 1명 정하세요");
         }
 
         // 단어판 생성
@@ -150,11 +150,11 @@ public class CodenamesGame implements RoomGame {
         return me(clientId);
     }
 
-    /** 스파이마스터 힌트 제출. */
+    /** 팀장 힌트 제출. */
     public synchronized CodenamesStateResponse clue(String clientId, String word, int number) {
         Player me = requirePlayer(clientId);
         if (phase != Phase.CLUE) throw bad("지금은 힌트 단계가 아닙니다");
-        if (!me.spymaster || !me.team.equals(currentTeam)) throw bad("지금 팀의 스파이마스터만 힌트를 줄 수 있습니다");
+        if (!me.spymaster || !me.team.equals(currentTeam)) throw bad("지금 팀의 팀장만 힌트를 줄 수 있습니다");
         String w = word == null ? "" : word.trim();
         if (w.isEmpty() || w.length() > 20) throw bad("힌트 단어를 확인하세요");
         if (number < 1 || number > 9) throw bad("숫자는 1~9로 입력하세요");
