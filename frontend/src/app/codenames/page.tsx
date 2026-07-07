@@ -65,6 +65,7 @@ export default function CodenamesPage() {
 
   const [nick, setNick] = useState('');
   const [showCreate, setShowCreate] = useState(false);
+  const [showRules, setShowRules] = useState(false);
   const [clueWord, setClueWord] = useState('');
   const [clueNumber, setClueNumber] = useState(2);
 
@@ -184,6 +185,36 @@ export default function CodenamesPage() {
     </div>
   );
 
+  const rulesHelp = (
+    <div className="w-full rounded-xl border border-gray-200 p-4 text-sm space-y-3 text-left mt-3">
+      <div className="flex items-center justify-between">
+        <p className="font-bold">게임 방법</p>
+        <button onClick={() => setShowRules(false)} className="text-xs text-gray-400">닫기 ✕</button>
+      </div>
+      <div>
+        <p className="font-bold text-hit">🎯 목표</p>
+        <p className="text-gray-600">두 팀(🔴레드/🔵블루)이 경쟁. <b>우리 팀 단어를 먼저 다 맞히면 승리</b>.</p>
+      </div>
+      <div>
+        <p className="font-bold">👥 구성</p>
+        <p className="text-gray-600">각 팀 = <b>스파이마스터 1명 + 요원들</b>. 스파이마스터만 25칸의 색(정답)을 봅니다. 요원은 공개된 칸만 보여요.</p>
+      </div>
+      <div>
+        <p className="font-bold">▶ 진행</p>
+        <ol className="list-decimal list-inside text-gray-600 space-y-1">
+          <li>스파이마스터가 <b>한 단어 힌트 + 숫자</b>를 줍니다. (예: “과일 3” = 과일 관련 우리 단어 3개)</li>
+          <li>요원들이 상의해서 카드를 탭합니다. <b>숫자+1번</b>까지 추측 가능.</li>
+          <li>우리 색 → 계속 / 중립·상대 색 → <b>턴 종료</b> / 💀<b>암살자 → 즉시 패배</b></li>
+          <li><b>패스</b>로 턴을 넘길 수 있어요.</li>
+        </ol>
+      </div>
+      <div>
+        <p className="font-bold">💡 힌트 규칙 & 팁</p>
+        <p className="text-gray-600">힌트는 <b>딱 한 단어</b>(뜻으로 연결, 보드에 있는 단어는 금지). 스파이마스터는 여러 단어를 한 힌트로 묶고, 요원은 <b>암살자</b>를 피하세요!</p>
+      </div>
+    </div>
+  );
+
   // ----- 방 목록 / 생성 -----
   if (!roomCode) {
     return (
@@ -201,6 +232,8 @@ export default function CodenamesPage() {
         ) : (
           <div className="w-full space-y-4">
             <button onClick={() => { setShowCreate(true); setError(null); }} className="w-full bg-hit text-white font-bold py-3 rounded-lg hover:opacity-90">+ 새 방 만들기</button>
+            <div className="text-center"><button onClick={() => setShowRules((v) => !v)} className="text-sm text-gray-400 underline">게임 방법 보기</button></div>
+            {showRules && rulesHelp}
             <p className="text-sm font-bold text-gray-600">방 목록</p>
             {rooms.length === 0 && <p className="text-gray-400 text-sm text-center py-6">아직 만들어진 방이 없어요.</p>}
             {rooms.map((r) => {
@@ -306,6 +339,8 @@ export default function CodenamesPage() {
             <button onClick={handleStart} disabled={busy} className="flex-1 bg-hit text-white font-bold py-3 rounded-lg disabled:opacity-50">게임 시작</button>
           </div>
         )}
+        <div className="text-center"><button onClick={() => setShowRules((v) => !v)} className="text-sm text-gray-400 underline">게임 방법 보기</button></div>
+        {showRules && rulesHelp}
         <p className="text-center text-xs text-gray-400">각 팀 최소 2명 + 스파이마스터 1명. 같은 주소를 친구들에게 공유하세요.</p>
       </div>
     );
