@@ -46,6 +46,14 @@ export default function HomePage() {
           <h2 className="text-2xl font-bold mb-2">🎭 마피아</h2>
           <p className="text-gray-600">밤·낮으로 자동 진행되는 마피아. 각자 폰으로 접속 (4~12인).</p>
         </Link>
+
+        <Link
+          href="/mafia-jobs"
+          className="border-2 border-gray-200 rounded-xl p-8 hover:border-move transition"
+        >
+          <h2 className="text-2xl font-bold mb-2">🕵️‍♂️ 직업 마피아</h2>
+          <p className="text-gray-600">경찰·의사·정신병자·관종 등 직업이 있는 마피아 (5~12인).</p>
+        </Link>
       </div>
     </main>
   );
