@@ -102,6 +102,7 @@ export default function AvalonPage() {
   const [incMordred, setIncMordred] = useState(false);
   const [incOberon, setIncOberon] = useState(false);
   const [showRoles, setShowRoles] = useState(false);
+  const [showRules, setShowRules] = useState(false);
   const [team, setTeam] = useState<number[]>([]);
 
   const [showAdmin, setShowAdmin] = useState(false);
@@ -272,6 +273,42 @@ export default function AvalonPage() {
     );
   }
 
+  function rulesHelp() {
+    return (
+      <div className="rounded-xl border border-gray-200 p-4 text-sm space-y-3 mt-3 text-left">
+        <div className="flex items-center justify-between">
+          <p className="font-bold">게임 방법</p>
+          <button onClick={() => setShowRules(false)} className="text-xs text-gray-400">닫기 ✕</button>
+        </div>
+        <div>
+          <p className="font-bold text-blue-600">🎯 목표</p>
+          <p className="text-gray-600">🔵 선은 <b>원정 3회 성공</b>, 🔴 악은 <b>원정 3회 실패</b>(또는 멀린 암살)로 승리.</p>
+        </div>
+        <div>
+          <p className="font-bold">▶ 한 원정 진행</p>
+          <ol className="list-decimal list-inside text-gray-600 space-y-1">
+            <li>리더가 원정대 인원을 <b>지목</b>합니다.</li>
+            <li><b>전원 찬반 투표</b> → 과반 찬성이면 출발, 아니면 리더가 다음 사람으로 넘어가 다시 지목.</li>
+            <li className="text-red-500">거부가 <b>5번 연속</b>되면 악이 즉시 승리!</li>
+            <li>원정대는 <b>비밀 카드</b> 제출 — 선은 <b>성공만</b>, 악은 성공/실패 선택 가능.</li>
+            <li><b>실패 카드</b>가 필요 수(보통 1장, 특정 원정은 2장) 이상이면 그 원정 실패.</li>
+          </ol>
+        </div>
+        <div>
+          <p className="font-bold">🏆 승패</p>
+          <ul className="list-disc list-inside text-gray-600 space-y-1">
+            <li>원정 <b>3성공</b> → 선이 이길 뻔하지만, <b>암살자가 멀린을 지목</b>해 맞히면 <span className="text-red-500 font-bold">악 승리로 역전</span>!</li>
+            <li>원정 <b>3실패</b> 또는 5연속 거부 → <span className="text-red-500 font-bold">악 승리</span>.</li>
+          </ul>
+        </div>
+        <div>
+          <p className="font-bold">💡 팁</p>
+          <p className="text-gray-600">선은 대화로 신뢰를 찾고, 악은 몰래 원정을 실패시키되 들키지 마세요. 멀린은 아는 걸 흘리되 <b>정체를 숨겨야</b> 암살을 피합니다.</p>
+        </div>
+      </div>
+    );
+  }
+
   function rolesHelp() {
     return (
       <div className="rounded-xl border border-gray-200 p-4 text-sm space-y-2 mt-3">
@@ -313,7 +350,11 @@ export default function AvalonPage() {
       <div className="text-center space-y-6 mt-6">
         <p className="text-gray-500">선과 악으로 나뉘어 원정을 다투는 추리 게임. 각자 폰으로 접속하세요.</p>
         <button onClick={() => setShowCreate(true)} className="bg-blue-600 text-white font-bold py-3 px-8 rounded-lg hover:opacity-90">새 방 만들기</button>
-        <div><button onClick={() => setShowRoles((v) => !v)} className="text-sm text-gray-400 underline">직업 설명 보기</button></div>
+        <div className="flex justify-center gap-4">
+          <button onClick={() => { setShowRules((v) => !v); setShowRoles(false); }} className="text-sm text-gray-400 underline">게임 방법 보기</button>
+          <button onClick={() => { setShowRoles((v) => !v); setShowRules(false); }} className="text-sm text-gray-400 underline">직업 설명 보기</button>
+        </div>
+        {showRules && rulesHelp()}
         {showRoles && rolesHelp()}
         <p className="text-xs text-gray-400">5~10명</p>
       </div>
@@ -333,7 +374,11 @@ export default function AvalonPage() {
             })}
           </div>
         </div>
-        <button onClick={() => setShowRoles((v) => !v)} className="text-sm text-gray-400 underline">직업 설명 보기</button>
+        <div className="flex gap-4">
+          <button onClick={() => { setShowRules((v) => !v); setShowRoles(false); }} className="text-sm text-gray-400 underline">게임 방법 보기</button>
+          <button onClick={() => { setShowRoles((v) => !v); setShowRules(false); }} className="text-sm text-gray-400 underline">직업 설명 보기</button>
+        </div>
+        {showRules && rulesHelp()}
         {showRoles && rolesHelp()}
         {!st!.joined ? (
           <div className="flex gap-2">
