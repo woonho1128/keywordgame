@@ -62,6 +62,14 @@ export default function HomePage() {
           <h2 className="text-2xl font-bold mb-2">🏰 아발론</h2>
           <p className="text-gray-600">선과 악으로 나뉘어 원정을 다투는 추리 게임 (5~10인).</p>
         </Link>
+
+        <Link
+          href="/codenames"
+          className="border-2 border-gray-200 rounded-xl p-8 hover:border-hit transition"
+        >
+          <h2 className="text-2xl font-bold mb-2">🔡 코드네임</h2>
+          <p className="text-gray-600">두 팀으로 나눠 스파이마스터의 힌트로 단어를 맞히는 팀 게임 (4~8인).</p>
+        </Link>
       </div>
     </main>
   );
