@@ -2,11 +2,11 @@ package com.wordplay.mafia;
 
 import com.wordplay.common.exception.BusinessException;
 import com.wordplay.common.exception.ErrorCode;
+import com.wordplay.common.room.RoomGame;
 import com.wordplay.mafia.dto.MafiaStateResponse;
 import com.wordplay.mafia.dto.MafiaStateResponse.PlayerView;
 import com.wordplay.mafia.dto.MafiaStateResponse.VoteView;
 import com.wordplay.mafia.dto.NewMafiaRequest;
-import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -24,8 +24,7 @@ import java.util.Set;
  * "지금 ≥ 페이즈 종료시각"이면 다음 페이즈로 넘긴다(lazy advance). 모두가
  * 1초마다 폴링하므로 사실상 실시간으로 흘러간다.
  */
-@Service
-public class MafiaService {
+public class MafiaService implements RoomGame {
 
     enum Phase { LOBBY, NIGHT, MORNING, DISCUSS, VOTE, EXECUTE, ENDED }
     enum Role { MAFIA, POLICE, DOCTOR, CITIZEN }
@@ -45,6 +44,7 @@ public class MafiaService {
     private Phase phase = null;              // null = 방 없음(NOT_STARTED)
     private long phaseEndsAt = 0;
     private long round = 0;
+    private long lastActiveMs = System.currentTimeMillis();
     private String hostClientId = null;
     private final List<Player> players = new ArrayList<>();          // seat = index
     private final Map<String, Integer> clientSeats = new HashMap<>(); // clientId -> seat
@@ -177,9 +177,20 @@ public class MafiaService {
 
     /** 폴링. */
     public synchronized MafiaStateResponse me(String clientId) {
+        lastActiveMs = System.currentTimeMillis();
         tick();
         return buildResponse(clientId);
     }
+
+    // ---- RoomGame ----
+    @Override public synchronized String roomStatus() {
+        if (phase == null || phase == Phase.LOBBY) return "WAITING";
+        return phase == Phase.ENDED ? "ENDED" : "PLAYING";
+    }
+    @Override public synchronized int playerCount() { return players.size(); }
+    @Override public synchronized String hostLabel() { return players.isEmpty() ? "" : players.get(0).nick; }
+    @Override public synchronized boolean isEnded() { return phase == Phase.ENDED; }
+    @Override public synchronized long lastActiveMs() { return lastActiveMs; }
 
     // =================== 타이머/진행 ===================
 

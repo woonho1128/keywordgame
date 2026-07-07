@@ -2,11 +2,11 @@ package com.wordplay.jobmafia;
 
 import com.wordplay.common.exception.BusinessException;
 import com.wordplay.common.exception.ErrorCode;
+import com.wordplay.common.room.RoomGame;
 import com.wordplay.jobmafia.dto.JobMafiaStateResponse;
 import com.wordplay.jobmafia.dto.JobMafiaStateResponse.PlayerView;
 import com.wordplay.jobmafia.dto.JobMafiaStateResponse.VoteView;
 import com.wordplay.jobmafia.dto.NewJobMafiaRequest;
-import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -29,8 +29,7 @@ import java.util.concurrent.ThreadLocalRandom;
  *
  * 정신병자: 본인에겐 가짜 직업(경찰/의사)으로 보이고 능력은 효과가 없다(경찰이면 결과가 랜덤).
  */
-@Service
-public class JobMafiaService {
+public class JobMafiaService implements RoomGame {
 
     enum Phase { LOBBY, NIGHT, MORNING, DISCUSS, VOTE, EXECUTE, ENDED }
     enum Role { CITIZEN, POLICE, DOCTOR, PSYCHO, MAFIA, ATTENTION }
@@ -49,6 +48,7 @@ public class JobMafiaService {
     private Phase phase = null;
     private long phaseEndsAt = 0;
     private long round = 0;
+    private long lastActiveMs = System.currentTimeMillis();
     private String hostClientId = null;
     private final List<Player> players = new ArrayList<>();
     private final Map<String, Integer> clientSeats = new HashMap<>();
@@ -199,9 +199,20 @@ public class JobMafiaService {
     }
 
     public synchronized JobMafiaStateResponse me(String clientId) {
+        lastActiveMs = System.currentTimeMillis();
         tick();
         return buildResponse(clientId);
     }
+
+    // ---- RoomGame ----
+    @Override public synchronized String roomStatus() {
+        if (phase == null || phase == Phase.LOBBY) return "WAITING";
+        return phase == Phase.ENDED ? "ENDED" : "PLAYING";
+    }
+    @Override public synchronized int playerCount() { return players.size(); }
+    @Override public synchronized String hostLabel() { return players.isEmpty() ? "" : players.get(0).nick; }
+    @Override public synchronized boolean isEnded() { return phase == Phase.ENDED; }
+    @Override public synchronized long lastActiveMs() { return lastActiveMs; }
 
     // =================== 타이머/진행 ===================
 

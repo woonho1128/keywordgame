@@ -6,7 +6,7 @@ import com.wordplay.avalon.dto.AvalonStateResponse.VoteView;
 import com.wordplay.avalon.dto.NewAvalonRequest;
 import com.wordplay.common.exception.BusinessException;
 import com.wordplay.common.exception.ErrorCode;
-import org.springframework.stereotype.Service;
+import com.wordplay.common.room.RoomGame;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -24,8 +24,7 @@ import java.util.concurrent.ThreadLocalRandom;
  * 흐름: LOBBY → REVEAL(역할·지식 확인) → [TEAM_BUILD → TEAM_VOTE → (승인 시) QUEST] × 최대 5원정
  *      → 원정 3성공이면 ASSASSIN(암살자가 멀린 지목) → ENDED
  */
-@Service
-public class AvalonService {
+public class AvalonService implements RoomGame {
 
     enum Phase { LOBBY, REVEAL, TEAM_BUILD, TEAM_VOTE, QUEST, ASSASSIN, ENDED }
     enum Role { MERLIN, PERCIVAL, SERVANT, ASSASSIN, MORGANA, MORDRED, OBERON, MINION }
@@ -52,6 +51,7 @@ public class AvalonService {
 
     private Phase phase = null;
     private long phaseEndsAt = 0;
+    private long lastActiveMs = System.currentTimeMillis();
     private String hostClientId = null;
     private final List<Player> players = new ArrayList<>();
     private final Map<String, Integer> clientSeats = new HashMap<>();
@@ -213,9 +213,20 @@ public class AvalonService {
     }
 
     public synchronized AvalonStateResponse me(String clientId) {
+        lastActiveMs = System.currentTimeMillis();
         tick();
         return buildResponse(clientId);
     }
+
+    // ---- RoomGame ----
+    @Override public synchronized String roomStatus() {
+        if (phase == null || phase == Phase.LOBBY) return "WAITING";
+        return phase == Phase.ENDED ? "ENDED" : "PLAYING";
+    }
+    @Override public synchronized int playerCount() { return players.size(); }
+    @Override public synchronized String hostLabel() { return players.isEmpty() ? "" : players.get(0).nick; }
+    @Override public synchronized boolean isEnded() { return phase == Phase.ENDED; }
+    @Override public synchronized long lastActiveMs() { return lastActiveMs; }
 
     // =================== 타이머/진행 ===================
 

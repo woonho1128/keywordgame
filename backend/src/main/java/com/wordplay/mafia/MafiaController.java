@@ -1,6 +1,8 @@
 package com.wordplay.mafia;
 
 import com.wordplay.common.dto.ApiResponse;
+import com.wordplay.common.dto.CreateRoomResponse;
+import com.wordplay.common.dto.RoomSummary;
 import com.wordplay.common.exception.BusinessException;
 import com.wordplay.common.exception.ErrorCode;
 import com.wordplay.mafia.dto.JoinRequest;
@@ -12,74 +14,79 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.List;
+
 @RestController
 @RequestMapping("/api/v1/mafia")
 @RequiredArgsConstructor
 public class MafiaController {
 
-    private final MafiaService mafiaService;
+    private final MafiaRoomManager rooms;
 
     @Value("${app.spyfall.admin-code}")
     private String adminCode;
 
-    /** 방 생성 + 방장 참가. */
-    @PostMapping("/new")
-    public ApiResponse<MafiaStateResponse> newGame(@RequestParam String clientId,
-                                                   @Valid @RequestBody NewMafiaRequest req) {
-        validateClientId(clientId);
-        return ApiResponse.success(mafiaService.newGame(clientId, req));
+    /** 방 목록. */
+    @GetMapping("/rooms")
+    public ApiResponse<List<RoomSummary>> roomList() {
+        return ApiResponse.success(rooms.list());
     }
 
-    /** 대기방 참가. */
+    /** 방 생성 + 방장 참가 → 방 코드 반환. */
+    @PostMapping("/new")
+    public ApiResponse<CreateRoomResponse<MafiaStateResponse>> newGame(@RequestParam String clientId,
+                                                                       @Valid @RequestBody NewMafiaRequest req) {
+        validateClientId(clientId);
+        String code = rooms.create(clientId, req);
+        return ApiResponse.success(new CreateRoomResponse<>(code, rooms.require(code).me(clientId)));
+    }
+
     @PostMapping("/join")
-    public ApiResponse<MafiaStateResponse> join(@RequestParam String clientId,
+    public ApiResponse<MafiaStateResponse> join(@RequestParam String roomCode, @RequestParam String clientId,
                                                 @Valid @RequestBody JoinRequest req) {
         validateClientId(clientId);
-        return ApiResponse.success(mafiaService.join(clientId, req.nick()));
+        return ApiResponse.success(rooms.require(roomCode).join(clientId, req.nick()));
     }
 
-    /** 방장이 게임 시작. */
     @PostMapping("/start")
-    public ApiResponse<MafiaStateResponse> start(@RequestParam String clientId) {
+    public ApiResponse<MafiaStateResponse> start(@RequestParam String roomCode, @RequestParam String clientId) {
         validateClientId(clientId);
-        return ApiResponse.success(mafiaService.start(clientId));
+        return ApiResponse.success(rooms.require(roomCode).start(clientId));
     }
 
-    /** 폴링. */
+    /** 폴링. 방이 사라졌으면 NOT_STARTED로 알려 목록으로 돌아가게 한다. */
     @GetMapping("/me")
-    public ApiResponse<MafiaStateResponse> me(@RequestParam String clientId) {
+    public ApiResponse<MafiaStateResponse> me(@RequestParam String roomCode, @RequestParam String clientId) {
         validateClientId(clientId);
-        return ApiResponse.success(mafiaService.me(clientId));
+        MafiaService g = rooms.find(roomCode);
+        if (g == null) return ApiResponse.success(MafiaStateResponse.notStarted(System.currentTimeMillis()));
+        return ApiResponse.success(g.me(clientId));
     }
 
-    /** 밤 행동(마피아/경찰/의사). */
     @PostMapping("/night-action")
-    public ApiResponse<MafiaStateResponse> nightAction(@RequestParam String clientId,
+    public ApiResponse<MafiaStateResponse> nightAction(@RequestParam String roomCode, @RequestParam String clientId,
                                                        @RequestBody TargetRequest req) {
         validateClientId(clientId);
-        return ApiResponse.success(mafiaService.nightAction(clientId, req.target()));
+        return ApiResponse.success(rooms.require(roomCode).nightAction(clientId, req.target()));
     }
 
-    /** 낮 투표. */
     @PostMapping("/vote")
-    public ApiResponse<MafiaStateResponse> vote(@RequestParam String clientId,
+    public ApiResponse<MafiaStateResponse> vote(@RequestParam String roomCode, @RequestParam String clientId,
                                                 @RequestBody TargetRequest req) {
         validateClientId(clientId);
-        return ApiResponse.success(mafiaService.vote(clientId, req.target()));
+        return ApiResponse.success(rooms.require(roomCode).vote(clientId, req.target()));
     }
 
-    /** 전체 초기화(관리자 코드 필요). */
+    /** 전체 방 초기화(관리자). */
     @PostMapping("/reset")
     public ApiResponse<MafiaStateResponse> reset(@RequestParam String code) {
-        if (!adminCode.equals(code)) {
-            throw new BusinessException(ErrorCode.INVALID_INPUT, "관리자 코드가 올바르지 않습니다");
-        }
-        return ApiResponse.success(mafiaService.resetGame());
+        if (!adminCode.equals(code)) throw new BusinessException(ErrorCode.INVALID_INPUT, "관리자 코드가 올바르지 않습니다");
+        rooms.resetAll();
+        return ApiResponse.success(MafiaStateResponse.notStarted(System.currentTimeMillis()));
     }
 
     private void validateClientId(String clientId) {
-        if (clientId == null || clientId.isBlank() || clientId.length() > 64) {
+        if (clientId == null || clientId.isBlank() || clientId.length() > 64)
             throw new BusinessException(ErrorCode.INVALID_INPUT, "clientId가 올바르지 않습니다");
-        }
     }
 }
