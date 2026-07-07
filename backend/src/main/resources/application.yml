@@ -49,7 +49,7 @@ app:
     wordguess-max-attempts: 5
   spyfall:
     # 스파이폴 전체 초기화(관리자) 코드. 운영에서 환경변수로 덮어쓰기 권장.
-    admin-code: ${SPYFALL_ADMIN_CODE:admin1128}
+    admin-code: ${SPYFALL_ADMIN_CODE:1128}
   wordsim:
     # WordSim 참고용 벡터 사전 위치 (rank 비교 기준)
     vectors-path: ${WORDSIM_VECTORS_PATH:/etc/wordplay/word_vectors.bin}
