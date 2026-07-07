@@ -53,21 +53,25 @@ public class JobMafiaService {
     private final List<Player> players = new ArrayList<>();
     private final Map<String, Integer> clientSeats = new HashMap<>();
 
-    // 설정
+    // 설정 (직업 인원 범위 — 시작 시 범위 안에서 랜덤)
     private long nightMs = 60_000, discussMs = 90_000, voteMs = 30_000;
-    private int cfgMafia = 0;                 // 0 = 자동
-    private Boolean cfgPsycho = null, cfgAttention = null; // null = 자동
+    private int mafiaMin = 1, mafiaMax = 2;
+    private int psychoMin = 0, psychoMax = 1;
+    private int attentionMin = 0, attentionMax = 1;
     private boolean revealOnDeath = true;
 
     // 밤 상태
     private final Map<Integer, Integer> nightTargetBySeat = new HashMap<>(); // 각자 이번 밤 지목(표시용)
-    private final List<String> copLog = new ArrayList<>();       // 진짜 경찰 조사 기록
-    private final List<String> psychoCopLog = new ArrayList<>(); // 가짜 경찰(정신병자) 기록
+    private final List<String> copLog = new ArrayList<>();               // 진짜 경찰 조사 기록
+    private final Map<Integer, List<String>> psychoCopLogs = new HashMap<>(); // 좌석별 가짜 경찰(정신병자) 기록
+
+    private List<String> psychoCopLogBySeat(int seat) {
+        return psychoCopLogs.computeIfAbsent(seat, k -> new ArrayList<>());
+    }
     private final Set<Integer> nightActed = new HashSet<>();
 
-    // 정신병자
-    private int psychoSeat = -1;
-    private Role psychoFakeRole = Role.POLICE;
+    // 정신병자: seat -> 본인에게 보일 가짜 직업(경찰/의사)
+    private final Map<Integer, Role> psychoFakeRoles = new HashMap<>();
 
     // 투표
     private final Map<Integer, Integer> votes = new HashMap<>();
@@ -87,9 +91,12 @@ public class JobMafiaService {
         nightMs = clampSec(req.nightSec(), 20, 180, 60) * 1000L;
         discussMs = clampSec(req.discussSec(), 15, 300, 90) * 1000L;
         voteMs = clampSec(req.voteSec(), 10, 120, 30) * 1000L;
-        cfgMafia = req.mafiaCount() == null ? 0 : Math.max(0, req.mafiaCount());
-        cfgPsycho = req.includePsycho();
-        cfgAttention = req.includeAttention();
+        mafiaMin = clampInt(req.mafiaMin(), 0, 6, 1);
+        mafiaMax = clampInt(req.mafiaMax(), mafiaMin, 6, Math.max(mafiaMin, 2));
+        psychoMin = clampInt(req.psychoMin(), 0, 4, 0);
+        psychoMax = clampInt(req.psychoMax(), psychoMin, 4, Math.max(psychoMin, 1));
+        attentionMin = clampInt(req.attentionMin(), 0, 4, 0);
+        attentionMax = clampInt(req.attentionMax(), attentionMin, 4, Math.max(attentionMin, 1));
         addPlayer(clientId, req.nick());
         return me(clientId);
     }
@@ -112,36 +119,42 @@ public class JobMafiaService {
         int n = players.size();
         if (n < 5) throw new BusinessException(ErrorCode.INVALID_INPUT, "최소 5명이 필요합니다");
 
-        int mafia = cfgMafia > 0 ? cfgMafia : Math.max(1, n / 4);
-        boolean psycho = cfgPsycho == null ? n >= 6 : cfgPsycho;
-        boolean attention = cfgAttention == null ? n >= 5 : cfgAttention;
-        int specials = mafia + 2 + (psycho ? 1 : 0) + (attention ? 1 : 0); // +경찰,의사
-        if (specials > n)
-            throw new BusinessException(ErrorCode.INVALID_INPUT, "직업 구성이 인원보다 많습니다. 마피아 수나 특수직업을 줄이세요");
+        // 범위 안에서 랜덤으로 각 직업 인원 결정
+        int mafia = Math.max(1, randRange(mafiaMin, mafiaMax)); // 마피아는 최소 1 보장
+        int psycho = randRange(psychoMin, psychoMax);
+        int attention = randRange(attentionMin, attentionMax);
+        // 인원 초과 시 특수직업부터 줄임(마피아는 1까지만 감축)
+        while (mafia + psycho + attention + 2 > n) {
+            if (attention > 0) attention--;
+            else if (psycho > 0) psycho--;
+            else if (mafia > 1) mafia--;
+            else break;
+        }
+        if (mafia + psycho + attention + 2 > n)
+            throw new BusinessException(ErrorCode.INVALID_INPUT, "인원이 부족합니다");
 
         List<Role> roles = new ArrayList<>();
         for (int i = 0; i < mafia; i++) roles.add(Role.MAFIA);
         roles.add(Role.POLICE);
         roles.add(Role.DOCTOR);
-        if (psycho) roles.add(Role.PSYCHO);
-        if (attention) roles.add(Role.ATTENTION);
+        for (int i = 0; i < psycho; i++) roles.add(Role.PSYCHO);
+        for (int i = 0; i < attention; i++) roles.add(Role.ATTENTION);
         while (roles.size() < n) roles.add(Role.CITIZEN);
         Collections.shuffle(roles);
 
-        psychoSeat = -1;
+        psychoFakeRoles.clear();
         for (int i = 0; i < n; i++) {
             players.get(i).role = roles.get(i);
             players.get(i).alive = true;
-            if (roles.get(i) == Role.PSYCHO) psychoSeat = i;
-        }
-        if (psychoSeat >= 0) {
-            // 정신병자에게 보일 가짜 직업(경찰/의사 중 랜덤)
-            psychoFakeRole = ThreadLocalRandom.current().nextBoolean() ? Role.POLICE : Role.DOCTOR;
+            if (roles.get(i) == Role.PSYCHO) {
+                // 정신병자에게 보일 가짜 직업(경찰/의사 중 랜덤)
+                psychoFakeRoles.put(i, ThreadLocalRandom.current().nextBoolean() ? Role.POLICE : Role.DOCTOR);
+            }
         }
 
         round = 1;
         copLog.clear();
-        psychoCopLog.clear();
+        psychoCopLogs.clear();
         prepareNight();
         startPhase(Phase.NIGHT);
         return me(clientId);
@@ -261,11 +274,13 @@ public class JobMafiaService {
             if (t != null && t >= 0)
                 copLog.add(round + "일차: " + players.get(t).nick + " → " + realScan(t));
         }
-        // 정신병자 가짜 조사(직업 2개 동등확률 — 우연히 진짜가 섞일 수도 있음)
-        if (psychoSeat >= 0 && players.get(psychoSeat).alive && psychoFakeRole == Role.POLICE) {
-            Integer t = nightTargetBySeat.get(psychoSeat);
+        // 정신병자(가짜 경찰) 가짜 조사 — 직업 2개 동등확률(우연히 진짜가 섞일 수도)
+        for (var e : psychoFakeRoles.entrySet()) {
+            int ps = e.getKey();
+            if (e.getValue() != Role.POLICE || !players.get(ps).alive) continue;
+            Integer t = nightTargetBySeat.get(ps);
             if (t != null && t >= 0)
-                psychoCopLog.add(round + "일차: " + players.get(t).nick + " → " + fakeScan());
+                psychoCopLogBySeat(ps).add(round + "일차: " + players.get(t).nick + " → " + fakeScan());
         }
     }
 
@@ -431,7 +446,8 @@ public class JobMafiaService {
         // 경찰 조사 기록은 '밤엔 숨기고 아침부터' 공개(진짜 경찰=정확, 정신병자=가짜).
         if (joined && phase != Phase.NIGHT) {
             if (me.role == Role.POLICE) myCopLog = List.copyOf(copLog);
-            else if (me.role == Role.PSYCHO && psychoFakeRole == Role.POLICE) myCopLog = List.copyOf(psychoCopLog);
+            else if (me.role == Role.PSYCHO && psychoFakeRoles.get(mySeatIdx) == Role.POLICE)
+                myCopLog = List.copyOf(psychoCopLogBySeat(mySeatIdx));
         }
 
         List<VoteView> tally = new ArrayList<>();
@@ -474,7 +490,7 @@ public class JobMafiaService {
 
     /** 정신병자는 가짜 직업으로 취급(본인 화면·행동). 그 외는 실제 직업. */
     private Role effectiveRole(Player p) {
-        return p.role == Role.PSYCHO ? psychoFakeRole : p.role;
+        return p.role == Role.PSYCHO ? psychoFakeRoles.getOrDefault(seatOf(p), Role.POLICE) : p.role;
     }
 
     private String teamOf(Role r) {
@@ -527,14 +543,15 @@ public class JobMafiaService {
         players.clear();
         clientSeats.clear();
         nightMs = 60_000; discussMs = 90_000; voteMs = 30_000;
-        cfgMafia = 0; cfgPsycho = null; cfgAttention = null;
+        mafiaMin = 1; mafiaMax = 2;
+        psychoMin = 0; psychoMax = 1;
+        attentionMin = 0; attentionMax = 1;
         revealOnDeath = true;
         nightTargetBySeat.clear();
         copLog.clear();
-        psychoCopLog.clear();
+        psychoCopLogs.clear();
         nightActed.clear();
-        psychoSeat = -1;
-        psychoFakeRole = Role.POLICE;
+        psychoFakeRoles.clear();
         votes.clear();
         nightMessage = null;
         nightDeadSeat = executedSeat = -1;
@@ -553,5 +570,16 @@ public class JobMafiaService {
     private static int clampSec(Integer v, int min, int max, int def) {
         if (v == null) return def;
         return Math.max(min, Math.min(max, v));
+    }
+
+    private static int clampInt(Integer v, int min, int max, int def) {
+        if (v == null) return def;
+        return Math.max(min, Math.min(max, v));
+    }
+
+    /** [min,max] 범위에서 랜덤(포함). */
+    private static int randRange(int min, int max) {
+        if (max < min) max = min;
+        return min + ThreadLocalRandom.current().nextInt(max - min + 1);
     }
 }

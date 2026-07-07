@@ -19,7 +19,8 @@ class JobMafiaServiceTest {
     private JobMafiaService start6() {
         JobMafiaService svc = new JobMafiaService();
         clients.clear();
-        svc.newGame("host", new NewJobMafiaRequest("방장", null, null, null, null, null, null));
+        // 범위 고정: 마피아1·정신병자1·관종1 → 6인이면 각 1명 + 시민1 (결정적)
+        svc.newGame("host", new NewJobMafiaRequest("방장", null, null, null, 1, 1, 1, 1, 1, 1));
         clients.add("host");
         for (int i = 1; i <= 5; i++) { svc.join("c" + i, "p" + i); clients.add("c" + i); }
         svc.start("host");
@@ -102,7 +103,7 @@ class JobMafiaServiceTest {
     @Test
     void 최소인원_미달_시작불가() {
         JobMafiaService svc = new JobMafiaService();
-        svc.newGame("host", new NewJobMafiaRequest("방장", null, null, null, null, null, null));
+        svc.newGame("host", new NewJobMafiaRequest("방장", null, null, null, null, null, null, null, null, null));
         for (int i = 1; i <= 3; i++) svc.join("c" + i, "p" + i);
         assertThatThrownBy(() -> svc.start("host")).hasMessageContaining("최소 5명");
     }

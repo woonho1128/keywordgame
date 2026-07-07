@@ -93,9 +93,12 @@ export default function MafiaJobsPage() {
   const [nightSec, setNightSec] = useState(60);
   const [discussSec, setDiscussSec] = useState(90);
   const [voteSec, setVoteSec] = useState(30);
-  const [mafiaCount, setMafiaCount] = useState(0); // 0 = 자동
-  const [includePsycho, setIncludePsycho] = useState(true);
-  const [includeAttention, setIncludeAttention] = useState(true);
+  const [mafiaMin, setMafiaMin] = useState(1);
+  const [mafiaMax, setMafiaMax] = useState(2);
+  const [psychoMin, setPsychoMin] = useState(0);
+  const [psychoMax, setPsychoMax] = useState(1);
+  const [attentionMin, setAttentionMin] = useState(0);
+  const [attentionMax, setAttentionMax] = useState(1);
   const [showRoles, setShowRoles] = useState(false);
 
   const [showAdmin, setShowAdmin] = useState(false);
@@ -177,8 +180,7 @@ export default function MafiaJobsPage() {
     saveNick(n);
     post(`/api/v1/jobmafia/new?clientId=${encodeURIComponent(clientId)}`, {
       nick: n, nightSec, discussSec, voteSec,
-      mafiaCount: mafiaCount > 0 ? mafiaCount : null,
-      includePsycho, includeAttention,
+      mafiaMin, mafiaMax, psychoMin, psychoMax, attentionMin, attentionMax,
     }).then((r) => r && setShowCreate(false));
   };
 
@@ -302,6 +304,34 @@ export default function MafiaJobsPage() {
     );
   }
 
+  function rangeRow(
+    label: string,
+    min: number, setMin: (n: number) => void,
+    max: number, setMax: (n: number) => void,
+    lo: number, hi: number,
+  ) {
+    const clamp = (v: number) => Math.max(lo, Math.min(hi, v));
+    const setMn = (v: number) => { const nv = clamp(v); setMin(nv); if (nv > max) setMax(nv); };
+    const setMx = (v: number) => { const nv = clamp(v); setMax(nv); if (nv < min) setMin(nv); };
+    const btn = (txt: string, on: () => void) => (
+      <button type="button" onClick={on} className="w-7 h-7 rounded border border-gray-300 text-gray-600 leading-none">{txt}</button>
+    );
+    return (
+      <div className="flex items-center justify-between">
+        <span className="text-sm">{label}</span>
+        <div className="flex items-center gap-1 text-sm">
+          {btn('−', () => setMn(min - 1))}
+          <span className="w-4 text-center font-bold">{min}</span>
+          {btn('＋', () => setMn(min + 1))}
+          <span className="text-gray-300 mx-1">~</span>
+          {btn('−', () => setMx(max - 1))}
+          <span className="w-4 text-center font-bold">{max}</span>
+          {btn('＋', () => setMx(max + 1))}
+        </div>
+      </div>
+    );
+  }
+
   function renderNotStarted() {
     if (showCreate) return renderCreateForm();
     return (
@@ -333,32 +363,12 @@ export default function MafiaJobsPage() {
           />
         </div>
 
-        <div className="space-y-2">
-          <label className="flex items-center gap-2 text-sm">
-            <input type="checkbox" checked={includePsycho} onChange={(e) => setIncludePsycho(e.target.checked)} />
-            🤪 정신병자 포함
-          </label>
-          <label className="flex items-center gap-2 text-sm">
-            <input type="checkbox" checked={includeAttention} onChange={(e) => setIncludeAttention(e.target.checked)} />
-            📢 관종 포함
-          </label>
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium mb-1">마피아 수</label>
-          <div className="flex gap-2">
-            {[0, 1, 2, 3].map((n) => (
-              <button
-                key={n}
-                onClick={() => setMafiaCount(n)}
-                className={`px-3 py-2 rounded-lg border text-sm ${
-                  mafiaCount === n ? 'border-red-400 bg-red-50 text-red-500 font-bold' : 'border-gray-300'
-                }`}
-              >
-                {n === 0 ? '자동' : n}
-              </button>
-            ))}
-          </div>
+        <div className="space-y-3 bg-gray-50 rounded-lg p-4">
+          <p className="text-sm font-medium">직업 인원 <span className="text-gray-400 font-normal text-xs">(범위 안에서 랜덤)</span></p>
+          {rangeRow('🔪 마피아', mafiaMin, setMafiaMin, mafiaMax, setMafiaMax, 0, 5)}
+          {rangeRow('🤪 정신병자', psychoMin, setPsychoMin, psychoMax, setPsychoMax, 0, 3)}
+          {rangeRow('📢 관종', attentionMin, setAttentionMin, attentionMax, setAttentionMax, 0, 3)}
+          <p className="text-xs text-gray-400">경찰·의사는 항상 1명씩, 나머지는 시민입니다.</p>
         </div>
 
         <button onClick={() => setShowAdvanced((v) => !v)} className="text-sm text-gray-500 underline">
