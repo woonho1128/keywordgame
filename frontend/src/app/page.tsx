@@ -38,6 +38,14 @@ export default function HomePage() {
           <h2 className="text-2xl font-bold mb-2">🕵️ 스파이폴</h2>
           <p className="text-gray-600">각자 폰으로 접속해 역할을 확인하고, 숨은 스파이를 찾는 게임 (3~12인).</p>
         </Link>
+
+        <Link
+          href="/mafia"
+          className="border-2 border-gray-200 rounded-xl p-8 hover:border-move transition"
+        >
+          <h2 className="text-2xl font-bold mb-2">🎭 마피아</h2>
+          <p className="text-gray-600">밤·낮으로 자동 진행되는 마피아. 각자 폰으로 접속 (4~12인).</p>
+        </Link>
       </div>
     </main>
   );
