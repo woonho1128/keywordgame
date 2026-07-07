@@ -39,8 +39,11 @@ type MafiaState = {
   mafiaPickTally: { targetSeat: number; count: number }[];
 };
 
+type RoomSummary = { code: string; status: string; playerCount: number; host: string };
+
 const CLIENT_ID_KEY = 'mafia_client_id';
 const NICK_KEY = 'mafia_nick';
+const ROOM_KEY = 'mafia_room';
 
 function getClientId(): string {
   if (typeof window === 'undefined') return '';
@@ -86,6 +89,11 @@ export default function MafiaPage() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
+  // 방(멀티룸)
+  const [roomCode, setRoomCode] = useState<string | null>(null);
+  const [rooms, setRooms] = useState<RoomSummary[]>([]);
+  const roomRef = useRef<string | null>(null);
+
   // 방 만들기 폼
   const [nick, setNick] = useState('');
   const [showAdvanced, setShowAdvanced] = useState(false);
@@ -103,21 +111,34 @@ export default function MafiaPage() {
   const endsAtRef = useRef(0);
   const inflight = useRef(false);
 
-  const fetchState = useCallback(async () => {
+  const changeRoom = useCallback((code: string | null) => {
+    roomRef.current = code;
+    setRoomCode(code);
+    try {
+      if (code) localStorage.setItem(ROOM_KEY, code);
+      else localStorage.removeItem(ROOM_KEY);
+    } catch {}
+  }, []);
+
+  const poll = useCallback(async () => {
     const cid = cidRef.current;
-    if (!cid || inflight.current) return;
+    const code = roomRef.current;
+    if (!code) {
+      try { setRooms(await api<RoomSummary[]>('/api/v1/mafia/rooms')); } catch {}
+      return;
+    }
+    if (inflight.current) return;
     inflight.current = true;
     try {
-      const res = await api<MafiaState>(`/api/v1/mafia/me?clientId=${encodeURIComponent(cid)}`);
-      setSt(res);
-      offsetRef.current = res.serverNow - Date.now();
-      endsAtRef.current = res.phaseEndsAt;
+      const res = await api<MafiaState>(`/api/v1/mafia/me?roomCode=${code}&clientId=${encodeURIComponent(cid)}`);
+      if (res.status === 'NOT_STARTED') { changeRoom(null); setSt(null); }
+      else { setSt(res); offsetRef.current = res.serverNow - Date.now(); endsAtRef.current = res.phaseEndsAt; }
     } catch {
-      // 폴링 중 일시 오류는 무시(마지막 상태 유지)
+      // 폴링 중 일시 오류 무시
     } finally {
       inflight.current = false;
     }
-  }, []);
+  }, [changeRoom]);
 
   useEffect(() => {
     const id = getClientId();
@@ -125,9 +146,11 @@ export default function MafiaPage() {
     cidRef.current = id;
     try {
       setNick(localStorage.getItem(NICK_KEY) || '');
+      const saved = localStorage.getItem(ROOM_KEY);
+      if (saved) { roomRef.current = saved; setRoomCode(saved); }
     } catch {}
-    fetchState();
-    const poll = setInterval(fetchState, 1000);
+    poll();
+    const pollTimer = setInterval(poll, 1000);
     const ticker = setInterval(() => {
       if (endsAtRef.current > 0) {
         const now = Date.now() + offsetRef.current;
@@ -137,10 +160,10 @@ export default function MafiaPage() {
       }
     }, 250);
     return () => {
-      clearInterval(poll);
+      clearInterval(pollTimer);
       clearInterval(ticker);
     };
-  }, [fetchState]);
+  }, [poll]);
 
   const post = useCallback(
     async (path: string, body?: unknown) => {
@@ -171,29 +194,41 @@ export default function MafiaPage() {
     } catch {}
   };
 
-  const handleCreate = () => {
+  const handleCreate = async () => {
     const n = nick.trim();
     if (!n) return setError('닉네임을 입력하세요');
     saveNick(n);
-    post(`/api/v1/mafia/new?clientId=${encodeURIComponent(clientId)}`, {
-      nick: n, nightSec, discussSec, voteSec,
-    }).then((r) => r && setShowCreate(false));
+    setBusy(true);
+    setError(null);
+    try {
+      const res = await api<{ roomCode: string; state: MafiaState }>(
+        `/api/v1/mafia/new?clientId=${encodeURIComponent(clientId)}`,
+        { method: 'POST', body: JSON.stringify({ nick: n, nightSec, discussSec, voteSec }) }
+      );
+      changeRoom(res.roomCode);
+      setSt(res.state);
+      setShowCreate(false);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : '방 생성 실패');
+    } finally {
+      setBusy(false);
+    }
   };
 
   const handleJoin = () => {
     const n = nick.trim();
     if (!n) return setError('닉네임을 입력하세요');
     saveNick(n);
-    post(`/api/v1/mafia/join?clientId=${encodeURIComponent(clientId)}`, { nick: n });
+    post(`/api/v1/mafia/join?roomCode=${roomCode}&clientId=${encodeURIComponent(clientId)}`, { nick: n });
   };
 
-  const handleStart = () => post(`/api/v1/mafia/start?clientId=${encodeURIComponent(clientId)}`);
+  const handleStart = () => post(`/api/v1/mafia/start?roomCode=${roomCode}&clientId=${encodeURIComponent(clientId)}`);
 
   const handleAct = (target: number) =>
-    post(`/api/v1/mafia/night-action?clientId=${encodeURIComponent(clientId)}`, { target });
+    post(`/api/v1/mafia/night-action?roomCode=${roomCode}&clientId=${encodeURIComponent(clientId)}`, { target });
 
   const handleVote = (target: number) =>
-    post(`/api/v1/mafia/vote?clientId=${encodeURIComponent(clientId)}`, { target });
+    post(`/api/v1/mafia/vote?roomCode=${roomCode}&clientId=${encodeURIComponent(clientId)}`, { target });
 
   const handleAdminReset = async () => {
     const code = adminInput.trim();
@@ -202,12 +237,67 @@ export default function MafiaPage() {
     if (res) {
       setShowAdmin(false);
       setAdminInput('');
+      changeRoom(null);
+      setSt(null);
     }
   };
 
   const nickOf = (seat: number) => st?.players.find((p) => p.seat === seat)?.nick ?? `${seat}번`;
 
   // ---------- 렌더 ----------
+  function adminFooter() {
+    return (
+      <div className="w-full mt-8 pt-4 border-t border-gray-100 flex justify-center">
+        {showAdmin ? (
+          <div className="flex items-center gap-2">
+            <input type="password" value={adminInput} onChange={(e) => setAdminInput(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && handleAdminReset()} placeholder="관리자 코드"
+              className="border border-gray-300 rounded-lg px-3 py-2 text-sm w-32 focus:outline-none focus:border-red-400" />
+            <button onClick={handleAdminReset} className="bg-gray-700 text-white text-sm px-3 py-2 rounded-lg">전체 초기화</button>
+          </div>
+        ) : (
+          <button onClick={() => setShowAdmin(true)} className="text-xs text-gray-300 hover:text-gray-500">🔒 관리자</button>
+        )}
+      </div>
+    );
+  }
+
+  function renderRoomList() {
+    return (
+      <div className="w-full space-y-4">
+        <button onClick={() => { setShowCreate(true); setError(null); }} className="w-full bg-hit text-white font-bold py-3 rounded-lg hover:opacity-90">+ 새 방 만들기</button>
+        <p className="text-sm font-bold text-gray-600">방 목록</p>
+        {rooms.length === 0 && <p className="text-gray-400 text-sm text-center py-6">아직 만들어진 방이 없어요. 새 방을 만들어보세요!</p>}
+        {rooms.map((r) => {
+          const badge = r.status === 'WAITING' ? '모집중' : r.status === 'PLAYING' ? '진행중' : '종료';
+          const cls = r.status === 'WAITING' ? 'bg-green-100 text-green-700' : r.status === 'PLAYING' ? 'bg-yellow-100 text-yellow-700' : 'bg-gray-100 text-gray-400';
+          return (
+            <div key={r.code} className="flex items-center justify-between border border-gray-200 rounded-lg px-4 py-3">
+              <div><span className="font-bold tracking-wider">{r.code}</span><span className="text-xs text-gray-400 ml-2">{r.host} · {r.playerCount}명</span></div>
+              <div className="flex items-center gap-2">
+                <span className={`text-xs px-2 py-1 rounded-full ${cls}`}>{badge}</span>
+                {r.status === 'WAITING'
+                  ? <button onClick={() => { changeRoom(r.code); setSt(null); }} className="text-sm font-bold text-hit">참가</button>
+                  : <span className="text-sm text-gray-300">{badge}</span>}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    );
+  }
+
+  if (!roomCode) {
+    return (
+      <main className="min-h-screen flex flex-col items-center p-6 max-w-md mx-auto w-full">
+        <h1 className="text-2xl font-bold mb-6 self-start">🎭 마피아</h1>
+        {showCreate ? renderCreateForm() : renderRoomList()}
+        {error && <p className="text-red-500 text-sm mt-4 text-center">{error}</p>}
+        {adminFooter()}
+      </main>
+    );
+  }
+
   if (!st) {
     return (
       <main className="min-h-screen flex items-center justify-center">
@@ -222,7 +312,11 @@ export default function MafiaPage() {
     <main className="min-h-screen flex flex-col items-center p-6 max-w-md mx-auto w-full">
       {/* 헤더 */}
       <div className="w-full flex items-center justify-between mb-4">
-        <h1 className="text-2xl font-bold">🎭 마피아</h1>
+        <div className="flex items-center gap-2">
+          <h1 className="text-2xl font-bold">🎭 마피아</h1>
+          <span className="text-xs bg-gray-100 rounded px-2 py-1 tracking-wider font-bold">{roomCode}</span>
+          <button onClick={() => { changeRoom(null); setSt(null); }} className="text-xs text-gray-400 underline">나가기</button>
+        </div>
         {phase !== 'NOT_STARTED' && phase !== 'LOBBY' && (
           <div className="text-right">
             <div className="text-sm font-bold text-gray-700">

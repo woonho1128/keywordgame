@@ -51,8 +51,11 @@ type AvState = {
   playerCount: number;
 };
 
+type RoomSummary = { code: string; status: string; playerCount: number; host: string };
+
 const CLIENT_ID_KEY = 'avalon_client_id';
 const NICK_KEY = 'avalon_nick';
+const ROOM_KEY = 'avalon_room';
 
 function getClientId(): string {
   if (typeof window === 'undefined') return '';
@@ -96,6 +99,10 @@ export default function AvalonPage() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
+  const [roomCode, setRoomCode] = useState<string | null>(null);
+  const [rooms, setRooms] = useState<RoomSummary[]>([]);
+  const roomRef = useRef<string | null>(null);
+
   const [nick, setNick] = useState('');
   const [showCreate, setShowCreate] = useState(false);
   const [incPM, setIncPM] = useState(true);
@@ -113,35 +120,52 @@ export default function AvalonPage() {
   const endsAtRef = useRef(0);
   const inflight = useRef(false);
 
-  const fetchState = useCallback(async () => {
-    const cid = cidRef.current;
-    if (!cid || inflight.current) return;
+  const changeRoom = useCallback((code: string | null) => {
+    roomRef.current = code;
+    setRoomCode(code);
+    try {
+      if (code) localStorage.setItem(ROOM_KEY, code);
+      else localStorage.removeItem(ROOM_KEY);
+    } catch {}
+  }, []);
+
+  const poll = useCallback(async () => {
+    const c = cidRef.current;
+    const code = roomRef.current;
+    if (!code) {
+      try { setRooms(await api<RoomSummary[]>('/api/v1/avalon/rooms')); } catch {}
+      return;
+    }
+    if (inflight.current) return;
     inflight.current = true;
     try {
-      const res = await api<AvState>(`/api/v1/avalon/me?clientId=${encodeURIComponent(cid)}`);
-      setSt(res);
-      offsetRef.current = res.serverNow - Date.now();
-      endsAtRef.current = res.phaseEndsAt;
+      const res = await api<AvState>(`/api/v1/avalon/me?roomCode=${code}&clientId=${encodeURIComponent(c)}`);
+      if (res.status === 'NOT_STARTED') { changeRoom(null); setSt(null); }
+      else { setSt(res); offsetRef.current = res.serverNow - Date.now(); endsAtRef.current = res.phaseEndsAt; }
     } catch { /* ignore */ } finally {
       inflight.current = false;
     }
-  }, []);
+  }, [changeRoom]);
 
   useEffect(() => {
     const id = getClientId();
     setClientId(id);
     cidRef.current = id;
-    try { setNick(localStorage.getItem(NICK_KEY) || ''); } catch {}
-    fetchState();
-    const poll = setInterval(fetchState, 1000);
+    try {
+      setNick(localStorage.getItem(NICK_KEY) || '');
+      const saved = localStorage.getItem(ROOM_KEY);
+      if (saved) { roomRef.current = saved; setRoomCode(saved); }
+    } catch {}
+    poll();
+    const pollTimer = setInterval(poll, 1000);
     const ticker = setInterval(() => {
       if (endsAtRef.current > 0) {
         const now = Date.now() + offsetRef.current;
         setRemaining(Math.max(0, Math.ceil((endsAtRef.current - now) / 1000)));
       } else setRemaining(0);
     }, 250);
-    return () => { clearInterval(poll); clearInterval(ticker); };
-  }, [fetchState]);
+    return () => { clearInterval(pollTimer); clearInterval(ticker); };
+  }, [poll]);
 
   const post = useCallback(async (path: string, body?: unknown) => {
     setBusy(true);
@@ -159,33 +183,46 @@ export default function AvalonPage() {
   }, []);
 
   const cid = () => encodeURIComponent(clientId);
+  const rp = () => `roomCode=${roomCode}&clientId=${cid()}`;
   const saveNick = (n: string) => { try { localStorage.setItem(NICK_KEY, n); } catch {} };
 
-  const handleCreate = () => {
+  const handleCreate = async () => {
     const n = nick.trim();
     if (!n) return setError('닉네임을 입력하세요');
     saveNick(n);
-    post(`/api/v1/avalon/new?clientId=${cid()}`, {
-      nick: n, includePercivalMorgana: incPM, includeMordred: incMordred, includeOberon: incOberon,
-    }).then((r) => r && setShowCreate(false));
+    setBusy(true);
+    setError(null);
+    try {
+      const res = await api<{ roomCode: string; state: AvState }>(
+        `/api/v1/avalon/new?clientId=${cid()}`,
+        { method: 'POST', body: JSON.stringify({ nick: n, includePercivalMorgana: incPM, includeMordred: incMordred, includeOberon: incOberon }) }
+      );
+      changeRoom(res.roomCode);
+      setSt(res.state);
+      setShowCreate(false);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : '방 생성 실패');
+    } finally {
+      setBusy(false);
+    }
   };
   const handleJoin = () => {
     const n = nick.trim();
     if (!n) return setError('닉네임을 입력하세요');
     saveNick(n);
-    post(`/api/v1/avalon/join?clientId=${cid()}`, { nick: n });
+    post(`/api/v1/avalon/join?${rp()}`, { nick: n });
   };
-  const handleStart = () => post(`/api/v1/avalon/start?clientId=${cid()}`);
-  const handleReady = () => post(`/api/v1/avalon/ready?clientId=${cid()}`);
-  const handlePropose = () => post(`/api/v1/avalon/propose?clientId=${cid()}`, { team }).then((r) => r && setTeam([]));
-  const handleVote = (approve: boolean) => post(`/api/v1/avalon/vote?clientId=${cid()}`, { value: approve });
-  const handleQuest = (success: boolean) => post(`/api/v1/avalon/quest?clientId=${cid()}`, { value: success });
-  const handleAssassinate = (target: number) => post(`/api/v1/avalon/assassinate?clientId=${cid()}`, { target });
+  const handleStart = () => post(`/api/v1/avalon/start?${rp()}`);
+  const handleReady = () => post(`/api/v1/avalon/ready?${rp()}`);
+  const handlePropose = () => post(`/api/v1/avalon/propose?${rp()}`, { team }).then((r) => r && setTeam([]));
+  const handleVote = (approve: boolean) => post(`/api/v1/avalon/vote?${rp()}`, { value: approve });
+  const handleQuest = (success: boolean) => post(`/api/v1/avalon/quest?${rp()}`, { value: success });
+  const handleAssassinate = (target: number) => post(`/api/v1/avalon/assassinate?${rp()}`, { target });
   const handleAdminReset = async () => {
     const code = adminInput.trim();
     if (!code) return;
     const res = await post(`/api/v1/avalon/reset?code=${encodeURIComponent(code)}`);
-    if (res) { setShowAdmin(false); setAdminInput(''); }
+    if (res) { setShowAdmin(false); setAdminInput(''); changeRoom(null); setSt(null); }
   };
 
   const nickOf = (seat: number) => st?.players.find((p) => p.seat === seat)?.nick ?? `${seat}번`;
@@ -198,6 +235,63 @@ export default function AvalonPage() {
     });
   };
 
+  const adminFooter = (
+    <div className="w-full mt-6 pt-4 border-t border-gray-100 flex justify-center">
+      {showAdmin ? (
+        <div className="flex items-center gap-2">
+          <input type="password" value={adminInput} onChange={(e) => setAdminInput(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && handleAdminReset()} placeholder="관리자 코드"
+            className="border border-gray-300 rounded-lg px-3 py-2 text-sm w-32 focus:outline-none focus:border-red-400" />
+          <button onClick={handleAdminReset} className="bg-gray-700 text-white text-sm px-3 py-2 rounded-lg">전체 초기화</button>
+        </div>
+      ) : (
+        <button onClick={() => setShowAdmin(true)} className="text-xs text-gray-300 hover:text-gray-500">🔒 관리자</button>
+      )}
+    </div>
+  );
+
+  function renderRoomList() {
+    return (
+      <div className="w-full space-y-4">
+        <button onClick={() => { setShowCreate(true); setError(null); }} className="w-full bg-blue-600 text-white font-bold py-3 rounded-lg hover:opacity-90">+ 새 방 만들기</button>
+        <div className="flex justify-center gap-4">
+          <button onClick={() => { setShowRules((v) => !v); setShowRoles(false); }} className="text-sm text-gray-400 underline">게임 방법 보기</button>
+          <button onClick={() => { setShowRoles((v) => !v); setShowRules(false); }} className="text-sm text-gray-400 underline">직업 설명 보기</button>
+        </div>
+        {showRules && rulesHelp()}
+        {showRoles && rolesHelp()}
+        <p className="text-sm font-bold text-gray-600">방 목록</p>
+        {rooms.length === 0 && <p className="text-gray-400 text-sm text-center py-6">아직 만들어진 방이 없어요. 새 방을 만들어보세요!</p>}
+        {rooms.map((r) => {
+          const badge = r.status === 'WAITING' ? '모집중' : r.status === 'PLAYING' ? '진행중' : '종료';
+          const cls = r.status === 'WAITING' ? 'bg-green-100 text-green-700' : r.status === 'PLAYING' ? 'bg-yellow-100 text-yellow-700' : 'bg-gray-100 text-gray-400';
+          return (
+            <div key={r.code} className="flex items-center justify-between border border-gray-200 rounded-lg px-4 py-3">
+              <div><span className="font-bold tracking-wider">{r.code}</span><span className="text-xs text-gray-400 ml-2">{r.host} · {r.playerCount}명</span></div>
+              <div className="flex items-center gap-2">
+                <span className={`text-xs px-2 py-1 rounded-full ${cls}`}>{badge}</span>
+                {r.status === 'WAITING'
+                  ? <button onClick={() => { changeRoom(r.code); setSt(null); }} className="text-sm font-bold text-blue-600">참가</button>
+                  : <span className="text-sm text-gray-300">{badge}</span>}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    );
+  }
+
+  if (!roomCode) {
+    return (
+      <main className="min-h-screen flex flex-col items-center p-6 max-w-md mx-auto w-full">
+        <h1 className="text-2xl font-bold mb-6 self-start">🏰 아발론</h1>
+        {showCreate ? renderNotStarted() : renderRoomList()}
+        {error && <p className="text-red-500 text-sm mt-4 text-center">{error}</p>}
+        {adminFooter}
+      </main>
+    );
+  }
+
   if (!st) {
     return <main className="min-h-screen flex items-center justify-center"><p className="text-gray-400">불러오는 중...</p></main>;
   }
@@ -206,7 +300,11 @@ export default function AvalonPage() {
   return (
     <main className="min-h-screen flex flex-col items-center p-6 max-w-md mx-auto w-full">
       <div className="w-full flex items-center justify-between mb-3">
-        <h1 className="text-2xl font-bold">🏰 아발론</h1>
+        <div className="flex items-center gap-2">
+          <h1 className="text-2xl font-bold">🏰 아발론</h1>
+          <span className="text-xs bg-gray-100 rounded px-2 py-1 tracking-wider font-bold">{roomCode}</span>
+          <button onClick={() => { changeRoom(null); setSt(null); }} className="text-xs text-gray-400 underline">나가기</button>
+        </div>
         {phase !== 'NOT_STARTED' && phase !== 'LOBBY' && (
           <div className="text-right">
             <div className="text-sm font-bold text-gray-700">{PHASE_LABEL[phase]}</div>
