@@ -48,6 +48,11 @@ export default function SpyfallPage() {
   const [playerCount, setPlayerCount] = useState(6);
   const [spyCount, setSpyCount] = useState(1);
 
+  // 관리자(전체 초기화)
+  const [adminVerified, setAdminVerified] = useState(false);
+  const [showAdmin, setShowAdmin] = useState(false);
+  const [adminInput, setAdminInput] = useState('');
+
   useEffect(() => {
     const id = getClientId();
     setClientId(id);
@@ -55,6 +60,61 @@ export default function SpyfallPage() {
       .then(setState)
       .catch((e) => setError(e instanceof Error ? e.message : '불러오기 실패'))
       .finally(() => setLoading(false));
+
+    // 저장된 관리자 코드가 있으면 검증해서 초기화 버튼 유지
+    try {
+      const saved = localStorage.getItem('spyfall_admin_code');
+      if (saved) {
+        api<boolean>(`/api/v1/spyfall/admin/verify?code=${encodeURIComponent(saved)}`)
+          .then((ok) => setAdminVerified(ok))
+          .catch(() => {});
+      }
+    } catch {}
+  }, []);
+
+  const handleVerifyAdmin = useCallback(async () => {
+    const code = adminInput.trim();
+    if (!code) return;
+    setError(null);
+    try {
+      const ok = await api<boolean>(
+        `/api/v1/spyfall/admin/verify?code=${encodeURIComponent(code)}`
+      );
+      if (ok) {
+        try {
+          localStorage.setItem('spyfall_admin_code', code);
+        } catch {}
+        setAdminVerified(true);
+        setShowAdmin(false);
+        setAdminInput('');
+      } else {
+        setError('관리자 코드가 올바르지 않습니다');
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : '확인 실패');
+    }
+  }, [adminInput]);
+
+  const handleReset = useCallback(async () => {
+    if (!window.confirm('전체 초기화할까요? 모든 사람의 판이 사라집니다.')) return;
+    setBusy(true);
+    setError(null);
+    let code = '';
+    try {
+      code = localStorage.getItem('spyfall_admin_code') || '';
+    } catch {}
+    try {
+      const res = await api<SpyfallState>(
+        `/api/v1/spyfall/reset?code=${encodeURIComponent(code)}`,
+        { method: 'POST' }
+      );
+      setState(res);
+      setRevealed(false);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : '초기화 실패');
+    } finally {
+      setBusy(false);
+    }
   }, []);
 
   // 버튼: 숨김이면 최신 역할을 받아서 공개, 공개 중이면 숨김.
@@ -259,6 +319,59 @@ export default function SpyfallPage() {
         )}
 
         {error && <p className="text-red-500 text-sm mt-4">{error}</p>}
+      </div>
+
+      {/* 관리자: 전체 초기화 */}
+      <div className="w-full mt-8 pt-4 border-t border-gray-100 flex flex-col items-center">
+        {adminVerified ? (
+          <div className="flex flex-col items-center gap-2">
+            <button
+              onClick={handleReset}
+              disabled={busy}
+              className="border border-red-300 text-red-500 font-bold px-4 py-2 rounded-lg text-sm hover:bg-red-50 active:scale-95 transition disabled:opacity-50"
+            >
+              ⚠️ 전체 초기화
+            </button>
+            <button
+              onClick={() => {
+                try {
+                  localStorage.removeItem('spyfall_admin_code');
+                } catch {}
+                setAdminVerified(false);
+              }}
+              className="text-xs text-gray-400 underline"
+            >
+              관리자 해제
+            </button>
+          </div>
+        ) : showAdmin ? (
+          <div className="flex items-center gap-2">
+            <input
+              type="password"
+              value={adminInput}
+              onChange={(e) => setAdminInput(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && handleVerifyAdmin()}
+              placeholder="관리자 코드"
+              className="border border-gray-300 rounded-lg px-3 py-2 text-sm w-40 focus:outline-none focus:border-hit"
+            />
+            <button
+              onClick={handleVerifyAdmin}
+              className="bg-gray-700 text-white text-sm font-medium px-3 py-2 rounded-lg"
+            >
+              확인
+            </button>
+          </div>
+        ) : (
+          <button
+            onClick={() => {
+              setShowAdmin(true);
+              setError(null);
+            }}
+            className="text-xs text-gray-300 hover:text-gray-500"
+          >
+            🔒 관리자
+          </button>
+        )}
       </div>
     </main>
   );

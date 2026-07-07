@@ -88,6 +88,17 @@ public class SpyfallService {
         return seatResponse(seatIdx);
     }
 
+    /** 전체 초기화(관리자): 진행 중인 판을 완전히 비운다 → NOT_STARTED. */
+    public synchronized SpyfallStateResponse reset() {
+        this.round = 0;
+        this.playerCount = 0;
+        this.spyCount = 0;
+        this.seats = List.of();
+        this.clientSeats.clear();
+        this.nextSeat = 0;
+        return SpyfallStateResponse.notStarted();
+    }
+
     /** 재접속/조회: 좌석을 새로 잡지 않고 현재 상태만 반환. */
     public synchronized SpyfallStateResponse state(String clientId) {
         if (round == 0) {
