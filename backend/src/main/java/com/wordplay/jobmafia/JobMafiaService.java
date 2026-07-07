@@ -13,6 +13,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -253,23 +254,57 @@ public class JobMafiaService {
             nightMessage = "평화로운 밤이었습니다. 아무도 죽지 않았습니다.";
         }
 
-        // 경찰 조사(진짜: 정확) — 아침에 결과 1줄
+        // 경찰 조사(진짜: 직업 후보 2개 중 하나가 진짜) — 아침에 결과 1줄
         int copSeat = aliveSeatOfRole(Role.POLICE);
         if (copSeat >= 0) {
             Integer t = nightTargetBySeat.get(copSeat);
-            if (t != null && t >= 0) {
-                boolean isMafia = players.get(t).role == Role.MAFIA;
-                copLog.add(round + "일차: " + players.get(t).nick + " → " + (isMafia ? "마피아 O" : "마피아 X"));
-            }
+            if (t != null && t >= 0)
+                copLog.add(round + "일차: " + players.get(t).nick + " → " + realScan(t));
         }
-        // 정신병자 가짜 조사(진위 무관 완전 랜덤)
+        // 정신병자 가짜 조사(직업 2개 동등확률 — 우연히 진짜가 섞일 수도 있음)
         if (psychoSeat >= 0 && players.get(psychoSeat).alive && psychoFakeRole == Role.POLICE) {
             Integer t = nightTargetBySeat.get(psychoSeat);
-            if (t != null && t >= 0) {
-                boolean fake = ThreadLocalRandom.current().nextBoolean();
-                psychoCopLog.add(round + "일차: " + players.get(t).nick + " → " + (fake ? "마피아 O" : "마피아 X"));
-            }
+            if (t != null && t >= 0)
+                psychoCopLog.add(round + "일차: " + players.get(t).nick + " → " + fakeScan());
         }
+    }
+
+    private String jobLabel(Role r) {
+        return switch (r) {
+            case CITIZEN -> "시민";
+            case POLICE -> "경찰";
+            case DOCTOR -> "의사";
+            case PSYCHO -> "정신병자";
+            case MAFIA -> "마피아";
+            case ATTENTION -> "관종";
+        };
+    }
+
+    /** 이 게임에 실제로 존재하는 직업 라벨들(중복 제거). */
+    private List<String> presentJobLabels() {
+        LinkedHashSet<String> set = new LinkedHashSet<>();
+        for (Player p : players) if (p.role != null) set.add(jobLabel(p.role));
+        return new ArrayList<>(set);
+    }
+
+    /** 진짜 경찰: 진짜 직업 + 랜덤 미끼 1개(동등확률), 순서 무작위. */
+    private String realScan(int targetSeat) {
+        String truth = jobLabel(players.get(targetSeat).role);
+        List<String> pool = presentJobLabels();
+        pool.remove(truth);
+        String decoy = pool.isEmpty() ? truth : pool.get(ThreadLocalRandom.current().nextInt(pool.size()));
+        List<String> two = new ArrayList<>(List.of(truth, decoy));
+        Collections.shuffle(two);
+        return two.get(0) + " | " + two.get(1);
+    }
+
+    /** 정신병자 가짜 경찰: 존재하는 직업 중 2개 동등확률(진짜가 섞일 수도 있음). */
+    private String fakeScan() {
+        List<String> pool = presentJobLabels();
+        Collections.shuffle(pool);
+        String a = pool.get(0);
+        String b = pool.size() > 1 ? pool.get(1) : a;
+        return a + " | " + b;
     }
 
     private int aliveSeatOfRole(Role r) {

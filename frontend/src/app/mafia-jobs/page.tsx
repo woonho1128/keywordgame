@@ -60,7 +60,7 @@ function getClientId(): string {
 
 const ROLE_META: Record<string, { label: string; emoji: string; color: string; desc: string }> = {
   CITIZEN: { label: '시민', emoji: '🧑', color: 'text-gray-700', desc: '능력 없음. 토론과 투표로 마피아를 찾으세요.' },
-  POLICE: { label: '경찰', emoji: '👮', color: 'text-blue-500', desc: '밤마다 1명을 조사해 마피아 여부를 알 수 있습니다.' },
+  POLICE: { label: '경찰', emoji: '👮', color: 'text-blue-500', desc: '밤마다 1명을 조사하면 직업 후보 2개가 나옵니다(하나가 진짜).' },
   DOCTOR: { label: '의사', emoji: '🩺', color: 'text-green-600', desc: '밤마다 1명을 치료해 마피아 공격을 막습니다(자신 포함).' },
   PSYCHO: { label: '정신병자', emoji: '🤪', color: 'text-purple-500', desc: '시민팀. 본인은 다른 직업인 줄 알지만 능력이 통하지 않습니다.' },
   MAFIA: { label: '마피아', emoji: '🔪', color: 'text-red-500', desc: '밤마다 동료와 함께 1명을 제거합니다.' },
@@ -497,7 +497,7 @@ export default function MafiaJobsPage() {
         )}
 
         {kind === 'POLICE_CHECK' && (
-          <p className="text-center text-xs text-blue-400">🔎 한 명만 조사할 수 있어요. 결과는 아침에 공개됩니다</p>
+          <p className="text-center text-xs text-blue-400">🔎 한 명만 조사할 수 있어요. 직업 후보 2개가 아침에 공개됩니다(하나가 진짜)</p>
         )}
         {st!.myTarget > 0 && (
           <p className="text-center text-xs text-gray-400">내 선택: <b>{nickOf(st!.myTarget)}</b> · 시간 내 변경 가능</p>
