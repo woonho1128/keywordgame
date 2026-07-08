@@ -35,4 +35,6 @@ public class CodenamesRoomManager {
     public List<RoomSummary> list() { return reg.list(); }
 
     public void resetAll() { reg.clear(); }
+
+    public boolean closeRoom(String code) { return reg.remove(code); }
 }

@@ -93,6 +93,12 @@ public class RummikubController {
         return ApiResponse.success(RummikubStateResponse.notStarted(System.currentTimeMillis()));
     }
 
+    @PostMapping("/close-room")
+    public ApiResponse<Boolean> closeRoom(@RequestParam String code, @RequestParam String roomCode) {
+        if (!adminCode.equals(code)) throw new BusinessException(ErrorCode.INVALID_INPUT, "관리자 코드가 올바르지 않습니다");
+        return ApiResponse.success(rooms.closeRoom(roomCode));
+    }
+
     private void validateClientId(String clientId) {
         if (clientId == null || clientId.isBlank() || clientId.length() > 64)
             throw new BusinessException(ErrorCode.INVALID_INPUT, "clientId가 올바르지 않습니다");

@@ -56,6 +56,11 @@ public class RoomRegistry<T extends RoomGame> {
         rooms.clear();
     }
 
+    /** 특정 방 제거. 실제로 지웠으면 true. */
+    public synchronized boolean remove(String code) {
+        return code != null && rooms.remove(code.toUpperCase()) != null;
+    }
+
     private void purge() {
         long now = System.currentTimeMillis();
         Iterator<Map.Entry<String, T>> it = rooms.entrySet().iterator();

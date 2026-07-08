@@ -241,6 +241,15 @@ export default function MafiaJobsPage() {
       setSt(null);
     }
   };
+  const handleCloseRoom = async (rc: string) => {
+    const code = adminInput.trim();
+    if (!code) { setError('관리자 코드를 먼저 입력하세요'); return; }
+    if (!confirm(`${rc} 방을 삭제할까요?`)) return;
+    try {
+      await api<boolean>(`/api/v1/jobmafia/close-room?code=${encodeURIComponent(code)}&roomCode=${rc}`, { method: 'POST' });
+      setRooms((cur) => cur.filter((r) => r.code !== rc));
+    } catch (e) { setError(e instanceof Error ? e.message : '방 삭제에 실패했습니다'); }
+  };
 
   const nickOf = (seat: number) => st?.players.find((p) => p.seat === seat)?.nick ?? `${seat}번`;
 
@@ -278,6 +287,7 @@ export default function MafiaJobsPage() {
                 {r.status === 'ENDED'
                   ? <span className="text-sm text-gray-300">종료</span>
                   : <button onClick={() => { changeRoom(r.code); setSt(null); }} className="text-sm font-bold text-hit">{r.status === 'WAITING' ? '참가' : '이어하기'}</button>}
+                {showAdmin && <button onClick={() => handleCloseRoom(r.code)} title="방 삭제" className="text-sm text-red-500 hover:text-red-600">🗑</button>}
               </div>
             </div>
           );

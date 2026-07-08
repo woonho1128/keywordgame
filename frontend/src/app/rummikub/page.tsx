@@ -71,6 +71,7 @@ export default function RummikubPage() {
   const [wr, setWr] = useState<number[]>([]);      // 아직 안 놓은 내 타일
   const [sel, setSel] = useState<Set<number>>(new Set());
   const turnRef = useRef('');
+  const rackOrderRef = useRef<number[]>([]); // 내가 정렬해둔 랙 순서 기억(새 타일은 우측 append)
 
   const cidRef = useRef('');
   const inflight = useRef(false);
@@ -111,6 +112,17 @@ export default function RummikubPage() {
     return () => clearInterval(t);
   }, [poll]);
 
+  // 내 랙을 "기억해둔 순서" 기준으로 정렬: 기존 타일은 내 순서 유지, 새로 들어온 타일은 맨 우측에 붙인다.
+  const orderRack = (serverIds: number[]): number[] => {
+    const set = new Set(serverIds);
+    const kept = rackOrderRef.current.filter((id) => set.has(id));
+    const keptSet = new Set(kept);
+    const extras = serverIds.filter((id) => !keptSet.has(id));
+    const result = [...kept, ...extras];
+    rackOrderRef.current = result;
+    return result;
+  };
+
   // 커밋된 서버 상태(차례·테이블·내 랙)가 바뀌면 워크스페이스를 초기화.
   // 편집 중엔 서버 상태가 안 바뀌므로 내 편집은 유지되고,
   // 봇이 내 폴링 중 자동으로 두어 차례가 나에게 되돌아와도(테이블 변경) 다시 동기화된다.
@@ -122,7 +134,7 @@ export default function RummikubPage() {
     if (sig !== turnRef.current) {
       turnRef.current = sig;
       setWt(st.table.map((s) => s.map((t) => t.id)));
-      setWr(st.myRack.map((t) => t.id));
+      setWr(orderRack(st.myRack.map((t) => t.id)));
       setSel(new Set());
     }
   }, [st]);
@@ -179,6 +191,15 @@ export default function RummikubPage() {
     const res = await post(`/api/v1/rummikub/reset?code=${encodeURIComponent(code)}`);
     if (res) { setShowAdmin(false); setAdminInput(''); changeRoom(null); setSt(null); }
   };
+  const handleCloseRoom = async (rc: string) => {
+    const code = adminInput.trim();
+    if (!code) { setError('관리자 코드를 먼저 입력하세요'); return; }
+    if (!confirm(`${rc} 방을 삭제할까요?`)) return;
+    try {
+      await api<boolean>(`/api/v1/rummikub/close-room?code=${encodeURIComponent(code)}&roomCode=${rc}`, { method: 'POST' });
+      setRooms((cur) => cur.filter((r) => r.code !== rc));
+    } catch (e) { setError(e instanceof Error ? e.message : '방 삭제에 실패했습니다'); }
+  };
 
   // 타일 조회 맵
   const tileMap = new Map<number, TileView>();
@@ -212,19 +233,24 @@ export default function RummikubPage() {
   const resetWork = () => {
     if (!st) return;
     setWt(st.table.map((s) => s.map((t) => t.id)));
-    setWr(st.myRack.map((t) => t.id));
+    setWr(orderRack(st.myRack.map((t) => t.id)));
     setSel(new Set());
   };
 
   // 내 패 정렬: 'number'=숫자순(그룹용), 'color'=색깔순(런용). 조커는 항상 맨 뒤.
-  const sortWr = (mode: 'number' | 'color') => setWr((cur) => [...cur].sort((a, b) => {
-    const ta = tileMap.get(a), tb = tileMap.get(b);
-    if (!ta || !tb) return 0;
-    if (ta.joker !== tb.joker) return ta.joker ? 1 : -1;
-    if (ta.joker) return 0;
-    const ca = COLOR_ORDER[ta.color ?? ''] ?? 9, cb = COLOR_ORDER[tb.color ?? ''] ?? 9;
-    return mode === 'number' ? (ta.number - tb.number || ca - cb) : (ca - cb || ta.number - tb.number);
-  }));
+  // 정렬 결과를 선호 순서로 기억해 두어, 이후 가져온 타일은 이 순서 뒤(우측)에 붙는다.
+  const sortWr = (mode: 'number' | 'color') => setWr((cur) => {
+    const sorted = [...cur].sort((a, b) => {
+      const ta = tileMap.get(a), tb = tileMap.get(b);
+      if (!ta || !tb) return 0;
+      if (ta.joker !== tb.joker) return ta.joker ? 1 : -1;
+      if (ta.joker) return 0;
+      const ca = COLOR_ORDER[ta.color ?? ''] ?? 9, cb = COLOR_ORDER[tb.color ?? ''] ?? 9;
+      return mode === 'number' ? (ta.number - tb.number || ca - cb) : (ca - cb || ta.number - tb.number);
+    });
+    rackOrderRef.current = sorted;
+    return sorted;
+  });
 
   function Tile({ t, onClick, selected, small, fromTable }: { t: TileView; onClick?: () => void; selected?: boolean; small?: boolean; fromTable?: boolean }) {
     const color = t.joker ? 'text-fuchsia-500' : COLOR_CLS[t.color ?? ''] ?? 'text-gray-700';
@@ -242,14 +268,17 @@ export default function RummikubPage() {
   }
 
   const adminFooter = (
-    <div className="w-full mt-6 pt-4 border-t border-gray-100 flex justify-center">
+    <div className="w-full mt-6 pt-4 border-t border-gray-100 flex flex-col items-center gap-2">
       {showAdmin ? (
-        <div className="flex items-center gap-2">
-          <input type="password" value={adminInput} onChange={(e) => setAdminInput(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && handleAdminReset()} placeholder="관리자 코드"
-            className="border border-gray-300 rounded-lg px-3 py-2 text-sm w-32 focus:outline-none focus:border-red-400" />
-          <button onClick={handleAdminReset} className="bg-gray-700 text-white text-sm px-3 py-2 rounded-lg">전체 초기화</button>
-        </div>
+        <>
+          <div className="flex items-center gap-2">
+            <input type="password" value={adminInput} onChange={(e) => setAdminInput(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && handleAdminReset()} placeholder="관리자 코드"
+              className="border border-gray-300 rounded-lg px-3 py-2 text-sm w-32 focus:outline-none focus:border-red-400" />
+            <button onClick={handleAdminReset} className="bg-gray-700 text-white text-sm px-3 py-2 rounded-lg">전체 초기화</button>
+          </div>
+          <p className="text-[11px] text-gray-400">코드 입력 후 방 목록의 🗑 로 개별 방을 삭제할 수 있어요</p>
+        </>
       ) : (
         <button onClick={() => setShowAdmin(true)} className="text-xs text-gray-300 hover:text-gray-500">🔒 관리자</button>
       )}
@@ -300,6 +329,7 @@ export default function RummikubPage() {
                     {r.status === 'ENDED'
                       ? <span className="text-sm text-gray-300">종료</span>
                       : <button onClick={() => { changeRoom(r.code); setSt(null); }} className="text-sm font-bold text-hit">{r.status === 'WAITING' ? '참가' : '이어하기'}</button>}
+                    {showAdmin && <button onClick={() => handleCloseRoom(r.code)} title="방 삭제" className="text-sm text-red-500 hover:text-red-600">🗑</button>}
                   </div>
                 </div>
               );
