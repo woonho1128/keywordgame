@@ -211,6 +211,11 @@ export default function PlayPage() {
     const word = guessInput.trim();
     if (!word) return;
 
+    if (game?.gameType === 'WORDGUESS' && game.wordLength && [...word].length !== game.wordLength) {
+      setError(`${game.wordLength}글자 단어여야 합니다`);
+      return;
+    }
+
     try {
       const res = await api<GuessResp>(`/api/v1/games/${params.gameId}/guess`, {
         method: 'POST',
