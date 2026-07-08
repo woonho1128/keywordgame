@@ -141,11 +141,7 @@ public class MafiaService implements RoomGame {
 
         switch (me.role) {
             case MAFIA -> mafiaPicks.put(seatOf(me), t);
-            case POLICE -> {
-                copTarget = t;
-                boolean isMafia = players.get(t).role == Role.MAFIA;
-                copLog.add(round + "일차: " + players.get(t).nick + " → " + (isMafia ? "마피아 O" : "마피아 X"));
-            }
+            case POLICE -> copTarget = t; // 선택만 저장(밤 동안 변경 가능). 결과는 밤이 끝날 때 1건만 공개
             case DOCTOR -> doctorTarget = t;
             case CITIZEN -> citizenPicks.put(seatOf(me), t); // 위장 지목: 결과에 영향 없음
         }
@@ -252,6 +248,11 @@ public class MafiaService implements RoomGame {
             nightMessage = players.get(mafiaTarget).nick + "님이 밤 사이 사망했습니다.";
         } else {
             nightMessage = "평화로운 밤이었습니다. 아무도 죽지 않았습니다.";
+        }
+        // 경찰 조사 결과: 최종 지목 1명만 아침에 공개
+        if (copTarget >= 0 && copTarget < players.size()) {
+            boolean isMafia = players.get(copTarget).role == Role.MAFIA;
+            copLog.add(round + "일차: " + players.get(copTarget).nick + " → " + (isMafia ? "마피아 O" : "마피아 X"));
         }
         lastDoctorTarget = doctorTarget; // 다음 밤 연속 보호 금지용
     }

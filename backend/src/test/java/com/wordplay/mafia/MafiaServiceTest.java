@@ -107,6 +107,27 @@ class MafiaServiceTest {
     }
 
     @Test
+    void 경찰은_밤에_한명만_조사공개된다() {
+        Setup s = start5();
+        String mafia = clientWithRole(s.roleByClient, "MAFIA");
+        String cop = clientWithRole(s.roleByClient, "POLICE");
+        String doctor = clientWithRole(s.roleByClient, "DOCTOR");
+
+        // 경찰이 여러 명 클릭(대상 변경)해도 밤 동안엔 아무 결과도 안 뜸
+        List<Integer> targets = s.svc.me(cop).selectable();
+        s.svc.nightAction(cop, targets.get(0));
+        s.svc.nightAction(cop, targets.get(1)); // 변경
+        assertThat(s.svc.me(cop).copLog()).isEmpty();
+
+        s.svc.nightAction(mafia, s.svc.me(mafia).selectable().get(0));
+        s.svc.nightAction(doctor, s.svc.me(doctor).selectable().get(0));
+        citizensAct(s); // 밤 종료
+
+        // 아침엔 최종 지목 1명만 결과 공개
+        assertThat(s.svc.me(cop).copLog()).hasSize(1);
+    }
+
+    @Test
     void 밤_의사가_킬대상_보호하면_아무도_안죽음() {
         Setup s = start5();
         String mafia = clientWithRole(s.roleByClient, "MAFIA");
