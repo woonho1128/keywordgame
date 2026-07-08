@@ -276,9 +276,9 @@ export default function AvalonPage() {
               <div><span className="font-bold tracking-wider">{r.code}</span><span className="text-xs text-gray-400 ml-2">{r.host} · {r.playerCount}명</span></div>
               <div className="flex items-center gap-2">
                 <span className={`text-xs px-2 py-1 rounded-full ${cls}`}>{badge}</span>
-                {r.status === 'WAITING'
-                  ? <button onClick={() => { changeRoom(r.code); setSt(null); }} className="text-sm font-bold text-blue-600">참가</button>
-                  : <span className="text-sm text-gray-300">{badge}</span>}
+                {r.status === 'ENDED'
+                  ? <span className="text-sm text-gray-300">종료</span>
+                  : <button onClick={() => { changeRoom(r.code); setSt(null); }} className="text-sm font-bold text-blue-600">{r.status === 'WAITING' ? '참가' : '이어하기'}</button>}
               </div>
             </div>
           );
