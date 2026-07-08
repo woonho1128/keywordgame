@@ -107,6 +107,6 @@ class CodenamesGameTest {
         g.setTeam("c1", "RED");
         g.setTeam("c2", "BLUE");
         g.setTeam("c3", "BLUE");
-        assertThatThrownBy(() -> g.start("host")).hasMessageContaining("스파이마스터");
+        assertThatThrownBy(() -> g.start("host")).hasMessageContaining("팀장");
     }
 }

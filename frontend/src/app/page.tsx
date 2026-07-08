@@ -3,8 +3,8 @@ import Link from 'next/link';
 export default function HomePage() {
   return (
     <main className="min-h-screen flex flex-col items-center justify-center p-8">
-      <h1 className="text-4xl font-bold mb-2">WordPlay</h1>
-      <p className="text-gray-500 mb-12">친구들과 즐기는 한국어 단어 게임</p>
+      <h1 className="text-5xl font-extrabold mb-2 tracking-tight">🎮 gg</h1>
+      <p className="text-gray-500 mb-12">친구들과 모여 하는 파티·보드게임</p>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-5xl w-full">
         <Link
@@ -68,7 +68,15 @@ export default function HomePage() {
           className="border-2 border-gray-200 rounded-xl p-8 hover:border-hit transition"
         >
           <h2 className="text-2xl font-bold mb-2">🔡 코드네임</h2>
-          <p className="text-gray-600">두 팀으로 나눠 스파이마스터의 힌트로 단어를 맞히는 팀 게임 (4~8인).</p>
+          <p className="text-gray-600">두 팀으로 나눠 팀장의 힌트로 단어를 맞히는 팀 게임 (4~8인).</p>
+        </Link>
+
+        <Link
+          href="/rummikub"
+          className="border-2 border-gray-200 rounded-xl p-8 hover:border-hit transition"
+        >
+          <h2 className="text-2xl font-bold mb-2">🁢 루미큐브</h2>
+          <p className="text-gray-600">타일로 세트를 만들어 먼저 다 내려놓는 사람이 이기는 게임 (2~4인).</p>
         </Link>
       </div>
     </main>
