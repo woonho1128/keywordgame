@@ -67,6 +67,8 @@ export default function HalliGalliPage() {
   const cidRef = useRef('');
   const verRef = useRef(-1);
   const esRef = useRef<EventSource | null>(null);
+  const stRef = useRef<HgState | null>(null);
+  useEffect(() => { stRef.current = st; }, [st]);
 
   const changeRoom = useCallback((code: string | null) => {
     roomRef.current = code;
@@ -103,9 +105,17 @@ export default function HalliGalliPage() {
       const saved = localStorage.getItem(ROOM_KEY);
       if (saved) { roomRef.current = saved; setRoomCode(saved); }
     } catch {}
-    poll();
-    const t = setInterval(poll, 2000);
-    return () => clearInterval(t);
+    // 자가 스케줄 폴링: 게임 중엔 빠르게(600ms), 대기/목록은 느리게. SSE가 막혀도 체감 지연 최소화.
+    let stop = false;
+    let timer: ReturnType<typeof setTimeout>;
+    const tick = async () => {
+      await poll();
+      if (stop) return;
+      const delay = !roomRef.current ? 2500 : (stRef.current?.status === 'PLAYING' ? 600 : 1500);
+      timer = setTimeout(tick, delay);
+    };
+    tick();
+    return () => { stop = true; clearTimeout(timer); };
   }, [poll]);
 
   // SSE 연결(방 안일 때만)
