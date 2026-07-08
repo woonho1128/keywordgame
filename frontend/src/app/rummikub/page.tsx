@@ -532,9 +532,9 @@ export default function RummikubPage() {
           {/* 테이블 (펠트) */}
           <div className="rounded-2xl p-3 min-h-[90px] bg-gradient-to-b from-emerald-600 to-emerald-800 shadow-inner ring-1 ring-emerald-900/40 border-[3px] border-emerald-900/30">
             <p className="text-xs text-emerald-100/80 mb-2 font-bold tracking-wide">🃏 테이블</p>
-            <div className="space-y-2">
+            <div className="flex flex-wrap gap-2 items-start">
               {(st.isMyTurn ? wt : st.table.map((s) => s.map((t) => t.id))).map((set, i) => (
-                <div key={i} className="flex items-center gap-1 flex-wrap bg-emerald-900/25 rounded-xl p-1.5">
+                <div key={i} className="flex items-center gap-1 flex-wrap max-w-full shrink-0 bg-emerald-900/25 rounded-xl p-1.5">
                   {sortSet(set).map((id) => {
                     const t = tileMap.get(id);
                     if (!t) return null;
@@ -547,10 +547,10 @@ export default function RummikubPage() {
                   )}
                 </div>
               ))}
-              {(st.isMyTurn ? wt : st.table).length === 0 && <p className="text-emerald-100/50 text-sm text-center py-3">아직 내려놓은 세트가 없어요</p>}
+              {(st.isMyTurn ? wt : st.table).length === 0 && <p className="w-full text-emerald-100/50 text-sm text-center py-3">아직 내려놓은 세트가 없어요</p>}
               {st.isMyTurn && (
                 <button onClick={newSet} disabled={sel.size === 0}
-                  className="text-xs text-emerald-50 border border-dashed border-emerald-200/60 rounded-lg px-3 py-1.5 disabled:opacity-30 active:translate-y-0.5">＋ 새 세트로 내려놓기</button>
+                  className="self-center text-xs text-emerald-50 border border-dashed border-emerald-200/60 rounded-lg px-3 py-2 disabled:opacity-30 active:translate-y-0.5 shrink-0">＋ 새 세트</button>
               )}
             </div>
           </div>
