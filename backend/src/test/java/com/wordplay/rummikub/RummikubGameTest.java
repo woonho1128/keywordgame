@@ -91,6 +91,19 @@ class RummikubGameTest {
     }
 
     @Test
+    void 런은_숫자순으로_정규화되어_저장() throws Exception {
+        RummikubGame g = started2();
+        List<Integer> rack = rackOf(g, 0);
+        rack.clear();
+        rack.addAll(List.of(tid(0, "RED", 10), tid(0, "RED", 11), tid(0, "RED", 12)));
+        // 뒤죽박죽 순서로 제출해도 테이블엔 10-11-12로 저장돼야 함
+        RummikubStateResponse res = g.play("host",
+                List.of(List.of(tid(0, "RED", 12), tid(0, "RED", 10), tid(0, "RED", 11))));
+        assertThat(res.table().get(0).stream().map(t -> t.number()).toList())
+                .containsExactly(10, 11, 12);
+    }
+
+    @Test
     void 첫등록_30점_미만이면_거부() throws Exception {
         RummikubGame g = started2();
         List<Integer> rack = rackOf(g, 0);

@@ -252,6 +252,30 @@ export default function RummikubPage() {
     return sorted;
   });
 
+  // 세트를 보기 좋게 정렬(런=숫자 오름차순·조커는 빈칸/뒤, 그룹=색 순서). 클릭은 id 기반이라 표시 순서만 바뀜.
+  const sortSet = (ids: number[]): number[] => {
+    const reals = ids.filter((id) => { const t = tileMap.get(id); return t && !t.joker; });
+    const jokers = ids.filter((id) => { const t = tileMap.get(id); return t && t.joker; });
+    if (reals.length === 0) return ids;
+    const num0 = tileMap.get(reals[0])!.number;
+    const isGroup = ids.length <= 4 && reals.every((id) => tileMap.get(id)!.number === num0);
+    if (isGroup) {
+      reals.sort((a, b) => (COLOR_ORDER[tileMap.get(a)!.color ?? ''] ?? 9) - (COLOR_ORDER[tileMap.get(b)!.color ?? ''] ?? 9));
+      return [...reals, ...jokers];
+    }
+    reals.sort((a, b) => tileMap.get(a)!.number - tileMap.get(b)!.number);
+    const out: number[] = [];
+    let ji = 0, prev = -1;
+    for (const id of reals) {
+      const n = tileMap.get(id)!.number;
+      if (prev >= 0) for (let g = prev + 1; g < n && ji < jokers.length; g++) out.push(jokers[ji++]);
+      out.push(id);
+      prev = n;
+    }
+    while (ji < jokers.length) out.push(jokers[ji++]);
+    return out;
+  };
+
   function Tile({ t, onClick, selected, small, fromTable }: { t: TileView; onClick?: () => void; selected?: boolean; small?: boolean; fromTable?: boolean }) {
     const color = t.joker ? 'text-fuchsia-500' : COLOR_CLS[t.color ?? ''] ?? 'text-gray-700';
     const ring = selected ? '-translate-y-1.5 ring-2 ring-hit shadow-lg z-10'
@@ -417,7 +441,7 @@ export default function RummikubPage() {
             <div className="space-y-2">
               {(st.isMyTurn ? wt : st.table.map((s) => s.map((t) => t.id))).map((set, i) => (
                 <div key={i} className="flex items-center gap-1 flex-wrap bg-emerald-900/25 rounded-xl p-1.5">
-                  {set.map((id) => {
+                  {sortSet(set).map((id) => {
                     const t = tileMap.get(id);
                     if (!t) return null;
                     const removable = st.isMyTurn && (!origTable.has(id) || st.myMelded);

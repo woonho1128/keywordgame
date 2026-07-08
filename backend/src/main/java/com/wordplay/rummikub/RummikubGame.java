@@ -9,6 +9,7 @@ import com.wordplay.rummikub.dto.RummikubStateResponse.TileView;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -165,10 +166,10 @@ public class RummikubGame implements RoomGame {
             if (meldSum < 30) throw bad("첫 등록은 30점 이상이어야 합니다 (현재 " + meldSum + "점)");
         }
 
-        // 커밋
+        // 커밋 (세트는 보기 좋게 정규화: 런=숫자 오름차순, 그룹=색 순서)
         me.rack.removeAll(added);
         table.clear();
-        for (List<Integer> s : proposed) table.add(new ArrayList<>(s));
+        for (List<Integer> s : proposed) table.add(canonicalize(s));
         me.melded = true;
         if (me.rack.isEmpty()) {
             winnerSeat = seatOf(me);
@@ -406,6 +407,42 @@ public class RummikubGame implements RoomGame {
             }
         }
         return best;
+    }
+
+    /** 세트를 표시용 순서로 정규화: 런은 숫자 오름차순(조커는 빈칸에 삽입), 그룹은 색 순서. */
+    private List<Integer> canonicalize(List<Integer> set) {
+        List<Integer> reals = new ArrayList<>();
+        List<Integer> jokers = new ArrayList<>();
+        for (int id : set) { if (id >= 104) jokers.add(id); else reals.add(id); }
+        if (reals.isEmpty()) return new ArrayList<>(set);
+
+        // 그룹 판정: 실제 타일 숫자가 모두 같음
+        int num = TILES[reals.get(0)].number();
+        boolean group = set.size() <= 4 && reals.stream().allMatch(id -> TILES[id].number() == num);
+        if (group) {
+            reals.sort(Comparator.comparingInt(id -> colorRank(TILES[id].color())));
+            List<Integer> out = new ArrayList<>(reals);
+            out.addAll(jokers); // 조커는 뒤에
+            return out;
+        }
+        // 런: 숫자 오름차순 + 사이 빈칸을 조커로 채우고 남는 조커는 뒤에
+        reals.sort(Comparator.comparingInt(id -> TILES[id].number()));
+        List<Integer> out = new ArrayList<>();
+        int ji = 0, prev = -1;
+        for (int id : reals) {
+            int n = TILES[id].number();
+            if (prev >= 0) for (int g = prev + 1; g < n && ji < jokers.size(); g++) out.add(jokers.get(ji++));
+            out.add(id);
+            prev = n;
+        }
+        while (ji < jokers.size()) out.add(jokers.get(ji++));
+        return out;
+    }
+
+    private static final String[] COLOR_DISPLAY = {"RED", "ORANGE", "BLUE", "BLACK"};
+    private static int colorRank(String c) {
+        for (int i = 0; i < COLOR_DISPLAY.length; i++) if (COLOR_DISPLAY[i].equals(c)) return i;
+        return 99;
     }
 
     // =================== 세트 검증 ===================
