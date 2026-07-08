@@ -25,6 +25,7 @@ type RkState = {
   winnerNick: string | null;
   lastAction: string | null;
   playerCount: number;
+  turnDeadlineMs: number;
 };
 
 const CLIENT_ID_KEY = 'rummikub_client_id';
@@ -66,6 +67,8 @@ export default function RummikubPage() {
   const [showAdmin, setShowAdmin] = useState(false);
   const [adminInput, setAdminInput] = useState('');
   const [wide, setWide] = useState(false); // 가로(넓게) 보기
+  const [, setNowTick] = useState(0);      // 타이머 리렌더용
+  const clockOffset = useRef(0);           // serverNow - Date.now()
 
   // 워크스페이스(내 턴 편집)
   const [wt, setWt] = useState<number[][]>([]);   // 테이블 세트(타일 id)
@@ -114,6 +117,13 @@ export default function RummikubPage() {
     const t = setInterval(poll, 1000);
     return () => clearInterval(t);
   }, [poll]);
+
+  // 타이머 카운트다운용 리렌더(500ms) + 서버 시계 오차 보정
+  useEffect(() => {
+    const t = setInterval(() => setNowTick((n) => n + 1), 500);
+    return () => clearInterval(t);
+  }, []);
+  useEffect(() => { if (st) clockOffset.current = st.serverNow - Date.now(); }, [st?.serverNow]);
 
   // 내 랙을 "기억해둔 순서" 기준으로 정렬: 기존 타일은 내 순서 유지, 새로 들어온 타일은 맨 우측에 붙인다.
   const orderRackView = (serverIds: number[]): number[] => {
@@ -506,6 +516,18 @@ export default function RummikubPage() {
             ))}
           </div>
           {st.lastAction && <p className="text-xs text-gray-400 text-center">{st.lastAction}</p>}
+          {st.status === 'PLAYING' && st.turnDeadlineMs > 0 && (() => {
+            const remain = Math.max(0, Math.ceil((st.turnDeadlineMs - (Date.now() + clockOffset.current)) / 1000));
+            const urgent = remain <= 10;
+            return (
+              <div className="flex items-center justify-center gap-2">
+                <span className={`text-sm font-bold ${urgent ? 'text-red-500 animate-pulse' : st.isMyTurn ? 'text-hit' : 'text-gray-500'}`}>
+                  ⏱ {remain}초
+                </span>
+                <span className="text-xs text-gray-400">{st.isMyTurn ? '· 내 차례 (60초 초과 시 자동 가져오기)' : ''}</span>
+              </div>
+            );
+          })()}
 
           {/* 테이블 (펠트) */}
           <div className="rounded-2xl p-3 min-h-[90px] bg-gradient-to-b from-emerald-600 to-emerald-800 shadow-inner ring-1 ring-emerald-900/40 border-[3px] border-emerald-900/30">

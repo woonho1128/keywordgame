@@ -60,11 +60,14 @@ public class RummikubGame implements RoomGame {
     private final List<Player> players = new ArrayList<>();
     private final Map<String, Integer> clientSeats = new HashMap<>();
 
+    private static final long TURN_MS = 60_000L; // 차례 제한시간 60초
+
     private final List<List<Integer>> table = new ArrayList<>();
     private final List<Integer> drawPile = new ArrayList<>();
     private int currentSeat = 0;
     private int winnerSeat = -1;
     private String lastAction = null;
+    private long turnDeadlineMs = 0;
 
     // =================== 명령 ===================
 
@@ -110,6 +113,7 @@ public class RummikubGame implements RoomGame {
         winnerSeat = -1;
         lastAction = players.get(0).nick + "님의 차례입니다.";
         phase = Phase.PLAYING;
+        turnDeadlineMs = System.currentTimeMillis() + TURN_MS;
         return me(clientId);
     }
 
@@ -208,8 +212,21 @@ public class RummikubGame implements RoomGame {
 
     public synchronized RummikubStateResponse me(String clientId) {
         lastActiveMs = System.currentTimeMillis();
+        tickTimeout();
         advanceAis();
         return buildResponse(clientId);
+    }
+
+    /** 사람 차례가 제한시간(60초)을 넘기면 자동으로 '가져오기' 처리. AI 차례는 advanceAis가 담당. */
+    private void tickTimeout() {
+        if (phase != Phase.PLAYING) return;
+        int guard = 0;
+        while (phase == Phase.PLAYING && !players.get(currentSeat).ai
+                && turnDeadlineMs > 0 && System.currentTimeMillis() >= turnDeadlineMs && guard++ < 20) {
+            Player p = players.get(currentSeat);
+            applyDraw(p); // nextTurn에서 새 데드라인이 설정됨
+            lastAction = p.nick + "님이 시간초과로 타일을 가져왔습니다.";
+        }
     }
 
     /** AI 플레이어 추가/제거(방장, 대기방). */
@@ -543,7 +560,8 @@ public class RummikubGame implements RoomGame {
                 winnerSeat < 0 ? -1 : winnerSeat + 1,
                 winnerSeat < 0 ? null : players.get(winnerSeat).nick,
                 lastAction,
-                players.size()
+                players.size(),
+                phase == Phase.PLAYING ? turnDeadlineMs : 0
         );
     }
 
@@ -565,7 +583,10 @@ public class RummikubGame implements RoomGame {
 
     // =================== 유틸 ===================
 
-    private void nextTurn() { currentSeat = (currentSeat + 1) % players.size(); }
+    private void nextTurn() {
+        currentSeat = (currentSeat + 1) % players.size();
+        turnDeadlineMs = System.currentTimeMillis() + TURN_MS;
+    }
 
     private void sortRack(Player p) {
         p.rack.sort((a, b) -> {
@@ -600,6 +621,7 @@ public class RummikubGame implements RoomGame {
         currentSeat = 0;
         winnerSeat = -1;
         lastAction = null;
+        turnDeadlineMs = 0;
     }
 
     private static BusinessException bad(String msg) {

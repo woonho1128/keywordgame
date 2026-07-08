@@ -148,6 +148,18 @@ class RummikubGameTest {
     }
 
     @Test
+    void 시간초과시_자동_가져오기() throws Exception {
+        RummikubGame g = started2();
+        int before = rackOf(g, 0).size();
+        Field df = RummikubGame.class.getDeclaredField("turnDeadlineMs");
+        df.setAccessible(true);
+        df.setLong(g, System.currentTimeMillis() - 1); // 데드라인을 과거로
+        RummikubStateResponse s = g.me("host");
+        assertThat(rackOf(g, 0)).hasSize(before + 1);   // 자동 가져오기 1장
+        assertThat(s.currentSeat()).isEqualTo(2);        // 다음 사람 차례(1-based)
+    }
+
+    @Test
     void 최소인원_미달() {
         RummikubGame g = new RummikubGame();
         g.newGame("host", "p0");

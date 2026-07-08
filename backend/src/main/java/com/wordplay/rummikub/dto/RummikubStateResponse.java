@@ -23,7 +23,8 @@ public record RummikubStateResponse(
         int winnerSeat,            // -1 없음
         String winnerNick,
         String lastAction,         // 안내 문구
-        int playerCount
+        int playerCount,
+        long turnDeadlineMs        // 현재 차례 마감 시각(ms). 0이면 없음
 ) {
     public record PlayerView(int seat, String nick, int rackCount, boolean melded) {}
     public record TileView(int id, String color, int number, boolean joker) {}
@@ -31,6 +32,6 @@ public record RummikubStateResponse(
     public static RummikubStateResponse notStarted(long now) {
         return new RummikubStateResponse(
                 "NOT_STARTED", now, false, false, 0, null, List.of(), List.of(), List.of(),
-                0, 0, false, false, -1, null, null, 0);
+                0, 0, false, false, -1, null, null, 0, 0);
     }
 }
