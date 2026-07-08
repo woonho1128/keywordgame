@@ -164,7 +164,15 @@ export default function RummikubPage() {
   const handleAddAi = (level: string) => post(`/api/v1/rummikub/add-ai?${rp()}&level=${level}`);
   const handleRemoveAi = () => post(`/api/v1/rummikub/remove-ai?${rp()}`);
   const handleDraw = () => post(`/api/v1/rummikub/draw?${rp()}`);
-  const handleSubmit = () => post(`/api/v1/rummikub/play?${rp()}`, { table: wt.filter((s) => s.length > 0) });
+  const handleSubmit = () => {
+    // 재배치로 집어든 테이블 타일은 모두 다시 놓여야 함
+    const placed = new Set(wt.flat());
+    if ([...origTable].some((id) => !placed.has(id))) {
+      setError('테이블에서 집어든 타일을 모두 다시 배치한 뒤 제출하세요');
+      return;
+    }
+    post(`/api/v1/rummikub/play?${rp()}`, { table: wt.filter((s) => s.length > 0) });
+  };
   const handleAdminReset = async () => {
     const code = adminInput.trim();
     if (!code) return;
@@ -196,7 +204,8 @@ export default function RummikubPage() {
     setSel(new Set());
   };
   const removePlaced = (setIdx: number, id: number) => {
-    if (origTable.has(id)) return; // 테이블 원래 타일은 못 뺌
+    // 첫 등록(30점) 전에는 테이블 원래 타일을 건드릴 수 없다. 등록 후엔 재배치 허용.
+    if (origTable.has(id) && !st?.myMelded) return;
     setWt((cur) => cur.map((s, i) => (i === setIdx ? s.filter((x) => x !== id) : s)).filter((s) => s.length > 0));
     setWr((cur) => [...cur, id]);
   };
@@ -217,12 +226,15 @@ export default function RummikubPage() {
     return mode === 'number' ? (ta.number - tb.number || ca - cb) : (ca - cb || ta.number - tb.number);
   }));
 
-  function Tile({ t, onClick, selected, small }: { t: TileView; onClick?: () => void; selected?: boolean; small?: boolean }) {
+  function Tile({ t, onClick, selected, small, fromTable }: { t: TileView; onClick?: () => void; selected?: boolean; small?: boolean; fromTable?: boolean }) {
     const color = t.joker ? 'text-fuchsia-500' : COLOR_CLS[t.color ?? ''] ?? 'text-gray-700';
+    const ring = selected ? '-translate-y-1.5 ring-2 ring-hit shadow-lg z-10'
+      : fromTable ? 'ring-2 ring-rose-400 shadow-[0_2px_0_rgba(0,0,0,0.18)]'
+      : 'shadow-[0_2px_0_rgba(0,0,0,0.18)]';
     return (
       <button onClick={onClick} disabled={!onClick}
         className={`relative ${small ? 'w-8 h-11' : 'w-9 h-12'} rounded-lg bg-[#fffdf4] border border-black/10 flex flex-col items-center justify-center font-extrabold shrink-0 transition
-          ${selected ? '-translate-y-1.5 ring-2 ring-hit shadow-lg z-10' : 'shadow-[0_2px_0_rgba(0,0,0,0.18)]'} ${color} ${onClick ? 'active:translate-y-0 cursor-pointer' : ''}`}>
+          ${ring} ${color} ${onClick ? 'active:translate-y-0 cursor-pointer' : ''}`}>
         <span className={small ? 'text-base leading-none' : 'text-lg leading-none'}>{t.joker ? '🃏' : t.number}</span>
         {!t.joker && <span className="w-[3px] h-[3px] rounded-full mt-1" style={{ backgroundColor: 'currentColor' }} />}
       </button>
@@ -378,7 +390,7 @@ export default function RummikubPage() {
                   {set.map((id) => {
                     const t = tileMap.get(id);
                     if (!t) return null;
-                    const removable = st.isMyTurn && !origTable.has(id);
+                    const removable = st.isMyTurn && (!origTable.has(id) || st.myMelded);
                     return <Tile key={id} t={t} small onClick={removable ? () => removePlaced(i, id) : undefined} />;
                   })}
                   {st.isMyTurn && (
@@ -420,9 +432,15 @@ export default function RummikubPage() {
               </div>
               <div className="flex flex-wrap gap-1">
                 {st.isMyTurn
-                  ? wr.map((id) => { const t = tileMap.get(id); return t ? <Tile key={id} t={t} selected={sel.has(id)} onClick={() => toggleSel(id)} /> : null; })
+                  ? wr.map((id) => { const t = tileMap.get(id); return t ? <Tile key={id} t={t} selected={sel.has(id)} fromTable={origTable.has(id)} onClick={() => toggleSel(id)} /> : null; })
                   : st.myRack.map((t) => <Tile key={t.id} t={t} />)}
               </div>
+              {st.isMyTurn && wr.some((id) => origTable.has(id)) && (
+                <p className="text-[11px] text-rose-500 mt-2">🔴 테두리 타일은 테이블에서 집어온 것 — 다시 배치해야 제출할 수 있어요</p>
+              )}
+              {st.isMyTurn && st.myMelded && (
+                <p className="text-[11px] text-amber-600/70 mt-1">💡 테이블 타일을 눌러 집어와 다른 세트로 재배치할 수 있어요</p>
+              )}
             </div>
           )}
 
