@@ -45,7 +45,7 @@ function getClientId(): string {
 }
 
 const COLOR_CLS: Record<string, string> = {
-  RED: 'text-red-500', BLUE: 'text-blue-600', BLACK: 'text-gray-800', ORANGE: 'text-orange-500',
+  RED: 'text-red-600', BLUE: 'text-blue-600', BLACK: 'text-gray-800', ORANGE: 'text-amber-500',
 };
 const COLOR_ORDER: Record<string, number> = { RED: 0, ORANGE: 1, BLUE: 2, BLACK: 3 };
 
@@ -65,6 +65,7 @@ export default function RummikubPage() {
 
   const [showAdmin, setShowAdmin] = useState(false);
   const [adminInput, setAdminInput] = useState('');
+  const [wide, setWide] = useState(false); // 가로(넓게) 보기
 
   // 워크스페이스(내 턴 편집)
   const [wt, setWt] = useState<number[][]>([]);   // 테이블 세트(타일 id)
@@ -105,6 +106,7 @@ export default function RummikubPage() {
     cidRef.current = id;
     try {
       setNick(localStorage.getItem(NICK_KEY) || '');
+      setWide(localStorage.getItem('rummikub_wide') === '1');
       const saved = localStorage.getItem(ROOM_KEY);
       if (saved) { roomRef.current = saved; setRoomCode(saved); }
     } catch {}
@@ -158,6 +160,7 @@ export default function RummikubPage() {
 
   const cid = () => encodeURIComponent(clientId);
   const rp = () => `roomCode=${roomCode}&clientId=${cid()}`;
+  const toggleWide = () => setWide((v) => { const n = !v; try { localStorage.setItem('rummikub_wide', n ? '1' : '0'); } catch {} return n; });
   const saveNick = (n: string) => { try { localStorage.setItem(NICK_KEY, n); } catch {} };
 
   const handleCreate = async () => {
@@ -333,7 +336,7 @@ export default function RummikubPage() {
         className={`relative ${small ? 'w-8 h-11' : 'w-9 h-12'} rounded-lg bg-[#fffdf4] border border-black/10 flex flex-col items-center justify-center font-extrabold shrink-0 transition
           ${ring} ${color} ${onClick ? 'active:translate-y-0 cursor-pointer' : ''}`}>
         <span className={small ? 'text-base leading-none' : 'text-lg leading-none'}>{t.joker ? '🃏' : t.number}</span>
-        {!t.joker && <span className="w-[3px] h-[3px] rounded-full mt-1" style={{ backgroundColor: 'currentColor' }} />}
+        {!t.joker && <span className="w-1.5 h-1.5 rounded-full mt-1" style={{ backgroundColor: 'currentColor' }} />}
       </button>
     );
   }
@@ -434,14 +437,18 @@ export default function RummikubPage() {
   if (!st) return <main className="min-h-screen flex items-center justify-center"><p className="text-gray-400">불러오는 중...</p></main>;
 
   return (
-    <main className="min-h-screen flex flex-col items-center p-4 max-w-lg mx-auto w-full">
+    <main className={`min-h-screen flex flex-col items-center p-4 ${wide ? 'max-w-5xl' : 'max-w-lg'} mx-auto w-full`}>
       <div className="w-full flex items-center justify-between mb-3">
         <div className="flex items-center gap-2">
           <h1 className="text-xl font-bold">🁢 루미큐브</h1>
           <span className="text-xs bg-gray-100 rounded px-2 py-1 tracking-wider font-bold">{roomCode}</span>
           <button onClick={() => { changeRoom(null); setSt(null); }} className="text-xs text-gray-400 underline">나가기</button>
         </div>
-        {st.status === 'PLAYING' && <span className="text-xs text-gray-400">더미 {st.drawCount}</span>}
+        <div className="flex items-center gap-2">
+          <button onClick={toggleWide} title="가로/세로 보기 전환"
+            className="text-xs border border-gray-300 rounded-md px-2 py-1 text-gray-500 hover:bg-gray-50">{wide ? '📱 세로' : '🖥 가로'}</button>
+          {st.status === 'PLAYING' && <span className="text-xs text-gray-400">더미 {st.drawCount}</span>}
+        </div>
       </div>
 
       {st.status === 'LOBBY' && (
