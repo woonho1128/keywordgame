@@ -108,6 +108,33 @@ class RummikubGameTest {
     }
 
     @Test
+    void AI_턴_자동진행() {
+        RummikubGame g = new RummikubGame();
+        g.newGame("host", "p0");
+        g.addAi("host");
+        assertThat(g.me("host").playerCount()).isEqualTo(2);
+        g.start("host");
+        // 사람이 뽑고 턴 종료 → AI가 자동으로 두고 다시 사람 차례(1-based seat 1)
+        RummikubStateResponse s = g.draw("host");
+        assertThat(s.status()).isIn("PLAYING", "ENDED");
+        if (s.status().equals("PLAYING")) assertThat(s.currentSeat()).isEqualTo(1);
+    }
+
+    @Test
+    void AI_난이도_지정_추가() {
+        RummikubGame g = new RummikubGame();
+        g.newGame("host", "p0");
+        g.addAi("host", "EASY");
+        g.addAi("host", "HARD");
+        g.addAi("host", "몰라요"); // 알 수 없는 값 → 중급
+        RummikubStateResponse s = g.me("host");
+        assertThat(s.playerCount()).isEqualTo(4);
+        assertThat(s.players().get(1).nick()).contains("초급");
+        assertThat(s.players().get(2).nick()).contains("고급");
+        assertThat(s.players().get(3).nick()).contains("중급");
+    }
+
+    @Test
     void 최소인원_미달() {
         RummikubGame g = new RummikubGame();
         g.newGame("host", "p0");

@@ -46,6 +46,19 @@ public class RummikubController {
         return ApiResponse.success(rooms.require(roomCode).join(clientId, req.nick()));
     }
 
+    @PostMapping("/add-ai")
+    public ApiResponse<RummikubStateResponse> addAi(@RequestParam String roomCode, @RequestParam String clientId,
+                                                    @RequestParam(defaultValue = "NORMAL") String level) {
+        validateClientId(clientId);
+        return ApiResponse.success(rooms.require(roomCode).addAi(clientId, level));
+    }
+
+    @PostMapping("/remove-ai")
+    public ApiResponse<RummikubStateResponse> removeAi(@RequestParam String roomCode, @RequestParam String clientId) {
+        validateClientId(clientId);
+        return ApiResponse.success(rooms.require(roomCode).removeAi(clientId));
+    }
+
     @PostMapping("/start")
     public ApiResponse<RummikubStateResponse> start(@RequestParam String roomCode, @RequestParam String clientId) {
         validateClientId(clientId);

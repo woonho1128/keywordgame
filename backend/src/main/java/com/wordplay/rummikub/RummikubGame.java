@@ -44,10 +44,14 @@ public class RummikubGame implements RoomGame {
     private static final class Player {
         final String clientId;
         String nick;
+        boolean ai = false;
+        String aiLevel = "NORMAL"; // EASY / NORMAL / HARD
         final List<Integer> rack = new ArrayList<>();
         boolean melded = false;
         Player(String clientId, String nick) { this.clientId = clientId; this.nick = nick; }
     }
+
+    private int aiCounter = 0;
 
     private Phase phase = null;
     private long lastActiveMs = System.currentTimeMillis();
@@ -113,6 +117,11 @@ public class RummikubGame implements RoomGame {
         Player me = requirePlayer(clientId);
         if (phase != Phase.PLAYING) throw bad("게임 중이 아닙니다");
         if (seatOf(me) != currentSeat) throw bad("당신의 차례가 아닙니다");
+        applyPlay(me, proposed);
+        return me(clientId);
+    }
+
+    private void applyPlay(Player me, List<List<Integer>> proposed) {
         if (proposed == null) proposed = List.of();
 
         // 1) 타일 id 유효성 + 중복 없음
@@ -169,7 +178,6 @@ public class RummikubGame implements RoomGame {
             nextTurn();
             lastAction = me.nick + "님이 타일을 내려놨습니다.";
         }
-        return me(clientId);
     }
 
     /** 더미에서 1개 가져오고 턴 종료. */
@@ -177,6 +185,11 @@ public class RummikubGame implements RoomGame {
         Player me = requirePlayer(clientId);
         if (phase != Phase.PLAYING) throw bad("게임 중이 아닙니다");
         if (seatOf(me) != currentSeat) throw bad("당신의 차례가 아닙니다");
+        applyDraw(me);
+        return me(clientId);
+    }
+
+    private void applyDraw(Player me) {
         if (!drawPile.isEmpty()) {
             me.rack.add(drawPile.remove(drawPile.size() - 1));
             sortRack(me);
@@ -185,7 +198,6 @@ public class RummikubGame implements RoomGame {
             lastAction = "더미가 비어 " + me.nick + "님이 턴을 넘겼습니다.";
         }
         nextTurn();
-        return me(clientId);
     }
 
     public synchronized RummikubStateResponse resetGame() {
@@ -195,7 +207,205 @@ public class RummikubGame implements RoomGame {
 
     public synchronized RummikubStateResponse me(String clientId) {
         lastActiveMs = System.currentTimeMillis();
+        advanceAis();
         return buildResponse(clientId);
+    }
+
+    /** AI 플레이어 추가/제거(방장, 대기방). */
+    public synchronized RummikubStateResponse addAi(String clientId) {
+        return addAi(clientId, "NORMAL");
+    }
+
+    public synchronized RummikubStateResponse addAi(String clientId, String level) {
+        if (phase != Phase.LOBBY) throw bad("대기방에서만 추가할 수 있습니다");
+        if (!clientId.equals(hostClientId)) throw bad("방장만 추가할 수 있습니다");
+        if (players.size() >= 4) throw bad("정원(4명)이 찼습니다");
+        String lvl = normalizeLevel(level);
+        aiCounter++;
+        Player p = new Player("AI#" + aiCounter, "🤖 봇" + aiCounter + "(" + levelLabel(lvl) + ")");
+        p.ai = true;
+        p.aiLevel = lvl;
+        clientSeats.put(p.clientId, players.size());
+        players.add(p);
+        return me(clientId);
+    }
+
+    private static String normalizeLevel(String level) {
+        if (level == null) return "NORMAL";
+        String u = level.trim().toUpperCase();
+        return switch (u) { case "EASY", "NORMAL", "HARD" -> u; default -> "NORMAL"; };
+    }
+
+    private static String levelLabel(String lvl) {
+        return switch (lvl) { case "EASY" -> "초급"; case "HARD" -> "고급"; default -> "중급"; };
+    }
+
+    public synchronized RummikubStateResponse removeAi(String clientId) {
+        if (phase != Phase.LOBBY) throw bad("대기방에서만 가능합니다");
+        if (!clientId.equals(hostClientId)) throw bad("방장만 가능합니다");
+        for (int i = players.size() - 1; i >= 0; i--) {
+            if (players.get(i).ai) {
+                players.remove(i);
+                clientSeats.clear();
+                for (int k = 0; k < players.size(); k++) clientSeats.put(players.get(k).clientId, k);
+                break;
+            }
+        }
+        return me(clientId);
+    }
+
+    // =================== AI 봇 ===================
+
+    private void advanceAis() {
+        int guard = 0;
+        while (phase == Phase.PLAYING && players.get(currentSeat).ai && guard++ < 100) {
+            Player ai = players.get(currentSeat);
+            List<List<Integer>> plan = botPlan(ai);
+            if (plan != null) {
+                try { applyPlay(ai, plan); continue; }
+                catch (RuntimeException ignore) { /* 계획이 무효면 뽑기로 */ }
+            }
+            applyDraw(ai);
+        }
+    }
+
+    /**
+     * 봇의 이번 턴 계획(놓을 수 없으면 null → 뽑기).
+     * 난이도: EASY=새 세트만(테이블 확장·조커 X), NORMAL=새 세트+테이블 확장, HARD=거기에 조커까지 활용.
+     */
+    private List<List<Integer>> botPlan(Player ai) {
+        boolean canExtend = !"EASY".equals(ai.aiLevel);
+        boolean useJokers = "HARD".equals(ai.aiLevel);
+
+        List<List<Integer>> newSets = useJokers
+                ? findSetsWithJokers(new ArrayList<>(ai.rack))
+                : findSets(new ArrayList<>(ai.rack));
+
+        if (!ai.melded) {
+            int sum = 0;
+            for (var s : newSets) sum += Math.max(0, setValue(s));
+            if (newSets.isEmpty() || sum < 30) return null;   // 첫 등록 30점 미달 → 뽑기
+            List<List<Integer>> proposed = new ArrayList<>();
+            for (var s : table) proposed.add(new ArrayList<>(s));
+            proposed.addAll(newSets);
+            return proposed;
+        }
+        // 이미 등록: 새 세트 + (중급 이상) 기존 세트에 붙일 수 있는 타일 붙이기
+        List<List<Integer>> proposed = new ArrayList<>();
+        for (var s : table) proposed.add(new ArrayList<>(s));
+        Set<Integer> used = new HashSet<>();
+        for (var s : newSets) used.addAll(s);
+        List<Integer> leftover = new ArrayList<>();
+        for (int id : ai.rack) if (!used.contains(id)) leftover.add(id);
+        boolean extended = false;
+        if (canExtend) {
+            for (List<Integer> set : proposed) {
+                boolean changed = true;
+                while (changed) {
+                    changed = false;
+                    for (int i = 0; i < leftover.size(); i++) {
+                        List<Integer> cand = new ArrayList<>(set);
+                        cand.add(leftover.get(i));
+                        if (setValue(cand) >= 0) { set.add(leftover.remove(i)); extended = true; changed = true; break; }
+                    }
+                }
+            }
+        }
+        proposed.addAll(newSets);
+        return (!newSets.isEmpty() || extended) ? proposed : null;
+    }
+
+    /** 랙에서 겹치지 않는 세트들을 그리디로 추출(조커 제외). */
+    private List<List<Integer>> findSets(List<Integer> avail) {
+        List<Integer> rem = new ArrayList<>(avail);
+        List<List<Integer>> out = new ArrayList<>();
+        while (true) {
+            List<Integer> best = bestSet(rem);
+            if (best == null) break;
+            out.add(best);
+            rem.removeAll(best);
+        }
+        return out;
+    }
+
+    /** 조커까지 활용해 세트를 추출(고급 봇). 우선 조커 없이 뽑고, 남은 조커로 실제타일 2개를 마저 묶는다. */
+    private List<List<Integer>> findSetsWithJokers(List<Integer> avail) {
+        List<Integer> rem = new ArrayList<>();
+        List<Integer> jokers = new ArrayList<>();
+        for (int id : avail) { if (id >= 104) jokers.add(id); else rem.add(id); }
+        List<List<Integer>> out = new ArrayList<>();
+        while (true) {
+            List<Integer> best = bestSet(rem);
+            if (best == null) break;
+            out.add(best);
+            rem.removeAll(best);
+        }
+        for (int jid : jokers) {
+            List<Integer> made = bestPairWithJoker(rem, jid);
+            if (made != null) { out.add(made); rem.removeAll(made); }
+        }
+        return out;
+    }
+
+    /** rem의 실제타일 2개 + 조커 1개로 만들 수 있는 최고 점수 세트(없으면 null). */
+    private List<Integer> bestPairWithJoker(List<Integer> rem, int jokerId) {
+        List<Integer> tiles = new ArrayList<>();
+        for (int id : rem) if (id < 104) tiles.add(id);
+        List<Integer> best = null;
+        int bestVal = -1;
+        for (int i = 0; i < tiles.size(); i++) {
+            for (int j = i + 1; j < tiles.size(); j++) {
+                List<Integer> cand = new ArrayList<>(List.of(tiles.get(i), tiles.get(j), jokerId));
+                int v = setValue(cand);
+                if (v > bestVal) { bestVal = v; best = cand; }
+            }
+        }
+        return best;
+    }
+
+    /** rem에서 가장 점수 높은 유효 세트(조커 제외). 없으면 null. */
+    private List<Integer> bestSet(List<Integer> rem) {
+        List<Integer> tiles = new ArrayList<>();
+        for (int id : rem) if (id < 104) tiles.add(id);
+        List<Integer> best = null;
+        int bestVal = -1;
+
+        // 그룹: 숫자 → (색 → id)
+        Map<Integer, Map<String, Integer>> byNum = new HashMap<>();
+        for (int id : tiles) {
+            Tile t = TILES[id];
+            byNum.computeIfAbsent(t.number(), k -> new HashMap<>()).putIfAbsent(t.color(), id);
+        }
+        for (var e : byNum.entrySet()) {
+            if (e.getValue().size() >= 3) {
+                List<Integer> g = new ArrayList<>(e.getValue().values());
+                int v = setValue(g);
+                if (v > bestVal) { bestVal = v; best = g; }
+            }
+        }
+        // 런: 색 → (숫자 → id)
+        Map<String, Map<Integer, Integer>> byColor = new HashMap<>();
+        for (int id : tiles) {
+            Tile t = TILES[id];
+            byColor.computeIfAbsent(t.color(), k -> new HashMap<>()).putIfAbsent(t.number(), id);
+        }
+        for (var e : byColor.entrySet()) {
+            List<Integer> nums = new ArrayList<>(e.getValue().keySet());
+            Collections.sort(nums);
+            int i = 0;
+            while (i < nums.size()) {
+                int j = i;
+                while (j + 1 < nums.size() && nums.get(j + 1) == nums.get(j) + 1) j++;
+                if (j - i + 1 >= 3) {
+                    List<Integer> run = new ArrayList<>();
+                    for (int k = i; k <= j; k++) run.add(e.getValue().get(nums.get(k)));
+                    int v = setValue(run);
+                    if (v > bestVal) { bestVal = v; best = run; }
+                }
+                i = j + 1;
+            }
+        }
+        return best;
     }
 
     // =================== 세트 검증 ===================

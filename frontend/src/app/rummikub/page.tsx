@@ -156,6 +156,8 @@ export default function RummikubPage() {
     post(`/api/v1/rummikub/join?${rp()}`, { nick: n });
   };
   const handleStart = () => post(`/api/v1/rummikub/start?${rp()}`);
+  const handleAddAi = (level: string) => post(`/api/v1/rummikub/add-ai?${rp()}&level=${level}`);
+  const handleRemoveAi = () => post(`/api/v1/rummikub/remove-ai?${rp()}`);
   const handleDraw = () => post(`/api/v1/rummikub/draw?${rp()}`);
   const handleSubmit = () => post(`/api/v1/rummikub/play?${rp()}`, { table: wt.filter((s) => s.length > 0) });
   const handleAdminReset = async () => {
@@ -201,12 +203,13 @@ export default function RummikubPage() {
   };
 
   function Tile({ t, onClick, selected, small }: { t: TileView; onClick?: () => void; selected?: boolean; small?: boolean }) {
+    const color = t.joker ? 'text-fuchsia-500' : COLOR_CLS[t.color ?? ''] ?? 'text-gray-700';
     return (
       <button onClick={onClick} disabled={!onClick}
-        className={`${small ? 'w-7 h-9 text-xs' : 'w-8 h-10 text-sm'} rounded border-2 bg-white flex items-center justify-center font-extrabold shrink-0 ${
-          selected ? 'border-hit -translate-y-1 shadow' : 'border-gray-300'
-        } ${t.joker ? 'text-purple-500' : COLOR_CLS[t.color ?? ''] ?? 'text-gray-700'} transition`}>
-        {t.joker ? '🃏' : t.number}
+        className={`relative ${small ? 'w-8 h-11' : 'w-9 h-12'} rounded-lg bg-[#fffdf4] border border-black/10 flex flex-col items-center justify-center font-extrabold shrink-0 transition
+          ${selected ? '-translate-y-1.5 ring-2 ring-hit shadow-lg z-10' : 'shadow-[0_2px_0_rgba(0,0,0,0.18)]'} ${color} ${onClick ? 'active:translate-y-0 cursor-pointer' : ''}`}>
+        <span className={small ? 'text-base leading-none' : 'text-lg leading-none'}>{t.joker ? '🃏' : t.number}</span>
+        {!t.joker && <span className="w-[3px] h-[3px] rounded-full mt-1" style={{ backgroundColor: 'currentColor' }} />}
       </button>
     );
   }
@@ -234,6 +237,7 @@ export default function RummikubPage() {
       <p className="text-gray-600">세트 2종: <b>그룹</b>(같은 숫자·다른 색 3~4개) / <b>런</b>(같은 색·연속 숫자 3개+). 🃏조커는 아무 타일 대체.</p>
       <p className="text-gray-600">내 차례에: 랙 타일을 선택 → <b>새 세트</b>로 놓거나 기존 세트에 <b>추가</b> → <b>제출</b>. 못 놓으면 <b>가져오기</b>로 1장 뽑고 넘김.</p>
       <p className="text-gray-600">⚠️ <b>첫 등록</b>은 내 타일로만 만든 세트 합이 <b>30점 이상</b>이어야 합니다.</p>
+      <p className="text-gray-600">🤖 <b>혼자여도 OK!</b> 대기방에서 <b>초급·중급·고급</b> AI 봇을 넣어 바로 플레이하세요.</p>
     </div>
   );
 
@@ -313,9 +317,27 @@ export default function RummikubPage() {
               <button onClick={handleJoin} disabled={busy} className="bg-hit text-white font-bold px-5 rounded-lg disabled:opacity-50">참가</button>
             </div>
           ) : st.isHost ? (
-            <button onClick={handleStart} disabled={busy || st.playerCount < 2} className="w-full bg-hit text-white font-bold py-3 rounded-lg disabled:opacity-40">
-              {st.playerCount >= 2 ? '게임 시작' : '최소 2명 필요'}
-            </button>
+            <div className="space-y-3">
+              <div className="rounded-xl border border-amber-200 bg-amber-50/60 p-3">
+                <div className="flex items-center justify-between mb-2">
+                  <p className="text-sm font-bold text-amber-800">🤖 AI 봇 추가</p>
+                  <button onClick={handleRemoveAi} disabled={busy || !st.players.some((p) => p.nick.startsWith('🤖'))}
+                    className="text-xs text-gray-500 underline disabled:opacity-30">AI 제거</button>
+                </div>
+                <div className="grid grid-cols-3 gap-2">
+                  {[['EASY', '초급', 'bg-emerald-400'], ['NORMAL', '중급', 'bg-amber-400'], ['HARD', '고급', 'bg-rose-400']].map(([lv, label, cls]) => (
+                    <button key={lv} onClick={() => handleAddAi(lv)} disabled={busy || st.playerCount >= 4}
+                      className={`${cls} text-white font-bold py-2 rounded-lg text-sm shadow-[0_2px_0_rgba(0,0,0,0.15)] active:translate-y-0.5 disabled:opacity-40`}>
+                      {label}
+                    </button>
+                  ))}
+                </div>
+                <p className="text-[11px] text-gray-400 mt-2 text-center">혼자서도 바로 플레이 · 최대 4명까지</p>
+              </div>
+              <button onClick={handleStart} disabled={busy || st.playerCount < 2} className="w-full bg-hit text-white font-bold py-3 rounded-lg disabled:opacity-40">
+                {st.playerCount >= 2 ? '게임 시작' : '최소 2명 필요 (AI 추가 가능)'}
+              </button>
+            </div>
           ) : <p className="text-center text-gray-500 text-sm">방장이 시작하기를 기다리는 중...</p>}
         </div>
       )}
@@ -332,12 +354,12 @@ export default function RummikubPage() {
           </div>
           {st.lastAction && <p className="text-xs text-gray-400 text-center">{st.lastAction}</p>}
 
-          {/* 테이블 */}
-          <div className="rounded-xl border border-gray-200 p-3 bg-gray-50 min-h-[80px]">
-            <p className="text-xs text-gray-400 mb-2">테이블</p>
+          {/* 테이블 (펠트) */}
+          <div className="rounded-2xl p-3 min-h-[90px] bg-gradient-to-b from-emerald-600 to-emerald-800 shadow-inner ring-1 ring-emerald-900/40 border-[3px] border-emerald-900/30">
+            <p className="text-xs text-emerald-100/80 mb-2 font-bold tracking-wide">🃏 테이블</p>
             <div className="space-y-2">
               {(st.isMyTurn ? wt : st.table.map((s) => s.map((t) => t.id))).map((set, i) => (
-                <div key={i} className="flex items-center gap-1 flex-wrap">
+                <div key={i} className="flex items-center gap-1 flex-wrap bg-emerald-900/25 rounded-xl p-1.5">
                   {set.map((id) => {
                     const t = tileMap.get(id);
                     if (!t) return null;
@@ -346,14 +368,14 @@ export default function RummikubPage() {
                   })}
                   {st.isMyTurn && (
                     <button onClick={() => addToSet(i)} disabled={sel.size === 0}
-                      className="text-xs text-hit border border-hit rounded px-2 py-1 disabled:opacity-30">＋추가</button>
+                      className="text-xs text-white/90 border border-white/50 rounded-lg px-2 py-1 disabled:opacity-30 active:translate-y-0.5">＋추가</button>
                   )}
                 </div>
               ))}
-              {(st.isMyTurn ? wt : st.table).length === 0 && <p className="text-gray-300 text-sm text-center py-2">아직 내려놓은 세트가 없어요</p>}
+              {(st.isMyTurn ? wt : st.table).length === 0 && <p className="text-emerald-100/50 text-sm text-center py-3">아직 내려놓은 세트가 없어요</p>}
               {st.isMyTurn && (
                 <button onClick={newSet} disabled={sel.size === 0}
-                  className="text-xs text-gray-600 border border-dashed border-gray-400 rounded px-3 py-1.5 disabled:opacity-30">＋ 새 세트로 내려놓기</button>
+                  className="text-xs text-emerald-50 border border-dashed border-emerald-200/60 rounded-lg px-3 py-1.5 disabled:opacity-30 active:translate-y-0.5">＋ 새 세트로 내려놓기</button>
               )}
             </div>
           </div>
@@ -366,12 +388,12 @@ export default function RummikubPage() {
             </div>
           )}
 
-          {/* 내 랙 */}
+          {/* 내 랙 (나무 받침) */}
           {st.status === 'PLAYING' && (
-            <div className="rounded-xl border border-gray-200 p-3">
+            <div className="rounded-2xl p-3 bg-gradient-to-b from-amber-100 to-amber-200/70 border-[3px] border-amber-300/70 shadow-[inset_0_2px_6px_rgba(180,120,40,0.25)]">
               <div className="flex items-center justify-between mb-2">
-                <p className="text-xs text-gray-400">내 타일 ({st.isMyTurn ? wr.length : st.myRack.length})</p>
-                {st.isMyTurn && <span className="text-xs text-hit font-bold">내 차례!</span>}
+                <p className="text-xs text-amber-700/80 font-bold">🪵 내 타일 ({st.isMyTurn ? wr.length : st.myRack.length})</p>
+                {st.isMyTurn && <span className="text-xs text-white bg-hit rounded-full px-2 py-0.5 font-bold animate-pulse">내 차례!</span>}
               </div>
               <div className="flex flex-wrap gap-1">
                 {st.isMyTurn
