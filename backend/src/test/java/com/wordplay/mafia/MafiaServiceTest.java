@@ -104,6 +104,10 @@ class MafiaServiceTest {
 
         // 경찰 로그에 마피아 O
         assertThat(s.svc.me(cop).copLog()).anyMatch(l -> l.contains("마피아 O"));
+        // 경찰 본인 보드엔 조사한 마피아 좌석에 정체 표시
+        assertThat(s.svc.me(cop).players().get(mafiaSeat - 1).copResult()).isEqualTo("MAFIA");
+        // 경찰이 아닌 사람에겐 안 보임
+        assertThat(s.svc.me(mafia).players().get(mafiaSeat - 1).copResult()).isNull();
     }
 
     @Test

@@ -7,7 +7,7 @@ type Phase =
   | 'NOT_STARTED' | 'LOBBY' | 'NIGHT' | 'MORNING'
   | 'DISCUSS' | 'VOTE' | 'EXECUTE' | 'ENDED';
 
-type PlayerView = { seat: number; nick: string; alive: boolean; role: string | null };
+type PlayerView = { seat: number; nick: string; alive: boolean; role: string | null; copResult: string | null };
 type VoteView = { targetSeat: number; count: number };
 
 type MafiaState = {
@@ -37,6 +37,8 @@ type MafiaState = {
   totalMafia: number;
   playerCount: number;
   mafiaPickTally: { targetSeat: number; count: number }[];
+  discussSkipCount: number;
+  iSkippedDiscuss: boolean;
 };
 
 type RoomSummary = { code: string; status: string; playerCount: number; host: string };
@@ -229,6 +231,9 @@ export default function MafiaPage() {
 
   const handleVote = (target: number) =>
     post(`/api/v1/mafia/vote?roomCode=${roomCode}&clientId=${encodeURIComponent(clientId)}`, { target });
+
+  const handleSkipDiscuss = () =>
+    post(`/api/v1/mafia/skip-discuss?roomCode=${roomCode}&clientId=${encodeURIComponent(clientId)}`);
 
   const handleAdminReset = async () => {
     const code = adminInput.trim();
@@ -554,6 +559,11 @@ export default function MafiaPage() {
               >
                 {p.nick}{me && ' (나)'}
                 {p.role && <span className="ml-1">{ROLE_META[p.role]?.emoji}</span>}
+                {p.copResult && (
+                  <span className={`ml-1 font-bold ${p.copResult === 'MAFIA' ? 'text-red-500' : 'text-blue-500'}`}>
+                    ({p.copResult === 'MAFIA' ? '마피아' : '시민'})
+                  </span>
+                )}
               </span>
             );
           })}
@@ -634,6 +644,23 @@ export default function MafiaPage() {
         <p className="text-gray-600">자유롭게 토론하세요. 곧 투표가 시작됩니다.</p>
         {st!.nightMessage && <p className="text-sm text-gray-400">{st!.nightMessage}</p>}
         {aliveBoard()}
+        {st!.joined && st!.alive && (
+          <div className="pt-2">
+            <button
+              onClick={handleSkipDiscuss}
+              disabled={busy || st!.iSkippedDiscuss}
+              className={`w-full rounded-lg py-3 font-bold text-sm border ${
+                st!.iSkippedDiscuss
+                  ? 'bg-gray-100 text-gray-400 border-gray-200'
+                  : 'bg-white text-hit border-hit hover:bg-hit/5'
+              } disabled:opacity-60`}
+            >
+              {st!.iSkippedDiscuss ? '✓ 토론 스킵 동의함' : '⏭️ 토론 스킵 (바로 투표)'}
+              <span className="ml-1 text-gray-400 font-normal">{st!.discussSkipCount}/{st!.aliveCount}</span>
+            </button>
+            <p className="text-[11px] text-gray-400 mt-1">생존자 전원이 동의하면 바로 투표로 넘어가요</p>
+          </div>
+        )}
       </div>
     );
   }

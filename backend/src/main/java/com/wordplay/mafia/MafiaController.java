@@ -77,6 +77,12 @@ public class MafiaController {
         return ApiResponse.success(rooms.require(roomCode).vote(clientId, req.target()));
     }
 
+    @PostMapping("/skip-discuss")
+    public ApiResponse<MafiaStateResponse> skipDiscuss(@RequestParam String roomCode, @RequestParam String clientId) {
+        validateClientId(clientId);
+        return ApiResponse.success(rooms.require(roomCode).skipDiscuss(clientId));
+    }
+
     /** 전체 방 초기화(관리자). */
     @PostMapping("/reset")
     public ApiResponse<MafiaStateResponse> reset(@RequestParam String code) {

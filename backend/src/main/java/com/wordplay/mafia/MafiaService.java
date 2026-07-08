@@ -58,6 +58,8 @@ public class MafiaService implements RoomGame {
     private int copTarget = -1, doctorTarget = -1;
     private int lastDoctorTarget = -1;       // 직전 밤 의사 보호 대상(연속 보호 금지)
     private final List<String> copLog = new ArrayList<>();
+    private final Map<Integer, Boolean> copFindings = new HashMap<>();  // 경찰만: 조사한 좌석 -> 마피아 여부
+    private final Set<Integer> skipVotes = new HashSet<>();             // 토론 스킵에 동의한 좌석
     private final Map<Integer, Integer> mafiaPicks = new HashMap<>();   // 마피아 seat -> 지목(실시간 공유·다수결)
     private final Map<Integer, Integer> citizenPicks = new HashMap<>(); // 시민 위장 지목(결과 무관)
     private final Set<Integer> nightActed = new HashSet<>();            // 이번 밤 지목을 마친 좌석
@@ -165,6 +167,17 @@ public class MafiaService implements RoomGame {
         return me(clientId);
     }
 
+    /** 토론 스킵 동의. 살아있는 전원이 동의하면 즉시 투표로 넘어간다. */
+    public synchronized MafiaStateResponse skipDiscuss(String clientId) {
+        tick();
+        Player me = requirePlayer(clientId);
+        if (phase != Phase.DISCUSS) throw new BusinessException(ErrorCode.INVALID_INPUT, "지금은 토론 시간이 아닙니다");
+        if (!me.alive) throw new BusinessException(ErrorCode.INVALID_INPUT, "사망한 플레이어입니다");
+        skipVotes.add(seatOf(me));
+        if (skipVotes.containsAll(aliveSeats())) advance();
+        return me(clientId);
+    }
+
     /** 관리자 초기화. */
     public synchronized MafiaStateResponse resetGame() {
         reset();
@@ -210,7 +223,7 @@ public class MafiaService implements RoomGame {
     private void advance() {
         switch (phase) {
             case NIGHT -> { resolveNight(); if (!checkWin()) startPhase(Phase.MORNING); }
-            case MORNING -> startPhase(Phase.DISCUSS);
+            case MORNING -> { skipVotes.clear(); startPhase(Phase.DISCUSS); }
             case DISCUSS -> { votes.clear(); startPhase(Phase.VOTE); }
             case VOTE -> { resolveVote(); if (!checkWin()) startPhase(Phase.EXECUTE); }
             case EXECUTE -> { round++; prepareNight(); startPhase(Phase.NIGHT); }
@@ -253,6 +266,7 @@ public class MafiaService implements RoomGame {
         if (copTarget >= 0 && copTarget < players.size()) {
             boolean isMafia = players.get(copTarget).role == Role.MAFIA;
             copLog.add(round + "일차: " + players.get(copTarget).nick + " → " + (isMafia ? "마피아 O" : "마피아 X"));
+            copFindings.put(copTarget, isMafia);
         }
         lastDoctorTarget = doctorTarget; // 다음 밤 연속 보호 금지용
     }
@@ -307,12 +321,16 @@ public class MafiaService implements RoomGame {
         boolean joined = me != null;
 
         // 플레이어 보드(역할은 종료 시 또는 사망+공개옵션일 때만 노출)
+        boolean iAmPolice = joined && me.role == Role.POLICE;
         List<PlayerView> board = new ArrayList<>();
         for (int i = 0; i < players.size(); i++) {
             Player p = players.get(i);
             String shownRole = null;
             if (p.role != null && (ended || (revealOnDeath && !p.alive))) shownRole = p.role.name();
-            board.add(new PlayerView(i + 1, p.nick, p.alive, shownRole));
+            // 경찰에게만: 내가 조사한 사람은 시민/마피아 표시
+            String copResult = null;
+            if (iAmPolice && copFindings.containsKey(i)) copResult = copFindings.get(i) ? "MAFIA" : "CITIZEN";
+            board.add(new PlayerView(i + 1, p.nick, p.alive, shownRole, copResult));
         }
 
         String actionKind = "NONE";
@@ -398,7 +416,9 @@ public class MafiaService implements RoomGame {
                 (int) players.stream().filter(p -> p.alive).count(),
                 totalMafia,
                 players.size(),
-                mafiaPickTally
+                mafiaPickTally,
+                (int) skipVotes.stream().filter(s -> s < players.size() && players.get(s).alive).count(),
+                joined && skipVotes.contains(mySeatIdx)
         );
     }
 
@@ -416,6 +436,8 @@ public class MafiaService implements RoomGame {
         revealOnDeath = true;
         copTarget = doctorTarget = lastDoctorTarget = -1;
         copLog.clear();
+        copFindings.clear();
+        skipVotes.clear();
         mafiaPicks.clear();
         citizenPicks.clear();
         nightActed.clear();
