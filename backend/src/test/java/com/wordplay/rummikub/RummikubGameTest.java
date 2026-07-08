@@ -1,0 +1,116 @@
+package com.wordplay.rummikub;
+
+import com.wordplay.rummikub.dto.RummikubStateResponse;
+import org.junit.jupiter.api.Test;
+
+import java.lang.reflect.Field;
+import java.util.ArrayList;
+import java.util.List;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+
+class RummikubGameTest {
+
+    private static final List<String> C = List.of("RED", "BLUE", "BLACK", "ORANGE");
+    private int tid(int copy, String color, int number) {
+        return copy * 52 + C.indexOf(color) * 13 + (number - 1);
+    }
+    private static final int JOKER = 104;
+
+    // ---------- 세트 검증 ----------
+    @Test
+    void 런_그룹_조커_검증() {
+        RummikubGame g = new RummikubGame();
+        // 런: 빨강 1-2-3
+        assertThat(g.setValue(List.of(tid(0, "RED", 1), tid(0, "RED", 2), tid(0, "RED", 3)))).isEqualTo(6);
+        // 그룹: 5 세 색
+        assertThat(g.setValue(List.of(tid(0, "RED", 5), tid(0, "BLUE", 5), tid(0, "BLACK", 5)))).isEqualTo(15);
+        // 조커 런: 1,2,+조커(=3)
+        assertThat(g.setValue(List.of(tid(0, "RED", 1), tid(0, "RED", 2), JOKER))).isEqualTo(6);
+        // 조커 그룹: 5,5,+조커
+        assertThat(g.setValue(List.of(tid(0, "RED", 5), tid(0, "BLUE", 5), JOKER))).isEqualTo(15);
+    }
+
+    @Test
+    void 잘못된_세트는_음수() {
+        RummikubGame g = new RummikubGame();
+        // 색 섞인 연속 아님
+        assertThat(g.setValue(List.of(tid(0, "RED", 1), tid(0, "BLUE", 2), tid(0, "BLACK", 3)))).isLessThan(0);
+        // 그룹인데 색 중복
+        assertThat(g.setValue(List.of(tid(0, "RED", 5), tid(1, "RED", 5), tid(0, "BLUE", 5)))).isLessThan(0);
+        // 런인데 숫자 중복
+        assertThat(g.setValue(List.of(tid(0, "RED", 5), tid(1, "RED", 5), tid(0, "RED", 6)))).isLessThan(0);
+        // 3개 미만
+        assertThat(g.setValue(List.of(tid(0, "RED", 1), tid(0, "RED", 2)))).isLessThan(0);
+    }
+
+    // ---------- 게임 흐름 ----------
+    private RummikubGame started2() {
+        RummikubGame g = new RummikubGame();
+        g.newGame("host", "p0");
+        g.join("c1", "p1");
+        g.start("host");
+        return g;
+    }
+
+    @SuppressWarnings("unchecked")
+    private List<Integer> rackOf(RummikubGame g, int seat) throws Exception {
+        Field pf = RummikubGame.class.getDeclaredField("players");
+        pf.setAccessible(true);
+        List<?> players = (List<?>) pf.get(g);
+        Object p = players.get(seat);
+        Field rf = p.getClass().getDeclaredField("rack");
+        rf.setAccessible(true);
+        return (List<Integer>) rf.get(p);
+    }
+
+    @Test
+    void 시작하면_14개씩_분배() throws Exception {
+        RummikubGame g = started2();
+        assertThat(rackOf(g, 0)).hasSize(14);
+        assertThat(rackOf(g, 1)).hasSize(14);
+        assertThat(g.me("host").drawCount()).isEqualTo(106 - 28);
+        assertThat(g.me("host").isMyTurn()).isTrue();
+    }
+
+    @Test
+    void 첫등록_30점_이상이면_성공() throws Exception {
+        RummikubGame g = started2();
+        List<Integer> rack = rackOf(g, 0);
+        rack.clear();
+        // 빨강 10-11-12 = 33점 + 여분
+        rack.addAll(List.of(tid(0, "RED", 10), tid(0, "RED", 11), tid(0, "RED", 12), tid(0, "BLUE", 1)));
+
+        RummikubStateResponse res = g.play("host",
+                List.of(List.of(tid(0, "RED", 10), tid(0, "RED", 11), tid(0, "RED", 12))));
+        assertThat(res.table()).hasSize(1);
+        assertThat(res.table().get(0)).hasSize(3);
+        assertThat(g.me("host").myMelded()).isTrue();
+        assertThat(rackOf(g, 0)).containsExactly(tid(0, "BLUE", 1));
+    }
+
+    @Test
+    void 첫등록_30점_미만이면_거부() throws Exception {
+        RummikubGame g = started2();
+        List<Integer> rack = rackOf(g, 0);
+        rack.clear();
+        rack.addAll(List.of(tid(0, "RED", 1), tid(0, "RED", 2), tid(0, "RED", 3)));
+        assertThatThrownBy(() -> g.play("host",
+                List.of(List.of(tid(0, "RED", 1), tid(0, "RED", 2), tid(0, "RED", 3)))))
+                .hasMessageContaining("30점");
+    }
+
+    @Test
+    void 남의_차례엔_불가() {
+        RummikubGame g = started2();
+        assertThatThrownBy(() -> g.draw("c1")).hasMessageContaining("차례");
+    }
+
+    @Test
+    void 최소인원_미달() {
+        RummikubGame g = new RummikubGame();
+        g.newGame("host", "p0");
+        assertThatThrownBy(() -> g.start("host")).hasMessageContaining("최소 2명");
+    }
+}
