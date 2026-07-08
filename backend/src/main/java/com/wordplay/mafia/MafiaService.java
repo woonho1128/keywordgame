@@ -279,11 +279,14 @@ public class MafiaService implements RoomGame {
         }
         // 개인 밤 행동 기록(자기만 봄)
         int docSeat = seatOfRole(Role.DOCTOR);
-        if (docSeat >= 0 && doctorTarget >= 0)
-            myLog(docSeat).add(round + "일차 💉 보호: " + players.get(doctorTarget).nick);
+        if (docSeat >= 0 && doctorTarget >= 0) {
+            boolean saved = mafiaTarget >= 0 && mafiaTarget == doctorTarget;
+            myLog(docSeat).add(round + "일차 💉 보호: " + players.get(doctorTarget).nick + (saved ? " (마피아 공격을 막았다!)" : ""));
+        }
+        String killResult = nightDeadSeat >= 0 ? players.get(nightDeadSeat).nick + " 처치 성공" : "아무도 죽지 않음(보호/실패)";
         for (var e : mafiaPicks.entrySet())
             if (e.getValue() >= 0)
-                myLog(e.getKey()).add(round + "일차 🔪 지목: " + players.get(e.getValue()).nick);
+                myLog(e.getKey()).add(round + "일차 🔪 지목: " + players.get(e.getValue()).nick + " · 결과: " + killResult);
         lastDoctorTarget = doctorTarget; // 다음 밤 연속 보호 금지용
     }
 
