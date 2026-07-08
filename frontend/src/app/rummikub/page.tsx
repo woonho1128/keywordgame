@@ -47,6 +47,7 @@ function getClientId(): string {
 const COLOR_CLS: Record<string, string> = {
   RED: 'text-red-500', BLUE: 'text-blue-600', BLACK: 'text-gray-800', ORANGE: 'text-orange-500',
 };
+const COLOR_ORDER: Record<string, number> = { RED: 0, ORANGE: 1, BLUE: 2, BLACK: 3 };
 
 export default function RummikubPage() {
   const [clientId, setClientId] = useState('');
@@ -69,7 +70,7 @@ export default function RummikubPage() {
   const [wt, setWt] = useState<number[][]>([]);   // 테이블 세트(타일 id)
   const [wr, setWr] = useState<number[]>([]);      // 아직 안 놓은 내 타일
   const [sel, setSel] = useState<Set<number>>(new Set());
-  const turnRef = useRef(-2);
+  const turnRef = useRef('');
 
   const cidRef = useRef('');
   const inflight = useRef(false);
@@ -110,12 +111,16 @@ export default function RummikubPage() {
     return () => clearInterval(t);
   }, [poll]);
 
-  // 턴이 바뀌면 워크스페이스를 커밋된 상태로 초기화
+  // 커밋된 서버 상태(차례·테이블·내 랙)가 바뀌면 워크스페이스를 초기화.
+  // 편집 중엔 서버 상태가 안 바뀌므로 내 편집은 유지되고,
+  // 봇이 내 폴링 중 자동으로 두어 차례가 나에게 되돌아와도(테이블 변경) 다시 동기화된다.
   useEffect(() => {
     if (!st) return;
-    const key = st.status === 'PLAYING' ? st.currentSeat : -1;
-    if (key !== turnRef.current) {
-      turnRef.current = key;
+    const sig = st.status === 'PLAYING'
+      ? `${st.currentSeat}|${st.table.map((s) => s.map((t) => t.id).join(',')).join(';')}|${st.myRack.map((t) => t.id).join(',')}`
+      : `x${st.status}`;
+    if (sig !== turnRef.current) {
+      turnRef.current = sig;
       setWt(st.table.map((s) => s.map((t) => t.id)));
       setWr(st.myRack.map((t) => t.id));
       setSel(new Set());
@@ -201,6 +206,16 @@ export default function RummikubPage() {
     setWr(st.myRack.map((t) => t.id));
     setSel(new Set());
   };
+
+  // 내 패 정렬: 'number'=숫자순(그룹용), 'color'=색깔순(런용). 조커는 항상 맨 뒤.
+  const sortWr = (mode: 'number' | 'color') => setWr((cur) => [...cur].sort((a, b) => {
+    const ta = tileMap.get(a), tb = tileMap.get(b);
+    if (!ta || !tb) return 0;
+    if (ta.joker !== tb.joker) return ta.joker ? 1 : -1;
+    if (ta.joker) return 0;
+    const ca = COLOR_ORDER[ta.color ?? ''] ?? 9, cb = COLOR_ORDER[tb.color ?? ''] ?? 9;
+    return mode === 'number' ? (ta.number - tb.number || ca - cb) : (ca - cb || ta.number - tb.number);
+  }));
 
   function Tile({ t, onClick, selected, small }: { t: TileView; onClick?: () => void; selected?: boolean; small?: boolean }) {
     const color = t.joker ? 'text-fuchsia-500' : COLOR_CLS[t.color ?? ''] ?? 'text-gray-700';
@@ -393,7 +408,15 @@ export default function RummikubPage() {
             <div className="rounded-2xl p-3 bg-gradient-to-b from-amber-100 to-amber-200/70 border-[3px] border-amber-300/70 shadow-[inset_0_2px_6px_rgba(180,120,40,0.25)]">
               <div className="flex items-center justify-between mb-2">
                 <p className="text-xs text-amber-700/80 font-bold">🪵 내 타일 ({st.isMyTurn ? wr.length : st.myRack.length})</p>
-                {st.isMyTurn && <span className="text-xs text-white bg-hit rounded-full px-2 py-0.5 font-bold animate-pulse">내 차례!</span>}
+                <div className="flex items-center gap-1.5">
+                  {st.isMyTurn && (
+                    <>
+                      <button onClick={() => sortWr('number')} className="text-[11px] text-amber-800 bg-amber-200/70 border border-amber-300 rounded-md px-2 py-0.5 font-bold active:translate-y-0.5">숫자순</button>
+                      <button onClick={() => sortWr('color')} className="text-[11px] text-amber-800 bg-amber-200/70 border border-amber-300 rounded-md px-2 py-0.5 font-bold active:translate-y-0.5">색깔순</button>
+                      <span className="text-xs text-white bg-hit rounded-full px-2 py-0.5 font-bold animate-pulse">내 차례!</span>
+                    </>
+                  )}
+                </div>
               </div>
               <div className="flex flex-wrap gap-1">
                 {st.isMyTurn
