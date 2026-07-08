@@ -78,6 +78,14 @@ export default function HomePage() {
           <h2 className="text-2xl font-bold mb-2">🁢 루미큐브</h2>
           <p className="text-gray-600">타일로 세트를 만들어 먼저 다 내려놓는 사람이 이기는 게임 (2~4인).</p>
         </Link>
+
+        <Link
+          href="/halligalli"
+          className="border-2 border-gray-200 rounded-xl p-8 hover:border-hit transition"
+        >
+          <h2 className="text-2xl font-bold mb-2">🔔 할리갈리</h2>
+          <p className="text-gray-600">같은 과일 5개가 뜨면 먼저 종을 치는 실시간 순발력 게임 (2~6인).</p>
+        </Link>
       </div>
     </main>
   );
