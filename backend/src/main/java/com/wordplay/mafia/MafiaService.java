@@ -60,6 +60,7 @@ public class MafiaService implements RoomGame {
     private final List<String> copLog = new ArrayList<>();
     private final Map<Integer, Boolean> copFindings = new HashMap<>();  // 경찰만: 조사한 좌석 -> 마피아 여부
     private final Set<Integer> skipVotes = new HashSet<>();             // 토론 스킵에 동의한 좌석
+    private final List<String> history = new ArrayList<>();             // 전체 공개 진행 이력
     private final Map<Integer, Integer> mafiaPicks = new HashMap<>();   // 마피아 seat -> 지목(실시간 공유·다수결)
     private final Map<Integer, Integer> citizenPicks = new HashMap<>(); // 시민 위장 지목(결과 무관)
     private final Set<Integer> nightActed = new HashSet<>();            // 이번 밤 지목을 마친 좌석
@@ -126,6 +127,8 @@ public class MafiaService implements RoomGame {
         this.round = 1;
         this.lastDoctorTarget = -1;
         this.copLog.clear();
+        this.history.clear();
+        history.add("🎬 게임 시작 · " + n + "명 (마피아 " + mafia + "명)");
         prepareNight();
         startPhase(Phase.NIGHT);
         return me(clientId);
@@ -262,6 +265,7 @@ public class MafiaService implements RoomGame {
         } else {
             nightMessage = "평화로운 밤이었습니다. 아무도 죽지 않았습니다.";
         }
+        history.add(round + "일차 🌙 " + nightMessage);
         // 경찰 조사 결과: 최종 지목 1명만 아침에 공개
         if (copTarget >= 0 && copTarget < players.size()) {
             boolean isMafia = players.get(copTarget).role == Role.MAFIA;
@@ -298,14 +302,23 @@ public class MafiaService implements RoomGame {
         if (top >= 0 && !tie && max > 0) {
             players.get(top).alive = false;
             executedSeat = top;
+            history.add(round + "일차 ☀️ " + players.get(top).nick + "님 처형 (정체: " + roleKor(players.get(top).role) + ")");
+        } else {
+            history.add(round + "일차 ☀️ 처형 없음 (동표 또는 기권)");
         }
+    }
+
+    private static String roleKor(Role r) {
+        return switch (r) {
+            case MAFIA -> "마피아"; case POLICE -> "경찰"; case DOCTOR -> "의사"; default -> "시민";
+        };
     }
 
     private boolean checkWin() {
         long mafiaAlive = players.stream().filter(p -> p.alive && p.role == Role.MAFIA).count();
         long citizenAlive = players.stream().filter(p -> p.alive && p.role != Role.MAFIA).count();
-        if (mafiaAlive == 0) { winner = "CITIZEN"; phase = Phase.ENDED; phaseEndsAt = 0; return true; }
-        if (mafiaAlive >= citizenAlive) { winner = "MAFIA"; phase = Phase.ENDED; phaseEndsAt = 0; return true; }
+        if (mafiaAlive == 0) { winner = "CITIZEN"; phase = Phase.ENDED; phaseEndsAt = 0; history.add("🏁 시민팀 승리!"); return true; }
+        if (mafiaAlive >= citizenAlive) { winner = "MAFIA"; phase = Phase.ENDED; phaseEndsAt = 0; history.add("🏁 마피아팀 승리!"); return true; }
         return false;
     }
 
@@ -418,7 +431,8 @@ public class MafiaService implements RoomGame {
                 players.size(),
                 mafiaPickTally,
                 (int) skipVotes.stream().filter(s -> s < players.size() && players.get(s).alive).count(),
-                joined && skipVotes.contains(mySeatIdx)
+                joined && skipVotes.contains(mySeatIdx),
+                List.copyOf(history)
         );
     }
 
@@ -438,6 +452,7 @@ public class MafiaService implements RoomGame {
         copLog.clear();
         copFindings.clear();
         skipVotes.clear();
+        history.clear();
         mafiaPicks.clear();
         citizenPicks.clear();
         nightActed.clear();

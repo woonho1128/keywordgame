@@ -39,6 +39,7 @@ type MafiaState = {
   mafiaPickTally: { targetSeat: number; count: number }[];
   discussSkipCount: number;
   iSkippedDiscuss: boolean;
+  history: string[];
 };
 
 type RoomSummary = { code: string; status: string; playerCount: number; host: string };
@@ -368,6 +369,18 @@ export default function MafiaPage() {
 
         {error && <p className="text-red-500 text-sm mt-4 text-center">{error}</p>}
       </div>
+
+      {/* 진행 이력 */}
+      {st.history && st.history.length > 0 && phase !== 'LOBBY' && phase !== 'NOT_STARTED' && (
+        <details className="w-full mt-6 rounded-xl border border-gray-200">
+          <summary className="cursor-pointer select-none px-4 py-3 text-sm font-bold text-gray-600">📜 진행 이력 ({st.history.length})</summary>
+          <div className="px-4 pb-3 max-h-64 overflow-y-auto">
+            {st.history.map((h, i) => (
+              <p key={i} className="text-sm text-gray-600 border-t border-gray-50 py-1.5">{h}</p>
+            ))}
+          </div>
+        </details>
+      )}
 
       {/* 관리자 초기화 */}
       <div className="w-full mt-8 pt-4 border-t border-gray-100 flex justify-center">
