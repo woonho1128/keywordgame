@@ -61,6 +61,7 @@ public class MafiaService implements RoomGame {
     private final Map<Integer, Boolean> copFindings = new HashMap<>();  // 경찰만: 조사한 좌석 -> 마피아 여부
     private final Set<Integer> skipVotes = new HashSet<>();             // 토론 스킵에 동의한 좌석
     private final List<String> history = new ArrayList<>();             // 전체 공개 진행 이력
+    private final Map<Integer, List<String>> myLogs = new HashMap<>();  // 좌석별 개인 이력(자기 능력/투표)
     private final Map<Integer, Integer> mafiaPicks = new HashMap<>();   // 마피아 seat -> 지목(실시간 공유·다수결)
     private final Map<Integer, Integer> citizenPicks = new HashMap<>(); // 시민 위장 지목(결과 무관)
     private final Set<Integer> nightActed = new HashSet<>();            // 이번 밤 지목을 마친 좌석
@@ -128,6 +129,7 @@ public class MafiaService implements RoomGame {
         this.lastDoctorTarget = -1;
         this.copLog.clear();
         this.history.clear();
+        this.myLogs.clear();
         history.add("🎬 게임 시작 · " + n + "명 (마피아 " + mafia + "명)");
         prepareNight();
         startPhase(Phase.NIGHT);
@@ -267,11 +269,21 @@ public class MafiaService implements RoomGame {
         }
         history.add(round + "일차 🌙 " + nightMessage);
         // 경찰 조사 결과: 최종 지목 1명만 아침에 공개
+        int policeSeat = seatOfRole(Role.POLICE);
         if (copTarget >= 0 && copTarget < players.size()) {
             boolean isMafia = players.get(copTarget).role == Role.MAFIA;
             copLog.add(round + "일차: " + players.get(copTarget).nick + " → " + (isMafia ? "마피아 O" : "마피아 X"));
             copFindings.put(copTarget, isMafia);
+            if (policeSeat >= 0)
+                myLog(policeSeat).add(round + "일차 🔎 조사: " + players.get(copTarget).nick + " → " + (isMafia ? "마피아" : "시민"));
         }
+        // 개인 밤 행동 기록(자기만 봄)
+        int docSeat = seatOfRole(Role.DOCTOR);
+        if (docSeat >= 0 && doctorTarget >= 0)
+            myLog(docSeat).add(round + "일차 💉 보호: " + players.get(doctorTarget).nick);
+        for (var e : mafiaPicks.entrySet())
+            if (e.getValue() >= 0)
+                myLog(e.getKey()).add(round + "일차 🔪 지목: " + players.get(e.getValue()).nick);
         lastDoctorTarget = doctorTarget; // 다음 밤 연속 보호 금지용
     }
 
@@ -293,6 +305,20 @@ public class MafiaService implements RoomGame {
         executedSeat = -1;
         Map<Integer, Integer> tally = new HashMap<>();
         for (int t : votes.values()) if (t != -1) tally.merge(t, 1, Integer::sum);
+        // 개인 투표 기록(자기만 봄)
+        for (var e : votes.entrySet())
+            myLog(e.getKey()).add(round + "일차 🗳️ 투표: " + (e.getValue() < 0 ? "기권" : players.get(e.getValue()).nick));
+        // 공개 집계
+        if (!tally.isEmpty()) {
+            List<Map.Entry<Integer, Integer>> es = new ArrayList<>(tally.entrySet());
+            es.sort((a, b) -> b.getValue() - a.getValue());
+            StringBuilder sb = new StringBuilder();
+            for (var en : es) {
+                if (sb.length() > 0) sb.append(" · ");
+                sb.append(players.get(en.getKey()).nick).append(" ").append(en.getValue()).append("표");
+            }
+            history.add(round + "일차 🗳️ 집계: " + sb);
+        }
         int max = 0, top = -1;
         boolean tie = false;
         for (var e : tally.entrySet()) {
@@ -306,6 +332,13 @@ public class MafiaService implements RoomGame {
         } else {
             history.add(round + "일차 ☀️ 처형 없음 (동표 또는 기권)");
         }
+    }
+
+    private List<String> myLog(int seat) { return myLogs.computeIfAbsent(seat, k -> new ArrayList<>()); }
+
+    private int seatOfRole(Role r) {
+        for (int i = 0; i < players.size(); i++) if (players.get(i).role == r) return i;
+        return -1;
     }
 
     private static String roleKor(Role r) {
@@ -432,7 +465,8 @@ public class MafiaService implements RoomGame {
                 mafiaPickTally,
                 (int) skipVotes.stream().filter(s -> s < players.size() && players.get(s).alive).count(),
                 joined && skipVotes.contains(mySeatIdx),
-                List.copyOf(history)
+                List.copyOf(history),
+                joined && myLogs.containsKey(mySeatIdx) ? List.copyOf(myLogs.get(mySeatIdx)) : List.of()
         );
     }
 
@@ -453,6 +487,7 @@ public class MafiaService implements RoomGame {
         copFindings.clear();
         skipVotes.clear();
         history.clear();
+        myLogs.clear();
         mafiaPicks.clear();
         citizenPicks.clear();
         nightActed.clear();

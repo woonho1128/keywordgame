@@ -40,6 +40,7 @@ type MafiaState = {
   discussSkipCount: number;
   iSkippedDiscuss: boolean;
   history: string[];
+  myHistory: string[];
 };
 
 type RoomSummary = { code: string; status: string; playerCount: number; host: string };
@@ -370,9 +371,21 @@ export default function MafiaPage() {
         {error && <p className="text-red-500 text-sm mt-4 text-center">{error}</p>}
       </div>
 
-      {/* 진행 이력 */}
+      {/* 내 행동 기록(나만 봄) */}
+      {st.myHistory && st.myHistory.length > 0 && (
+        <details className="w-full mt-6 rounded-xl border border-hit/40 bg-hit/5">
+          <summary className="cursor-pointer select-none px-4 py-3 text-sm font-bold text-hit">🔒 내 행동 기록 ({st.myHistory.length})</summary>
+          <div className="px-4 pb-3 max-h-64 overflow-y-auto">
+            {st.myHistory.map((h, i) => (
+              <p key={i} className="text-sm text-gray-700 border-t border-hit/10 py-1.5">{h}</p>
+            ))}
+          </div>
+        </details>
+      )}
+
+      {/* 진행 이력(공개) */}
       {st.history && st.history.length > 0 && phase !== 'LOBBY' && phase !== 'NOT_STARTED' && (
-        <details className="w-full mt-6 rounded-xl border border-gray-200">
+        <details className="w-full mt-3 rounded-xl border border-gray-200">
           <summary className="cursor-pointer select-none px-4 py-3 text-sm font-bold text-gray-600">📜 진행 이력 ({st.history.length})</summary>
           <div className="px-4 pb-3 max-h-64 overflow-y-auto">
             {st.history.map((h, i) => (
