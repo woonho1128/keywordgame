@@ -114,12 +114,15 @@ export default function RummikubPage() {
   }, [poll]);
 
   // 내 랙을 "기억해둔 순서" 기준으로 정렬: 기존 타일은 내 순서 유지, 새로 들어온 타일은 맨 우측에 붙인다.
-  const orderRack = (serverIds: number[]): number[] => {
+  const orderRackView = (serverIds: number[]): number[] => {
     const set = new Set(serverIds);
     const kept = rackOrderRef.current.filter((id) => set.has(id));
     const keptSet = new Set(kept);
     const extras = serverIds.filter((id) => !keptSet.has(id));
-    const result = [...kept, ...extras];
+    return [...kept, ...extras];
+  };
+  const orderRack = (serverIds: number[]): number[] => {
+    const result = orderRackView(serverIds);
     rackOrderRef.current = result;
     return result;
   };
@@ -549,7 +552,7 @@ export default function RummikubPage() {
               <div className="flex flex-wrap items-center gap-1">
                 {st.isMyTurn
                   ? rackTileEls()
-                  : st.myRack.map((t) => <Tile key={t.id} t={t} />)}
+                  : orderRackView(st.myRack.map((t) => t.id)).map((id) => { const t = tileMap.get(id); return t ? <Tile key={id} t={t} /> : null; })}
               </div>
               {st.isMyTurn && rackSetLens.length > 0 && (
                 <p className="text-[11px] text-emerald-600 mt-2">🟢 초록 테두리 = 지금 낼 수 있는 세트 ({rackSetLens.length}개) — 선택 후 새 세트로 내려놓으세요</p>
