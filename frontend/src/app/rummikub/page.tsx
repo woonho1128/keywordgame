@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { api } from '@/lib/api';
 
 type TileView = { id: number; color: string | null; number: number; joker: boolean };
@@ -70,6 +70,7 @@ export default function RummikubPage() {
   const [wt, setWt] = useState<number[][]>([]);   // 테이블 세트(타일 id)
   const [wr, setWr] = useState<number[]>([]);      // 아직 안 놓은 내 타일
   const [sel, setSel] = useState<Set<number>>(new Set());
+  const [rackSetLens, setRackSetLens] = useState<number[]>([]); // 정렬 시 앞에 모은 "낼 수 있는 세트"들의 길이
   const turnRef = useRef('');
   const rackOrderRef = useRef<number[]>([]); // 내가 정렬해둔 랙 순서 기억(새 타일은 우측 append)
 
@@ -136,6 +137,7 @@ export default function RummikubPage() {
       setWt(st.table.map((s) => s.map((t) => t.id)));
       setWr(orderRack(st.myRack.map((t) => t.id)));
       setSel(new Set());
+      setRackSetLens([]);
     }
   }, [st]);
 
@@ -215,42 +217,83 @@ export default function RummikubPage() {
     const arr = selArr();
     setWt((cur) => cur.map((s, idx) => (idx === i ? [...s, ...arr] : s)));
     setWr((cur) => cur.filter((id) => !sel.has(id)));
-    setSel(new Set());
+    setSel(new Set()); setRackSetLens([]);
   };
   const newSet = () => {
     if (sel.size === 0) return;
     const arr = selArr();
     setWt((cur) => [...cur, arr]);
     setWr((cur) => cur.filter((id) => !sel.has(id)));
-    setSel(new Set());
+    setSel(new Set()); setRackSetLens([]);
   };
   const removePlaced = (setIdx: number, id: number) => {
     // 첫 등록(30점) 전에는 테이블 원래 타일을 건드릴 수 없다. 등록 후엔 재배치 허용.
     if (origTable.has(id) && !st?.myMelded) return;
     setWt((cur) => cur.map((s, i) => (i === setIdx ? s.filter((x) => x !== id) : s)).filter((s) => s.length > 0));
-    setWr((cur) => [...cur, id]);
+    setWr((cur) => [...cur, id]); setRackSetLens([]);
   };
   const resetWork = () => {
     if (!st) return;
     setWt(st.table.map((s) => s.map((t) => t.id)));
     setWr(orderRack(st.myRack.map((t) => t.id)));
-    setSel(new Set());
+    setSel(new Set()); setRackSetLens([]);
   };
 
-  // 내 패 정렬: 'number'=숫자순(그룹용), 'color'=색깔순(런용). 조커는 항상 맨 뒤.
-  // 정렬 결과를 선호 순서로 기억해 두어, 이후 가져온 타일은 이 순서 뒤(우측)에 붙는다.
-  const sortWr = (mode: 'number' | 'color') => setWr((cur) => {
-    const sorted = [...cur].sort((a, b) => {
-      const ta = tileMap.get(a), tb = tileMap.get(b);
-      if (!ta || !tb) return 0;
-      if (ta.joker !== tb.joker) return ta.joker ? 1 : -1;
-      if (ta.joker) return 0;
-      const ca = COLOR_ORDER[ta.color ?? ''] ?? 9, cb = COLOR_ORDER[tb.color ?? ''] ?? 9;
-      return mode === 'number' ? (ta.number - tb.number || ca - cb) : (ca - cb || ta.number - tb.number);
-    });
-    rackOrderRef.current = sorted;
-    return sorted;
-  });
+  // rem에서 가장 점수 높은 유효 세트(그룹/런, 조커 제외) 하나. 없으면 null.
+  const bestRackSet = (rem: number[]): number[] | null => {
+    let best: number[] | null = null, bestVal = -1;
+    const byNum = new Map<number, Map<string, number>>();
+    const byColor = new Map<string, Map<number, number>>();
+    for (const id of rem) {
+      const t = tileMap.get(id); if (!t || t.joker) continue;
+      if (!byNum.has(t.number)) byNum.set(t.number, new Map());
+      const mn = byNum.get(t.number)!; if (!mn.has(t.color ?? '')) mn.set(t.color ?? '', id);
+      if (!byColor.has(t.color ?? '')) byColor.set(t.color ?? '', new Map());
+      const mc = byColor.get(t.color ?? '')!; if (!mc.has(t.number)) mc.set(t.number, id);
+    }
+    for (const [num, m] of byNum) if (m.size >= 3) { const g = [...m.values()]; const v = num * g.length; if (v > bestVal) { bestVal = v; best = g; } }
+    for (const [, m] of byColor) {
+      const nums = [...m.keys()].sort((a, b) => a - b);
+      let i = 0;
+      while (i < nums.length) {
+        let j = i; while (j + 1 < nums.length && nums[j + 1] === nums[j] + 1) j++;
+        if (j - i + 1 >= 3) { const run: number[] = []; let v = 0; for (let k = i; k <= j; k++) { run.push(m.get(nums[k])!); v += nums[k]; } if (v > bestVal) { bestVal = v; best = run; } }
+        i = j + 1;
+      }
+    }
+    return best;
+  };
+  // 랙에서 겹치지 않는 완성 세트들을 그리디로 추출.
+  const findRackSets = (ids: number[]): number[][] => {
+    let rem = ids.slice();
+    const out: number[][] = [];
+    for (;;) {
+      const best = bestRackSet(rem);
+      if (!best) break;
+      out.push(best);
+      const bs = new Set(best);
+      rem = rem.filter((id) => !bs.has(id));
+    }
+    return out;
+  };
+  const cmpTile = (mode: 'number' | 'color') => (a: number, b: number) => {
+    const ta = tileMap.get(a), tb = tileMap.get(b);
+    if (!ta || !tb) return 0;
+    if (ta.joker !== tb.joker) return ta.joker ? 1 : -1;
+    if (ta.joker) return 0;
+    const ca = COLOR_ORDER[ta.color ?? ''] ?? 9, cb = COLOR_ORDER[tb.color ?? ''] ?? 9;
+    return mode === 'number' ? (ta.number - tb.number || ca - cb) : (ca - cb || ta.number - tb.number);
+  };
+  // 내 패 정렬: 낼 수 있는 세트를 앞으로 빼서 모으고(rackSetLens), 나머지는 선택한 기준으로 정렬.
+  const sortWr = (mode: 'number' | 'color') => {
+    const sets = findRackSets(wr).map((s) => [...s].sort(cmpTile(mode)));
+    const used = new Set(sets.flat());
+    const leftover = wr.filter((id) => !used.has(id)).sort(cmpTile(mode));
+    const ordered = [...sets.flat(), ...leftover];
+    rackOrderRef.current = ordered;
+    setRackSetLens(sets.map((s) => s.length));
+    setWr(ordered);
+  };
 
   // 세트를 보기 좋게 정렬(런=숫자 오름차순·조커는 빈칸/뒤, 그룹=색 순서). 클릭은 id 기반이라 표시 순서만 바뀜.
   const sortSet = (ids: number[]): number[] => {
@@ -276,10 +319,11 @@ export default function RummikubPage() {
     return out;
   };
 
-  function Tile({ t, onClick, selected, small, fromTable }: { t: TileView; onClick?: () => void; selected?: boolean; small?: boolean; fromTable?: boolean }) {
+  function Tile({ t, onClick, selected, small, fromTable, playable }: { t: TileView; onClick?: () => void; selected?: boolean; small?: boolean; fromTable?: boolean; playable?: boolean }) {
     const color = t.joker ? 'text-fuchsia-500' : COLOR_CLS[t.color ?? ''] ?? 'text-gray-700';
     const ring = selected ? '-translate-y-1.5 ring-2 ring-hit shadow-lg z-10'
       : fromTable ? 'ring-2 ring-rose-400 shadow-[0_2px_0_rgba(0,0,0,0.18)]'
+      : playable ? 'ring-2 ring-emerald-400 shadow-[0_2px_0_rgba(0,0,0,0.18)]'
       : 'shadow-[0_2px_0_rgba(0,0,0,0.18)]';
     return (
       <button onClick={onClick} disabled={!onClick}
@@ -290,6 +334,24 @@ export default function RummikubPage() {
       </button>
     );
   }
+
+  // 내 랙 렌더링: 정렬 시 앞으로 모은 세트(rackSetLens)는 초록 테두리 + 세트 사이 간격, 이후 나머지 타일.
+  const rackTileEls = (): ReactNode[] => {
+    const setCount = rackSetLens.reduce((a, b) => a + b, 0);
+    const setEnds = new Set<number>();  // 각 세트가 끝나는 누적 인덱스
+    { let acc = 0; for (const l of rackSetLens) { acc += l; setEnds.add(acc); } }
+    const els: ReactNode[] = [];
+    wr.forEach((id, idx) => {
+      const t = tileMap.get(id);
+      if (!t) return;
+      if (idx === setCount && setCount > 0 && setCount < wr.length)
+        els.push(<span key={`div`} className="w-px self-stretch bg-amber-400/60 mx-1" />);          // 세트↔나머지 구분선
+      else if (idx > 0 && idx < setCount && setEnds.has(idx))
+        els.push(<span key={`gap${idx}`} className="w-2 shrink-0" />);                                // 세트끼리 간격
+      els.push(<Tile key={id} t={t} selected={sel.has(id)} fromTable={origTable.has(id)} playable={idx < setCount} onClick={() => toggleSel(id)} />);
+    });
+    return els;
+  };
 
   const adminFooter = (
     <div className="w-full mt-6 pt-4 border-t border-gray-100 flex flex-col items-center gap-2">
@@ -484,11 +546,14 @@ export default function RummikubPage() {
                   )}
                 </div>
               </div>
-              <div className="flex flex-wrap gap-1">
+              <div className="flex flex-wrap items-center gap-1">
                 {st.isMyTurn
-                  ? wr.map((id) => { const t = tileMap.get(id); return t ? <Tile key={id} t={t} selected={sel.has(id)} fromTable={origTable.has(id)} onClick={() => toggleSel(id)} /> : null; })
+                  ? rackTileEls()
                   : st.myRack.map((t) => <Tile key={t.id} t={t} />)}
               </div>
+              {st.isMyTurn && rackSetLens.length > 0 && (
+                <p className="text-[11px] text-emerald-600 mt-2">🟢 초록 테두리 = 지금 낼 수 있는 세트 ({rackSetLens.length}개) — 선택 후 새 세트로 내려놓으세요</p>
+              )}
               {st.isMyTurn && wr.some((id) => origTable.has(id)) && (
                 <p className="text-[11px] text-rose-500 mt-2">🔴 테두리 타일은 테이블에서 집어온 것 — 다시 배치해야 제출할 수 있어요</p>
               )}
