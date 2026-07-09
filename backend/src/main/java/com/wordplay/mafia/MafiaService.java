@@ -36,7 +36,8 @@ public class MafiaService implements RoomGame {
     private static final long MORNING_MS = 6_000;
     private static final long EXECUTE_MS = 6_000;
     private static final int MAX_BOTS = 3;
-    private static final int MAX_BOT_CHAT_PER_DISCUSS = 3;  // 봇당 토론 발언 상한(비용 방어)
+    private static final int MAX_BOT_CHAT_PER_DISCUSS = 10; // 봇당 토론 발언 총상한(비용 방어)
+    private static final int BOT_PROACTIVE_CHAT = 3;        // 봇이 스스로 여는 발언 수(그 이상은 사람 말에 반응해서만)
 
     private static final class Player {
         final String clientId;
@@ -236,6 +237,7 @@ public class MafiaService implements RoomGame {
         String t = cleanChat(text);
         if (t.isEmpty()) return buildResponse(clientId);
         chat.add(new ChatMsg(seatOf(me), me.nick, t, false, round, System.currentTimeMillis()));
+        pokeBotsForReply(); // 봇이 사람 말에 반응하도록
         return me(clientId);
     }
 
@@ -522,8 +524,28 @@ public class MafiaService implements RoomGame {
             botChatCount.merge(seat, 1, Integer::sum);
         }
         long now = System.currentTimeMillis();
-        if (botChatCount.getOrDefault(seat, 0) < MAX_BOT_CHAT_PER_DISCUSS && phaseEndsAt - now > 6000)
+        // 스스로 여는 발언은 BOT_PROACTIVE_CHAT까지만. 그 이상은 사람이 말 걸 때(poke) 반응.
+        if (botChatCount.getOrDefault(seat, 0) < BOT_PROACTIVE_CHAT && phaseEndsAt - now > 6000)
             botChatAt.put(seat, now + 2500 + rnd(6000));
+    }
+
+    /** 사람이 토론 중 발언하면 봇 1~2명이 곧 반응하도록 예약. */
+    private void pokeBotsForReply() {
+        if (phase != Phase.DISCUSS) return;
+        long now = System.currentTimeMillis();
+        List<Integer> idle = new ArrayList<>();
+        for (int seat : aliveSeats()) {
+            Player p = players.get(seat);
+            if (!p.ai || botInFlight.contains(seat)) continue;
+            if (botChatCount.getOrDefault(seat, 0) >= MAX_BOT_CHAT_PER_DISCUSS) continue;
+            if (botChatAt.getOrDefault(seat, Long.MAX_VALUE) <= now + 2500) continue; // 이미 곧 말할 예정
+            idle.add(seat);
+        }
+        if (idle.isEmpty()) return;
+        Collections.shuffle(idle);
+        int replies = Math.min(idle.size(), 1 + rnd(2)); // 1~2명만 반응(전원이 우르르 답하면 어색)
+        for (int k = 0; k < replies; k++)
+            botChatAt.put(idle.get(k), now + 700 + 900L * k + rnd(1200));
     }
 
     // --- 투표: LLM 결정(비동기), 실패·마감임박 시 규칙 폴백 ---
