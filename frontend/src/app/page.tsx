@@ -78,6 +78,14 @@ export default function HomePage() {
           <h2 className="text-2xl font-bold mb-2">🎨 그림 텔레폰</h2>
           <p className="text-gray-600">문장을 그림으로, 그림을 문장으로 넘기며 엉뚱하게 변해가는 갈틱폰 (3~10인).</p>
         </Link>
+
+        <Link
+          href="/bingo"
+          className="border-2 border-gray-200 rounded-xl p-8 hover:border-hit transition"
+        >
+          <h2 className="text-2xl font-bold mb-2">🔢 빙고</h2>
+          <p className="text-gray-600">3×3~5×5 판을 채우고, 뽑히는 숫자로 먼저 빙고 줄을 완성하면 승리 (2~8인).</p>
+        </Link>
       </div>
     </main>
   );
