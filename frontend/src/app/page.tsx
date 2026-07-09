@@ -86,6 +86,22 @@ export default function HomePage() {
           <h2 className="text-2xl font-bold mb-2">🔢 빙고</h2>
           <p className="text-gray-600">3×3~5×5 판을 채우고, 뽑히는 숫자로 먼저 빙고 줄을 완성하면 승리 (2~8인).</p>
         </Link>
+
+        <Link
+          href="/snake"
+          className="border-2 border-gray-200 rounded-xl p-8 hover:border-hit transition"
+        >
+          <h2 className="text-2xl font-bold mb-2">🐍 지렁이</h2>
+          <p className="text-gray-600">먹이를 먹고 커지며 봇과 경쟁하는 지렁이 게임. 랭킹 등록 (혼자 플레이).</p>
+        </Link>
+
+        <Link
+          href="/territory"
+          className="border-2 border-gray-200 rounded-xl p-8 hover:border-hit transition"
+        >
+          <h2 className="text-2xl font-bold mb-2">🗺️ 땅따먹기</h2>
+          <p className="text-gray-600">영역을 그려 땅을 넓히고 봇과 경쟁하는 게임. 랭킹 등록 (혼자 플레이).</p>
+        </Link>
       </div>
     </main>
   );
