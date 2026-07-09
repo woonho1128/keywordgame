@@ -60,10 +60,10 @@ public class HalliGalliGame implements RoomGame {
     private final Map<Integer, Long> botRingAt = new HashMap<>(); // 봇 좌석 -> 이번 5에 종 칠 시각
     // 난이도별 [생각시간base, 생각jitter, 반응base, 반응jitter, 놓칠확률‰(천분율)]
     private static final Map<String, int[]> AI_TUNE = Map.of(
-            "EASY",    new int[]{1000, 500, 1000, 600, 220},
-            "NORMAL",  new int[]{1000, 350, 850,  350, 80},
-            "HARD",    new int[]{650,  200, 550,  180, 20},
-            "EXTREME", new int[]{420,  150, 280,  120, 5}   // 초월: 반응 0.28~0.4s, 실수 0.5%
+            "EASY",    new int[]{1000, 500, 1000, 600, 300},
+            "NORMAL",  new int[]{1000, 350, 850,  350, 120},
+            "HARD",    new int[]{650,  200, 550,  180, 50},
+            "EXTREME", new int[]{420,  150, 280,  120, 15}   // 초월: 반응 0.28~0.4s, 실수 1.5%
     );
 
     // =================== 명령 ===================
