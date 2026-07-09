@@ -48,16 +48,19 @@ public record MafiaStateResponse(
         int discussSkipCount,          // 토론 스킵에 동의한 생존자 수
         boolean iSkippedDiscuss,       // 내가 스킵에 동의했는지
         List<String> history,          // 전체 공개 진행 이력(오래된 순)
-        List<String> myHistory         // 나만 보는 개인 이력(내 능력/투표)
+        List<String> myHistory,        // 나만 보는 개인 이력(내 능력/투표)
+        List<ChatView> chat            // 토론 채팅(공개, 최근 순)
 ) {
-    /** copResult: 경찰 본인에게만, 내가 조사한 사람이면 MAFIA/CITIZEN. */
-    public record PlayerView(int seat, String nick, boolean alive, String role, String copResult) {}
+    /** copResult: 경찰 본인에게만, 내가 조사한 사람이면 MAFIA/CITIZEN. bot: AI 봇 여부. */
+    public record PlayerView(int seat, String nick, boolean alive, String role, String copResult, boolean bot) {}
     public record VoteView(int targetSeat, int count) {}
+    /** 토론 채팅 한 줄. bot: AI 봇 발언 여부. */
+    public record ChatView(int seat, String nick, String text, boolean bot, long round) {}
 
     public static MafiaStateResponse notStarted(long now) {
         return new MafiaStateResponse(
                 "NOT_STARTED", 0, 0, now, false, false, 0, null, null, null, false,
                 List.of(), "NONE", List.of(), -1, List.of(), List.of(),
-                null, -1, -1, List.of(), null, 0, 0, 0, List.of(), 0, false, List.of(), List.of());
+                null, -1, -1, List.of(), null, 0, 0, 0, List.of(), 0, false, List.of(), List.of(), List.of());
     }
 }

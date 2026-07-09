@@ -4,6 +4,7 @@ import com.wordplay.common.dto.RoomSummary;
 import com.wordplay.common.exception.BusinessException;
 import com.wordplay.common.exception.ErrorCode;
 import com.wordplay.common.room.RoomRegistry;
+import com.wordplay.mafia.ai.MafiaBotRuntime;
 import com.wordplay.mafia.dto.NewMafiaRequest;
 import org.springframework.stereotype.Service;
 
@@ -14,10 +15,15 @@ import java.util.List;
 public class MafiaRoomManager {
 
     private final RoomRegistry<MafiaService> reg = new RoomRegistry<>();
+    private final MafiaBotRuntime botRuntime;
+
+    public MafiaRoomManager(MafiaBotRuntime botRuntime) {
+        this.botRuntime = botRuntime;
+    }
 
     /** 방 생성 + 방장 참가 → 새 방 코드 반환. */
     public String create(String clientId, NewMafiaRequest req) {
-        MafiaService game = new MafiaService();
+        MafiaService game = new MafiaService(botRuntime);
         game.newGame(clientId, req);
         try {
             return reg.add(game);

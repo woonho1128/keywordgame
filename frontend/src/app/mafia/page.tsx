@@ -7,8 +7,9 @@ type Phase =
   | 'NOT_STARTED' | 'LOBBY' | 'NIGHT' | 'MORNING'
   | 'DISCUSS' | 'VOTE' | 'EXECUTE' | 'ENDED';
 
-type PlayerView = { seat: number; nick: string; alive: boolean; role: string | null; copResult: string | null };
+type PlayerView = { seat: number; nick: string; alive: boolean; role: string | null; copResult: string | null; bot: boolean };
 type VoteView = { targetSeat: number; count: number };
+type ChatView = { seat: number; nick: string; text: string; bot: boolean; round: number };
 
 type MafiaState = {
   status: Phase;
@@ -41,6 +42,7 @@ type MafiaState = {
   iSkippedDiscuss: boolean;
   history: string[];
   myHistory: string[];
+  chat: ChatView[];
 };
 
 type RoomSummary = { code: string; status: string; playerCount: number; host: string };
@@ -110,6 +112,12 @@ export default function MafiaPage() {
   const [showAdmin, setShowAdmin] = useState(false);
   const [adminInput, setAdminInput] = useState('');
 
+  // AI 봇 / 채팅
+  const [aiAvailable, setAiAvailable] = useState(false);
+  const [botAdminInput, setBotAdminInput] = useState('');
+  const [chatText, setChatText] = useState('');
+  const chatRef = useRef<HTMLDivElement>(null);
+
   const cidRef = useRef('');
   const offsetRef = useRef(0); // serverNow - Date.now()
   const endsAtRef = useRef(0);
@@ -153,6 +161,7 @@ export default function MafiaPage() {
       const saved = localStorage.getItem(ROOM_KEY);
       if (saved) { roomRef.current = saved; setRoomCode(saved); }
     } catch {}
+    api<boolean>('/api/v1/mafia/ai-available').then(setAiAvailable).catch(() => {});
     poll();
     const pollTimer = setInterval(poll, 1000);
     const ticker = setInterval(() => {
@@ -192,10 +201,28 @@ export default function MafiaPage() {
     []
   );
 
+  // 채팅이 늘면 맨 아래로 스크롤
+  useEffect(() => {
+    if (chatRef.current) chatRef.current.scrollTop = chatRef.current.scrollHeight;
+  }, [st?.chat?.length]);
+
   const saveNick = (n: string) => {
     try {
       localStorage.setItem(NICK_KEY, n);
     } catch {}
+  };
+
+  const handleAddBots = async (count: number) => {
+    const code = botAdminInput.trim();
+    if (!code) return setError('봇 관리자 코드를 입력하세요');
+    await post(`/api/v1/mafia/add-bots?roomCode=${roomCode}&clientId=${encodeURIComponent(clientId)}&code=${encodeURIComponent(code)}&count=${count}`);
+  };
+
+  const handleSendChat = async () => {
+    const t = chatText.trim();
+    if (!t) return;
+    setChatText('');
+    await post(`/api/v1/mafia/chat?roomCode=${roomCode}&clientId=${encodeURIComponent(clientId)}`, { text: t });
   };
 
   const handleCreate = async () => {
@@ -371,6 +398,9 @@ export default function MafiaPage() {
         {error && <p className="text-red-500 text-sm mt-4 text-center">{error}</p>}
       </div>
 
+      {/* 토론 채팅 */}
+      {chatBox()}
+
       {/* 내 행동 기록(나만 봄) */}
       {st.myHistory && st.myHistory.length > 0 && (
         <details className="w-full mt-6 rounded-xl border border-hit/40 bg-hit/5">
@@ -514,6 +544,36 @@ export default function MafiaPage() {
           </div>
         </div>
 
+        {st!.isHost && aiAvailable && (
+          <div className="rounded-xl border border-purple-200 bg-purple-50/50 p-4 space-y-2">
+            <p className="text-sm font-bold text-purple-700">
+              🤖 AI 봇 추가 <span className="text-xs font-normal text-gray-400">(관리자)</span>
+            </p>
+            <p className="text-xs text-gray-500 leading-relaxed">
+              혼자여도 봇과 즐길 수 있어요. 봇은 토론 채팅에 참여하고 투표해요. 최대 3명.
+            </p>
+            <input
+              type="password"
+              value={botAdminInput}
+              onChange={(e) => setBotAdminInput(e.target.value)}
+              placeholder="봇 관리자 코드"
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-purple-400"
+            />
+            <div className="grid grid-cols-3 gap-2">
+              {[1, 2, 3].map((n) => (
+                <button
+                  key={n}
+                  onClick={() => handleAddBots(n)}
+                  disabled={busy || st!.playerCount >= 12}
+                  className="bg-purple-500 text-white text-sm font-bold py-2 rounded-lg hover:opacity-90 disabled:opacity-40"
+                >
+                  봇 +{n}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
         {!st!.joined ? (
           <div className="space-y-2">
             <label className="block text-sm font-medium">닉네임으로 참가</label>
@@ -594,6 +654,53 @@ export default function MafiaPage() {
             );
           })}
         </div>
+      </div>
+    );
+  }
+
+  function chatBox() {
+    if (!st) return null;
+    const dayPhase = phase === 'MORNING' || phase === 'DISCUSS' || phase === 'VOTE';
+    if (!dayPhase) return null;
+    return (
+      <div className="w-full mt-4 rounded-xl border border-gray-200 flex flex-col overflow-hidden">
+        <div className="px-3 py-2 border-b border-gray-100 text-sm font-bold text-gray-600 flex items-center justify-between">
+          <span>💬 토론 채팅</span>
+          <span className="text-[11px] font-normal text-gray-400">서로 의심하고 설득하세요</span>
+        </div>
+        <div ref={chatRef} className="overflow-y-auto px-3 py-2 space-y-1" style={{ height: '11rem' }}>
+          {st.chat.length === 0 && (
+            <p className="text-xs text-gray-300 text-center py-8">아직 대화가 없어요. 먼저 말을 걸어보세요!</p>
+          )}
+          {st.chat.map((c, i) => {
+            const mine = c.seat === st.seat;
+            return (
+              <div key={i} className={`text-sm leading-snug ${mine ? 'text-right' : ''}`}>
+                <span className={`font-bold ${c.bot ? 'text-purple-500' : mine ? 'text-hit' : 'text-gray-700'}`}>{c.nick}</span>
+                <span className="text-gray-700"> {c.text}</span>
+              </div>
+            );
+          })}
+        </div>
+        {st.joined && st.alive ? (
+          <div className="flex gap-2 p-2 border-t border-gray-100">
+            <input
+              value={chatText}
+              onChange={(e) => setChatText(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && handleSendChat()}
+              maxLength={200}
+              placeholder="메시지 입력..."
+              className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-hit"
+            />
+            <button onClick={handleSendChat} disabled={busy} className="bg-hit text-white text-sm font-bold px-4 rounded-lg disabled:opacity-50">
+              전송
+            </button>
+          </div>
+        ) : (
+          <div className="p-2 border-t border-gray-100 text-center text-xs text-gray-400">
+            {st.joined ? '사망하여 관전 중 — 대화할 수 없어요' : '관전 중'}
+          </div>
+        )}
       </div>
     );
   }

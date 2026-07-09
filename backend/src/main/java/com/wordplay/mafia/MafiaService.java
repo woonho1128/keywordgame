@@ -3,7 +3,9 @@ package com.wordplay.mafia;
 import com.wordplay.common.exception.BusinessException;
 import com.wordplay.common.exception.ErrorCode;
 import com.wordplay.common.room.RoomGame;
+import com.wordplay.mafia.ai.MafiaBotRuntime;
 import com.wordplay.mafia.dto.MafiaStateResponse;
+import com.wordplay.mafia.dto.MafiaStateResponse.ChatView;
 import com.wordplay.mafia.dto.MafiaStateResponse.PlayerView;
 import com.wordplay.mafia.dto.MafiaStateResponse.VoteView;
 import com.wordplay.mafia.dto.NewMafiaRequest;
@@ -16,6 +18,8 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ThreadLocalRandom;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * 마피아(완전 자동·타이머) 단일 전역 방. 인메모리로 관리(DB 미사용).
@@ -31,14 +35,20 @@ public class MafiaService implements RoomGame {
 
     private static final long MORNING_MS = 6_000;
     private static final long EXECUTE_MS = 6_000;
+    private static final int MAX_BOTS = 3;
+    private static final int MAX_BOT_CHAT_PER_DISCUSS = 3;  // 봇당 토론 발언 상한(비용 방어)
 
     private static final class Player {
         final String clientId;
         String nick;
         Role role;
         boolean alive = true;
+        boolean ai = false;         // AI 봇 여부
         Player(String clientId, String nick) { this.clientId = clientId; this.nick = nick; }
     }
+
+    /** 토론 채팅 한 줄. */
+    private record ChatMsg(int seat, String nick, String text, boolean ai, long round, long ts) {}
 
     // ---- 게임 상태 ----
     private Phase phase = null;              // null = 방 없음(NOT_STARTED)
@@ -74,6 +84,20 @@ public class MafiaService implements RoomGame {
     private int nightDeadSeat = -1;
     private int executedSeat = -1;
     private String winner = null;
+
+    // ---- 채팅/AI 봇 ----
+    private final List<ChatMsg> chat = new ArrayList<>();               // 토론 채팅(공개)
+    private final AtomicInteger botCounter = new AtomicInteger(0);      // 봇 닉네임 번호
+    private final MafiaBotRuntime bot;                                  // null이면 봇 비활성
+    private final Set<Integer> botInFlight = new HashSet<>();           // LLM 호출 진행 중인 봇 좌석
+    private final Map<Integer, Long> botNightAt = new HashMap<>();      // 봇 좌석 -> 밤 행동 시각
+    private final Map<Integer, Long> botChatAt = new HashMap<>();       // 봇 좌석 -> 다음 발언 시각
+    private final Map<Integer, Integer> botChatCount = new HashMap<>(); // 봇 좌석 -> 이번 토론 발언 수
+    private final Map<Integer, Long> botVoteAt = new HashMap<>();       // 봇 좌석 -> 투표 시각
+    private long botPacingRound = -1;                                   // 토론 페이싱 초기화 기준 라운드
+
+    public MafiaService() { this(null); }
+    public MafiaService(MafiaBotRuntime bot) { this.bot = bot; }
 
     // =================== 명령 ===================
 
@@ -183,6 +207,38 @@ public class MafiaService implements RoomGame {
         return me(clientId);
     }
 
+    /** 관리자: AI 봇 추가(대기방에서만, 최대 3명). */
+    public synchronized MafiaStateResponse addBots(int count) {
+        if (bot == null || !bot.available())
+            throw new BusinessException(ErrorCode.INVALID_INPUT, "AI 봇이 설정되어 있지 않습니다(OpenAI 키 필요)");
+        if (phase != Phase.LOBBY)
+            throw new BusinessException(ErrorCode.INVALID_INPUT, "대기방에서만 봇을 추가할 수 있습니다");
+        int botsNow = (int) players.stream().filter(p -> p.ai).count();
+        int want = Math.min(Math.max(1, count), MAX_BOTS - botsNow);
+        if (want <= 0) throw new BusinessException(ErrorCode.INVALID_INPUT, "봇은 최대 " + MAX_BOTS + "명까지입니다");
+        for (int i = 0; i < want && players.size() < 12; i++) {
+            int n = botCounter.incrementAndGet();
+            Player b = new Player("bot::" + n + "::" + System.nanoTime(), "🤖 봇" + n);
+            b.ai = true;
+            players.add(b);
+            clientSeats.put(b.clientId, players.size() - 1);
+        }
+        return buildResponse(hostClientId);
+    }
+
+    /** 낮(아침/토론/투표) 동안 채팅 한 줄 전송. */
+    public synchronized MafiaStateResponse sendChat(String clientId, String text) {
+        tick();
+        Player me = requirePlayer(clientId);
+        if (phase != Phase.MORNING && phase != Phase.DISCUSS && phase != Phase.VOTE)
+            throw new BusinessException(ErrorCode.INVALID_INPUT, "지금은 대화할 수 없습니다");
+        if (!me.alive) throw new BusinessException(ErrorCode.INVALID_INPUT, "사망한 플레이어는 대화할 수 없습니다");
+        String t = cleanChat(text);
+        if (t.isEmpty()) return buildResponse(clientId);
+        chat.add(new ChatMsg(seatOf(me), me.nick, t, false, round, System.currentTimeMillis()));
+        return me(clientId);
+    }
+
     /** 관리자 초기화. */
     public synchronized MafiaStateResponse resetGame() {
         reset();
@@ -215,6 +271,7 @@ public class MafiaService implements RoomGame {
                 && phaseEndsAt > 0 && now >= phaseEndsAt && guard++ < 30) {
             advance();
         }
+        driveBots(System.currentTimeMillis());
     }
 
     private void maybeAdvanceNight() {
@@ -228,8 +285,8 @@ public class MafiaService implements RoomGame {
     private void advance() {
         switch (phase) {
             case NIGHT -> { resolveNight(); if (!checkWin()) startPhase(Phase.MORNING); }
-            case MORNING -> { skipVotes.clear(); startPhase(Phase.DISCUSS); }
-            case DISCUSS -> { votes.clear(); startPhase(Phase.VOTE); }
+            case MORNING -> { skipVotes.clear(); startPhase(Phase.DISCUSS); initBotDiscuss(); }
+            case DISCUSS -> { votes.clear(); startPhase(Phase.VOTE); initBotVote(); }
             case VOTE -> { resolveVote(); if (!checkWin()) startPhase(Phase.EXECUTE); }
             case EXECUTE -> { round++; prepareNight(); startPhase(Phase.NIGHT); }
             default -> { }
@@ -255,6 +312,7 @@ public class MafiaService implements RoomGame {
         doctorTarget = -1;
         citizenPicks.clear();
         nightActed.clear();
+        botNightAt.clear();
     }
 
     private void resolveNight() {
@@ -358,6 +416,248 @@ public class MafiaService implements RoomGame {
         return false;
     }
 
+    // =================== AI 봇 ===================
+
+    /** tick 끝에서 현재 페이즈에 맞는 봇 행동을 구동. */
+    private void driveBots(long now) {
+        if (bot == null || !bot.available() || phase == null) return;
+        if (players.stream().noneMatch(p -> p.ai)) return;
+        switch (phase) {
+            case NIGHT -> driveBotNight(now);
+            case DISCUSS -> driveBotDiscuss(now);
+            case VOTE -> driveBotVote(now);
+            default -> { }
+        }
+    }
+
+    // --- 밤: 규칙 기반(즉시·무료) ---
+    private void driveBotNight(long now) {
+        boolean acted = false;
+        for (int seat : aliveSeats()) {
+            Player p = players.get(seat);
+            if (!p.ai || nightActed.contains(seat)) continue;
+            long due = botNightAt.computeIfAbsent(seat, s -> now + 700 + rnd(2500));
+            if (now < due) continue;
+            int target = chooseNightTarget(p);
+            if (target >= 0) {
+                switch (p.role) {
+                    case MAFIA -> mafiaPicks.put(seat, target);
+                    case POLICE -> copTarget = target;
+                    case DOCTOR -> doctorTarget = target;
+                    case CITIZEN -> citizenPicks.put(seat, target);
+                }
+            }
+            nightActed.add(seat);
+            acted = true;
+        }
+        if (acted) maybeAdvanceNight();
+    }
+
+    /** 역할별 밤 대상 선택(생존자 중). 없으면 -1. */
+    private int chooseNightTarget(Player p) {
+        List<Integer> alive = aliveSeats();
+        int myS = seatOf(p);
+        switch (p.role) {
+            case MAFIA -> {
+                List<Integer> targets = new ArrayList<>();
+                for (int i : alive) if (players.get(i).role != Role.MAFIA) targets.add(i);
+                if (targets.isEmpty()) return -1;
+                // 모든 마피아 봇이 같은 대상을 고르도록 라운드 기반 결정.
+                return targets.get((int) Math.floorMod(round * 2654435761L, (long) targets.size()));
+            }
+            case POLICE -> {
+                List<Integer> unchecked = new ArrayList<>();
+                for (int i : alive) if (i != myS && !copFindings.containsKey(i)) unchecked.add(i);
+                List<Integer> pool = !unchecked.isEmpty() ? unchecked
+                        : alive.stream().filter(i -> i != myS).toList();
+                return pool.isEmpty() ? -1 : pool.get(rnd(pool.size()));
+            }
+            case DOCTOR -> {
+                List<Integer> pool = alive.stream().filter(i -> i != lastDoctorTarget).toList();
+                return pool.isEmpty() ? -1 : pool.get(rnd(pool.size()));
+            }
+            default -> {
+                List<Integer> pool = alive.stream().filter(i -> i != myS).toList();
+                return pool.isEmpty() ? -1 : pool.get(rnd(pool.size()));
+            }
+        }
+    }
+
+    // --- 토론: LLM 채팅(비동기, 페이싱) ---
+    private void initBotDiscuss() {
+        botPacingRound = round;
+        botChatCount.clear();
+        botChatAt.clear();
+        long now = System.currentTimeMillis();
+        int i = 0;
+        for (int seat : aliveSeats()) {
+            if (!players.get(seat).ai) continue;
+            botChatCount.put(seat, 0);
+            botChatAt.put(seat, now + 1200 + 2600L * (i++) + rnd(1500));
+        }
+    }
+
+    private void driveBotDiscuss(long now) {
+        for (int seat : aliveSeats()) {
+            Player p = players.get(seat);
+            if (!p.ai || botInFlight.contains(seat)) continue;
+            if (botChatCount.getOrDefault(seat, MAX_BOT_CHAT_PER_DISCUSS) >= MAX_BOT_CHAT_PER_DISCUSS) continue;
+            if (now < botChatAt.getOrDefault(seat, Long.MAX_VALUE)) continue;
+            botChatAt.put(seat, Long.MAX_VALUE);       // 응답 올 때까지 정지
+            botInFlight.add(seat);
+            long r = round;
+            String user = buildChatPrompt(p);
+            bot.submit(() -> applyBotChat(seat, r, bot.chat(user)));
+        }
+    }
+
+    synchronized void applyBotChat(int seat, long r, String text) {
+        botInFlight.remove(seat);
+        if (phase != Phase.DISCUSS || r != round || seat >= players.size()) return;
+        Player p = players.get(seat);
+        if (!p.alive || !p.ai) return;
+        String t = cleanChat(text);
+        if (!t.isEmpty()) {
+            chat.add(new ChatMsg(seat, p.nick, t, true, round, System.currentTimeMillis()));
+            botChatCount.merge(seat, 1, Integer::sum);
+        }
+        long now = System.currentTimeMillis();
+        if (botChatCount.getOrDefault(seat, 0) < MAX_BOT_CHAT_PER_DISCUSS && phaseEndsAt - now > 6000)
+            botChatAt.put(seat, now + 2500 + rnd(6000));
+    }
+
+    // --- 투표: LLM 결정(비동기), 실패·마감임박 시 규칙 폴백 ---
+    private void initBotVote() {
+        botVoteAt.clear();
+        long now = System.currentTimeMillis();
+        for (int seat : aliveSeats())
+            if (players.get(seat).ai) botVoteAt.put(seat, now + 1200 + rnd(3500));
+    }
+
+    private void driveBotVote(long now) {
+        boolean acted = false;
+        for (int seat : aliveSeats()) {
+            Player p = players.get(seat);
+            if (!p.ai || votes.containsKey(seat) || botInFlight.contains(seat)) continue;
+            if (phaseEndsAt - now < 3500) {            // 마감 임박: 규칙으로 즉시 투표
+                votes.put(seat, heuristicVote(p));
+                acted = true;
+                continue;
+            }
+            if (now < botVoteAt.getOrDefault(seat, Long.MAX_VALUE)) continue;
+            botVoteAt.put(seat, Long.MAX_VALUE);
+            botInFlight.add(seat);
+            long r = round;
+            String user = buildVotePrompt(p);
+            bot.submit(() -> applyBotVote(seat, r, bot.vote(user)));
+        }
+        if (acted) maybeAdvanceVote();
+    }
+
+    synchronized void applyBotVote(int seat, long r, String out) {
+        botInFlight.remove(seat);
+        if (phase != Phase.VOTE || r != round || seat >= players.size()) return;
+        Player p = players.get(seat);
+        if (!p.alive || !p.ai || votes.containsKey(seat)) return;
+        votes.put(seat, parseVote(out, p));
+        maybeAdvanceVote();
+    }
+
+    /** LLM 출력에서 좌석 번호 파싱. 유효하지 않으면 규칙 폴백. */
+    private int parseVote(String out, Player p) {
+        if (out != null) {
+            java.util.regex.Matcher m = java.util.regex.Pattern.compile("-?\\d+").matcher(out);
+            if (m.find()) {
+                int seat1 = Integer.parseInt(m.group());
+                if (seat1 == 0) return -1;             // 기권
+                int s0 = seat1 - 1;
+                if (s0 != seatOf(p) && aliveSeats().contains(s0)) return s0;
+            }
+        }
+        return heuristicVote(p);
+    }
+
+    /** 규칙 기반 투표(폴백): 마피아 봇은 비마피아 랜덤, 그 외는 기권. */
+    private int heuristicVote(Player p) {
+        if (p.role == Role.MAFIA) {
+            List<Integer> targets = aliveSeats().stream()
+                    .filter(i -> i != seatOf(p) && players.get(i).role != Role.MAFIA).toList();
+            if (!targets.isEmpty()) return targets.get(rnd(targets.size()));
+        }
+        return -1;
+    }
+
+    // --- 프롬프트(정보 격리: 각 좌석이 아는 것만) ---
+    private String buildChatPrompt(Player p) {
+        return commonContext()
+                + "\n너는 '" + p.nick + "'(" + (seatOf(p) + 1) + "번)이다. " + rolePrivate(p)
+                + "\n지금 토론방에 자연스럽게 한 줄만 보내라. 다른 설명 없이 대사만.";
+    }
+
+    private String buildVotePrompt(Player p) {
+        List<Integer> cand = aliveSeats().stream().filter(i -> i != seatOf(p)).map(i -> i + 1).toList();
+        return commonContext()
+                + "\n너는 '" + p.nick + "'(" + (seatOf(p) + 1) + "번)이다. " + rolePrivate(p)
+                + "\n이제 처형할 사람을 정한다. 다음 좌석 번호 중 하나만 숫자로 답하라: " + cand
+                + ". 기권은 0. 숫자만 출력.";
+    }
+
+    /** 모든 역할이 공유하는 공개 정보(생존자·최근 이력·이번 라운드 토론). */
+    private String commonContext() {
+        StringBuilder sb = new StringBuilder();
+        sb.append(round).append("일차. 생존자: ");
+        List<String> alive = new ArrayList<>();
+        for (int i : aliveSeats()) alive.add((i + 1) + "번 " + players.get(i).nick);
+        sb.append(String.join(", ", alive)).append(".");
+        int from = Math.max(0, history.size() - 6);
+        if (from < history.size()) {
+            sb.append("\n[상황]");
+            for (int i = from; i < history.size(); i++) sb.append("\n- ").append(history.get(i));
+        }
+        List<ChatMsg> today = chat.stream().filter(c -> c.round() == round).toList();
+        if (today.isEmpty()) sb.append("\n[대화] 아직 아무도 말하지 않았다.");
+        else {
+            sb.append("\n[대화]");
+            for (ChatMsg c : today) sb.append("\n").append(c.nick()).append(": ").append(c.text());
+        }
+        return sb.toString();
+    }
+
+    /** viewer가 실제로 아는 자기 역할·비밀 정보(정보 격리). */
+    private String rolePrivate(Player p) {
+        switch (p.role) {
+            case MAFIA -> {
+                List<String> fellows = new ArrayList<>();
+                for (int i = 0; i < players.size(); i++)
+                    if (i != seatOf(p) && players.get(i).role == Role.MAFIA)
+                        fellows.add((i + 1) + "번 " + players.get(i).nick);
+                String team = fellows.isEmpty() ? "동료 마피아는 없다(너 혼자)." : "동료 마피아: " + String.join(", ", fellows) + ".";
+                return "너의 정체는 [마피아]. " + team + " 정체를 숨기고 시민인 척하며 남을 의심하게 유도하라. 동료는 은근히 감싸라.";
+            }
+            case POLICE -> {
+                List<String> found = new ArrayList<>();
+                for (var e : copFindings.entrySet())
+                    found.add((e.getKey() + 1) + "번 " + players.get(e.getKey()).nick + "=" + (e.getValue() ? "마피아" : "시민"));
+                String info = found.isEmpty() ? "아직 조사 결과가 없다." : "너의 조사 결과: " + String.join(", ", found) + ".";
+                return "너의 정체는 [경찰]. " + info + " 결과를 활용하되 대놓고 경찰이라 밝히면 밤에 죽으니 조심히 몰아가라.";
+            }
+            case DOCTOR -> {
+                return "너의 정체는 [의사]. 정체를 숨기고 일반 시민처럼 추리에 참여하라.";
+            }
+            default -> {
+                return "너의 정체는 [시민]. 특별한 정보는 없다. 대화의 모순과 투표 행태로 마피아를 추리하라.";
+            }
+        }
+    }
+
+    private static int rnd(int bound) { return bound <= 0 ? 0 : ThreadLocalRandom.current().nextInt(bound); }
+
+    private static String cleanChat(String s) {
+        if (s == null) return "";
+        String t = s.trim().replaceAll("^[\"'\\s]+|[\"'\\s]+$", "").replaceAll("\\s+", " ");
+        return t.length() > 120 ? t.substring(0, 120) : t;
+    }
+
     // =================== 응답 빌드 ===================
 
     private MafiaStateResponse buildResponse(String clientId) {
@@ -379,7 +679,7 @@ public class MafiaService implements RoomGame {
             // 경찰에게만: 내가 조사한 사람은 시민/마피아 표시
             String copResult = null;
             if (iAmPolice && copFindings.containsKey(i)) copResult = copFindings.get(i) ? "MAFIA" : "CITIZEN";
-            board.add(new PlayerView(i + 1, p.nick, p.alive, shownRole, copResult));
+            board.add(new PlayerView(i + 1, p.nick, p.alive, shownRole, copResult, p.ai));
         }
 
         String actionKind = "NONE";
@@ -469,8 +769,20 @@ public class MafiaService implements RoomGame {
                 (int) skipVotes.stream().filter(s -> s < players.size() && players.get(s).alive).count(),
                 joined && skipVotes.contains(mySeatIdx),
                 List.copyOf(history),
-                joined && myLogs.containsKey(mySeatIdx) ? List.copyOf(myLogs.get(mySeatIdx)) : List.of()
+                joined && myLogs.containsKey(mySeatIdx) ? List.copyOf(myLogs.get(mySeatIdx)) : List.of(),
+                recentChat()
         );
+    }
+
+    /** 최근 채팅(최대 60줄) → 뷰. */
+    private List<ChatView> recentChat() {
+        int from = Math.max(0, chat.size() - 60);
+        List<ChatView> out = new ArrayList<>();
+        for (int i = from; i < chat.size(); i++) {
+            ChatMsg c = chat.get(i);
+            out.add(new ChatView(c.seat() + 1, c.nick(), c.text(), c.ai(), c.round()));
+        }
+        return out;
     }
 
     // =================== 유틸 ===================
@@ -498,6 +810,14 @@ public class MafiaService implements RoomGame {
         nightMessage = null;
         nightDeadSeat = executedSeat = -1;
         winner = null;
+        chat.clear();
+        botCounter.set(0);
+        botInFlight.clear();
+        botNightAt.clear();
+        botChatAt.clear();
+        botChatCount.clear();
+        botVoteAt.clear();
+        botPacingRound = -1;
     }
 
     private void addPlayer(String clientId, String nick) {

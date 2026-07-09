@@ -5,6 +5,8 @@ import com.wordplay.common.dto.CreateRoomResponse;
 import com.wordplay.common.dto.RoomSummary;
 import com.wordplay.common.exception.BusinessException;
 import com.wordplay.common.exception.ErrorCode;
+import com.wordplay.mafia.ai.MafiaBotRuntime;
+import com.wordplay.mafia.dto.ChatRequest;
 import com.wordplay.mafia.dto.JoinRequest;
 import com.wordplay.mafia.dto.MafiaStateResponse;
 import com.wordplay.mafia.dto.NewMafiaRequest;
@@ -22,9 +24,14 @@ import java.util.List;
 public class MafiaController {
 
     private final MafiaRoomManager rooms;
+    private final MafiaBotRuntime botRuntime;
 
     @Value("${app.spyfall.admin-code}")
     private String adminCode;
+
+    /** AI 봇 추가(관리자) 코드. 전체 초기화 코드와 다르다. */
+    @Value("${app.mafia.bot-admin-code}")
+    private String botAdminCode;
 
     /** 방 목록. */
     @GetMapping("/rooms")
@@ -81,6 +88,31 @@ public class MafiaController {
     public ApiResponse<MafiaStateResponse> skipDiscuss(@RequestParam String roomCode, @RequestParam String clientId) {
         validateClientId(clientId);
         return ApiResponse.success(rooms.require(roomCode).skipDiscuss(clientId));
+    }
+
+    /** 토론 채팅 전송. */
+    @PostMapping("/chat")
+    public ApiResponse<MafiaStateResponse> chat(@RequestParam String roomCode, @RequestParam String clientId,
+                                                @Valid @RequestBody ChatRequest req) {
+        validateClientId(clientId);
+        return ApiResponse.success(rooms.require(roomCode).sendChat(clientId, req.text()));
+    }
+
+    /** AI 봇 사용 가능 여부(OpenAI 키 설정 여부). */
+    @GetMapping("/ai-available")
+    public ApiResponse<Boolean> aiAvailable() {
+        return ApiResponse.success(botRuntime.available());
+    }
+
+    /** 관리자: AI 봇 추가(대기방, 최대 3명). 봇 전용 관리자 코드 필요. */
+    @PostMapping("/add-bots")
+    public ApiResponse<MafiaStateResponse> addBots(@RequestParam String roomCode, @RequestParam String clientId,
+                                                   @RequestParam String code, @RequestParam(defaultValue = "1") int count) {
+        validateClientId(clientId);
+        if (!botAdminCode.equals(code)) throw new BusinessException(ErrorCode.INVALID_INPUT, "봇 관리자 코드가 올바르지 않습니다");
+        MafiaService g = rooms.require(roomCode);
+        g.addBots(count);
+        return ApiResponse.success(g.me(clientId));
     }
 
     /** 전체 방 초기화(관리자). */
