@@ -63,7 +63,7 @@ public class HalliGalliGame implements RoomGame {
             "EASY",    new int[]{1000, 500, 1000, 600, 300},
             "NORMAL",  new int[]{1000, 350, 850,  350, 120},
             "HARD",    new int[]{650,  200, 550,  180, 50},
-            "EXTREME", new int[]{420,  150, 280,  120, 15}   // 초월: 반응 0.28~0.4s, 실수 1.5%
+            "EXTREME", new int[]{420,  150, 600,  120, 15}   // 초월: 반응 0.6~0.72s, 실수 1.5%
     );
 
     // =================== 명령 ===================
