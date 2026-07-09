@@ -82,6 +82,25 @@ class HalliGalliGameTest {
     }
 
     @Test
+    void 봇_차례면_생각시간_후_자동_넘김() throws Exception {
+        HalliGalliGame g = new HalliGalliGame();
+        g.newGame("host", "p0");
+        g.addAi("host", "HARD");
+        assertThat(g.me("host").playerCount()).isEqualTo(2);
+        g.start("host");
+        assertThat(g.tick()).isFalse();  // host(사람) 차례 → 봇 무동작
+        g.flip("host");                  // 봇(seat1) 차례로 넘어감
+        setLong(g, "flipReadyAt", 1L);   // 봇 생각시간 지난 것으로 강제
+        assertThat(g.tick()).isTrue();   // 봇이 자동으로 한 장 넘김
+    }
+
+    private void setLong(HalliGalliGame g, String field, long v) throws Exception {
+        java.lang.reflect.Field f = HalliGalliGame.class.getDeclaredField(field);
+        f.setAccessible(true);
+        f.setLong(g, v);
+    }
+
+    @Test
     void 최소인원_미달() {
         HalliGalliGame g = new HalliGalliGame();
         g.newGame("host", "p0");

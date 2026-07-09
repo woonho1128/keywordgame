@@ -50,6 +50,23 @@ public class HalliGalliController {
         return ApiResponse.success(res);
     }
 
+    @PostMapping("/add-ai")
+    public ApiResponse<HalliGalliStateResponse> addAi(@RequestParam String roomCode, @RequestParam String clientId,
+                                                      @RequestParam(defaultValue = "NORMAL") String level) {
+        validateClientId(clientId);
+        HalliGalliStateResponse res = rooms.require(roomCode).addAi(clientId, level);
+        rooms.broadcast(roomCode);
+        return ApiResponse.success(res);
+    }
+
+    @PostMapping("/remove-ai")
+    public ApiResponse<HalliGalliStateResponse> removeAi(@RequestParam String roomCode, @RequestParam String clientId) {
+        validateClientId(clientId);
+        HalliGalliStateResponse res = rooms.require(roomCode).removeAi(clientId);
+        rooms.broadcast(roomCode);
+        return ApiResponse.success(res);
+    }
+
     @PostMapping("/start")
     public ApiResponse<HalliGalliStateResponse> start(@RequestParam String roomCode, @RequestParam String clientId) {
         validateClientId(clientId);
@@ -79,6 +96,7 @@ public class HalliGalliController {
         validateClientId(clientId);
         HalliGalliGame g = rooms.find(roomCode);
         if (g == null) return ApiResponse.success(HalliGalliStateResponse.notStarted(System.currentTimeMillis()));
+        if (g.tick()) rooms.broadcast(roomCode); // 봇 진행(폴링에 얹어 실시간 동작)
         return ApiResponse.success(g.me(clientId));
     }
 

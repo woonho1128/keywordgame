@@ -164,6 +164,8 @@ export default function HalliGalliPage() {
     if (res) applyState(res);
   };
   const handleStart = async () => { const r = await post(`/api/v1/halligalli/start?${rp()}`); if (r) applyState(r); };
+  const handleAddAi = async (level: string) => { const r = await post(`/api/v1/halligalli/add-ai?${rp()}&level=${level}`); if (r) applyState(r); };
+  const handleRemoveAi = async () => { const r = await post(`/api/v1/halligalli/remove-ai?${rp()}`); if (r) applyState(r); };
   const handleFlip = async () => { const r = await post(`/api/v1/halligalli/flip?${rp()}`); if (r) applyState(r); };
   const handleRing = useCallback(async () => {
     const code = roomRef.current;
@@ -315,9 +317,27 @@ export default function HalliGalliPage() {
               <button onClick={handleJoin} disabled={busy} className="bg-hit text-white font-bold px-5 rounded-lg disabled:opacity-50">참가</button>
             </div>
           ) : st.isHost ? (
-            <button onClick={handleStart} disabled={busy || st.playerCount < 2} className="w-full bg-hit text-white font-bold py-3 rounded-lg disabled:opacity-40">
-              {st.playerCount >= 2 ? '게임 시작' : '최소 2명 필요'}
-            </button>
+            <div className="space-y-3">
+              <div className="rounded-xl border border-amber-200 bg-amber-50/60 p-3">
+                <div className="flex items-center justify-between mb-2">
+                  <p className="text-sm font-bold text-amber-800">🤖 AI 봇 추가</p>
+                  <button onClick={handleRemoveAi} disabled={busy || !st.players.some((p) => p.nick.startsWith('🤖'))}
+                    className="text-xs text-gray-500 underline disabled:opacity-30">AI 제거</button>
+                </div>
+                <div className="grid grid-cols-3 gap-2">
+                  {[['EASY', '초급', 'bg-emerald-400'], ['NORMAL', '중급', 'bg-amber-400'], ['HARD', '고급', 'bg-rose-400']].map(([lv, label, cls]) => (
+                    <button key={lv} onClick={() => handleAddAi(lv)} disabled={busy || st.playerCount >= 6}
+                      className={`${cls} text-white font-bold py-2 rounded-lg text-sm shadow-[0_2px_0_rgba(0,0,0,0.15)] active:translate-y-0.5 disabled:opacity-40`}>
+                      {label}
+                    </button>
+                  ))}
+                </div>
+                <p className="text-[11px] text-gray-400 mt-2 text-center">혼자서도 봇과 연습 · 고급은 반응속도가 매우 빨라요</p>
+              </div>
+              <button onClick={handleStart} disabled={busy || st.playerCount < 2} className="w-full bg-hit text-white font-bold py-3 rounded-lg disabled:opacity-40">
+                {st.playerCount >= 2 ? '게임 시작' : '최소 2명 필요 (AI 추가 가능)'}
+              </button>
+            </div>
           ) : <p className="text-center text-gray-500 text-sm">방장이 시작하기를 기다리는 중...</p>}
         </div>
       )}
