@@ -18,7 +18,7 @@ type Vec = { x: number; y: number };
 type Snake = {
   path: Vec[]; segs: number; angle: number; target: number;
   r: number; color: string; alive: boolean; bot: boolean; name: string;
-  score: number; respawnAt: number; invulnUntil: number;
+  score: number; respawnAt: number; invulnUntil: number; grow: number;
 };
 type Food = { x: number; y: number; r: number; c: string };
 type Obstacle = { x: number; y: number; r: number };
@@ -55,7 +55,7 @@ export default function SnakePage() {
     const angle = rand(0, Math.PI * 2);
     const path: Vec[] = [];
     for (let i = 0; i < START_SEG * SEG_GAP + 5; i++) path.push({ x: x - Math.cos(angle) * i, y: y - Math.sin(angle) * i });
-    return { path, segs: START_SEG, angle, target: angle, r: BASE_R, color, alive: true, bot, name, score: 0, respawnAt: 0, invulnUntil: performance.now() + invulnMs };
+    return { path, segs: START_SEG, angle, target: angle, r: BASE_R, color, alive: true, bot, name, score: 0, respawnAt: 0, invulnUntil: performance.now() + invulnMs, grow: 0 };
   };
 
   // 플레이어·장애물에서 충분히 떨어진 스폰 위치(스폰 즉사 방지)
@@ -156,11 +156,14 @@ export default function SnakePage() {
         const h = head(s);
         const nh = { x: h.x + Math.cos(s.angle) * SPEED, y: h.y + Math.sin(s.angle) * SPEED };
         s.path.unshift(nh);
-        const maxLen = s.segs * SEG_GAP + 6;
+        // 성장은 프레임당 조금씩만 반영 → 먹는 중에도 꼬리가 멈추지 않고 계속 움직임
+        if (s.grow > 0) { const inc = Math.min(s.grow, 0.2); s.segs = Math.min(500, s.segs + inc); s.grow -= inc; }
+        const maxLen = Math.floor(s.segs) * SEG_GAP + 6;
         if (s.path.length > maxLen) s.path.length = maxLen;
         s.r = BASE_R + Math.min(6, s.segs / 40);
       }
       // 먹이 섭취(머리·몸통·꼬리 어디든 닿으면 먹음 → 몸 밑에 끼어 안 사라지는 문제 해결)
+      // 성장은 grow에 쌓아 서서히 반영(꼬리 멈춤 방지). 머리로 먹으면 많이, 몸통으로 먹으면 조금.
       for (const s of g.snakes) {
         if (!s.alive) continue;
         const parts = body(s);
@@ -170,7 +173,9 @@ export default function SnakePage() {
           for (let j = 0; j < parts.length; j++) {
             const p = parts[j];
             if ((f.x - p.x) ** 2 + (f.y - p.y) ** 2 < rr * rr) {
-              g.foods.splice(i, 1); s.segs = Math.min(500, s.segs + 3); s.score += 1;
+              g.foods.splice(i, 1);
+              s.score += 1;
+              s.grow = Math.min(s.grow + (j === 0 ? 3 : 1), 30);
               if (s === g.me) setScore(s.score);
               spawnFood(g.foods);
               break;
