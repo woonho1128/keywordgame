@@ -392,7 +392,7 @@ export default function MafiaPage() {
               {st.round}일차 · {PHASE_LABEL[phase]}
             </div>
             {st.phaseEndsAt > 0 && (
-              <div className="text-lg font-extrabold tabular-nums text-gray-800">{remaining}s</div>
+              <div className={`text-lg font-extrabold tabular-nums transition-colors ${remaining <= 10 && remaining > 0 ? 'text-red-500 animate-pulse' : 'text-gray-800'}`}>{remaining}s</div>
             )}
           </div>
         )}
@@ -711,11 +711,19 @@ export default function MafiaPage() {
     if (!st) return null;
     const dayPhase = phase === 'MORNING' || phase === 'DISCUSS' || phase === 'VOTE';
     if (!dayPhase) return null;
+    const timed = st.phaseEndsAt > 0;
+    const urgent = timed && remaining > 0 && remaining <= 10;
     return (
-      <div className="w-full mt-4 rounded-xl border border-gray-200 flex flex-col overflow-hidden">
-        <div className="px-3 py-2 border-b border-gray-100 text-sm font-bold text-gray-600 flex items-center justify-between">
+      <div className={`w-full mt-4 rounded-xl border flex flex-col overflow-hidden transition-all ${urgent ? 'border-red-400 ring-2 ring-red-300' : 'border-gray-200'}`}>
+        <div className={`px-3 py-2 border-b text-sm font-bold flex items-center justify-between transition-colors ${urgent ? 'border-red-100 bg-red-50 text-red-600' : 'border-gray-100 text-gray-600'}`}>
           <span>💬 토론 채팅</span>
-          <span className="text-[11px] font-normal text-gray-400">서로 의심하고 설득하세요</span>
+          {timed ? (
+            <span className={`text-xs font-extrabold tabular-nums ${urgent ? 'text-red-500 animate-pulse' : 'text-gray-400'}`}>
+              {urgent ? `⏰ ${remaining}초!` : `${remaining}s`}
+            </span>
+          ) : (
+            <span className="text-[11px] font-normal text-gray-400">서로 의심하고 설득하세요</span>
+          )}
         </div>
         <div ref={chatRef} className="overflow-y-auto px-3 py-2 space-y-1" style={{ height: '11rem' }}>
           {st.chat.length === 0 && (
