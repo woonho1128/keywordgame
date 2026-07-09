@@ -60,8 +60,8 @@ public class HalliGalliGame implements RoomGame {
     private final Map<Integer, Long> botRingAt = new HashMap<>(); // 봇 좌석 -> 이번 5에 종 칠 시각
     // 난이도별 [생각시간base, 생각jitter, 반응base, 반응jitter, 놓칠확률%]
     private static final Map<String, int[]> AI_TUNE = Map.of(
-            "EASY",   new int[]{1400, 500, 1700, 600, 22},
-            "NORMAL", new int[]{1000, 350, 1000, 350, 8},
+            "EASY",   new int[]{1000, 500, 1000, 600, 22},
+            "NORMAL", new int[]{1000, 350, 850,  350, 8},
             "HARD",   new int[]{650,  200, 550,  180, 2}
     );
 
@@ -180,6 +180,8 @@ public class HalliGalliGame implements RoomGame {
     }
 
     private void applyRing(Player me) {
+        // 공개된 카드가 하나도 없으면(직전에 누가 쓸어간 직후 등) 종은 무효 — 벌칙 없음
+        if (players.stream().noneMatch(p -> !p.up.isEmpty())) return;
         if (hasExactlyFive()) {
             List<Card> pot = new ArrayList<>();
             for (Player p : players) { pot.addAll(p.up); p.up.clear(); }

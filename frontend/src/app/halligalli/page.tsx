@@ -195,7 +195,8 @@ export default function HalliGalliPage() {
 
   // 스페이스바 = 종
   useEffect(() => {
-    const canRing = st?.status === 'PLAYING' && st.joined && st.players.find((p) => p.seat === st.seat)?.alive;
+    const canRing = st?.status === 'PLAYING' && st.joined && st.players.find((p) => p.seat === st.seat)?.alive
+      && st.players.some((p) => p.up > 0); // 공개된 카드가 있어야 종 가능
     const onKey = (e: KeyboardEvent) => {
       if (e.code === 'Space' && canRing) {
         e.preventDefault();
@@ -287,6 +288,7 @@ export default function HalliGalliPage() {
 
   const meView = st.players.find((p) => p.seat === st.seat);
   const iAmAlive = !!meView?.alive;
+  const anyFaceUp = st.players.some((p) => p.up > 0); // 공개된 카드가 있어야 종 가능
 
   return (
     <main className="min-h-screen flex flex-col items-center p-4 max-w-2xl mx-auto w-full">
@@ -387,8 +389,8 @@ export default function HalliGalliPage() {
                 {st.isMyTurn ? '🃏 내 카드 넘기기' : `${st.players[st.currentSeat - 1]?.nick ?? ''}님 차례`}
               </button>
               <button
-                onClick={() => { handleRing(); setFlash('🔔'); setTimeout(() => setFlash(null), 200); }}
-                disabled={!iAmAlive}
+                onClick={() => { if (!anyFaceUp) return; handleRing(); setFlash('🔔'); setTimeout(() => setFlash(null), 200); }}
+                disabled={!iAmAlive || !anyFaceUp}
                 className="w-full py-8 rounded-full font-extrabold text-2xl text-white bg-gradient-to-b from-amber-400 to-amber-600 shadow-[0_5px_0_rgba(180,120,0,0.6)] active:translate-y-1 active:shadow-[0_2px_0_rgba(180,120,0,0.6)] disabled:opacity-40 select-none">
                 {flash ? '🔔🔔🔔' : '🔔 종 치기 (스페이스바)'}
               </button>
