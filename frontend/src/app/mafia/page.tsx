@@ -115,6 +115,8 @@ export default function MafiaPage() {
   // AI 봇 / 채팅
   const [aiAvailable, setAiAvailable] = useState(false);
   const [botAdminInput, setBotAdminInput] = useState('');
+  const [issuedCode, setIssuedCode] = useState<string | null>(null);
+  const [codeCopied, setCodeCopied] = useState(false);
   const [chatText, setChatText] = useState('');
   const chatRef = useRef<HTMLDivElement>(null);
 
@@ -214,8 +216,31 @@ export default function MafiaPage() {
 
   const handleAddBots = async (count: number) => {
     const code = botAdminInput.trim();
-    if (!code) return setError('봇 관리자 코드를 입력하세요');
+    if (!code) return setError('봇 관리자 코드 또는 1회성 코드를 입력하세요');
     await post(`/api/v1/mafia/add-bots?roomCode=${roomCode}&clientId=${encodeURIComponent(clientId)}&code=${encodeURIComponent(code)}&count=${count}`);
+  };
+
+  const handleIssueBotCode = async () => {
+    const code = botAdminInput.trim();
+    if (!code) return setError('먼저 봇 관리자 코드를 입력하세요');
+    setError(null);
+    try {
+      const c = await api<string>(`/api/v1/mafia/issue-bot-code?code=${encodeURIComponent(code)}`, { method: 'POST' });
+      setIssuedCode(c);
+      setCodeCopied(false);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : '코드 발급에 실패했습니다');
+    }
+  };
+
+  const copyIssuedCode = async () => {
+    if (!issuedCode) return;
+    try {
+      await navigator.clipboard.writeText(issuedCode);
+      setCodeCopied(true);
+    } catch {
+      setCodeCopied(false);
+    }
   };
 
   const handleSendChat = async () => {
@@ -556,7 +581,7 @@ export default function MafiaPage() {
               type="password"
               value={botAdminInput}
               onChange={(e) => setBotAdminInput(e.target.value)}
-              placeholder="봇 관리자 코드"
+              placeholder="봇 관리자 코드 또는 1회성 코드"
               className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-purple-400"
             />
             <div className="grid grid-cols-3 gap-2">
@@ -570,6 +595,30 @@ export default function MafiaPage() {
                   봇 +{n}
                 </button>
               ))}
+            </div>
+
+            {/* 1회성 코드 발급(마스터 코드 입력 시) */}
+            <div className="pt-1 border-t border-purple-100">
+              <button
+                onClick={handleIssueBotCode}
+                className="text-xs font-bold text-purple-600 hover:text-purple-800"
+              >
+                🎫 1회성 코드 발급받기
+              </button>
+              <p className="text-[11px] text-gray-400 mt-0.5">
+                위에 마스터 코드를 넣고 누르면 발급돼요. 발급된 코드는 봇 추가 1회에만 쓰이고 24시간 뒤 만료돼요(친구에게 공유용).
+              </p>
+              {issuedCode && (
+                <div className="mt-2 flex items-center justify-between gap-2 bg-white border border-purple-300 rounded-lg px-3 py-2">
+                  <span className="font-mono font-bold tracking-widest text-purple-700 select-all">{issuedCode}</span>
+                  <button
+                    onClick={copyIssuedCode}
+                    className="text-xs font-bold text-purple-600 border border-purple-300 rounded px-2 py-1 hover:bg-purple-50"
+                  >
+                    {codeCopied ? '복사됨 ✓' : '복사'}
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         )}

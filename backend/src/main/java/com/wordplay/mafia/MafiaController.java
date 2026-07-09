@@ -25,6 +25,7 @@ public class MafiaController {
 
     private final MafiaRoomManager rooms;
     private final MafiaBotRuntime botRuntime;
+    private final MafiaBotCodes botCodes;
 
     @Value("${app.spyfall.admin-code}")
     private String adminCode;
@@ -104,14 +105,24 @@ public class MafiaController {
         return ApiResponse.success(botRuntime.available());
     }
 
-    /** 관리자: AI 봇 추가(대기방, 최대 3명). 봇 전용 관리자 코드 필요. */
+    /** 관리자: 봇 추가용 1회성 코드 발급. 마스터 봇 관리자 코드 필요. */
+    @PostMapping("/issue-bot-code")
+    public ApiResponse<String> issueBotCode(@RequestParam String code) {
+        if (!botAdminCode.equals(code)) throw new BusinessException(ErrorCode.INVALID_INPUT, "봇 관리자 코드가 올바르지 않습니다");
+        return ApiResponse.success(botCodes.issue());
+    }
+
+    /** AI 봇 추가(대기방, 최대 3명). 마스터 봇 관리자 코드 또는 1회성 코드 필요. */
     @PostMapping("/add-bots")
     public ApiResponse<MafiaStateResponse> addBots(@RequestParam String roomCode, @RequestParam String clientId,
                                                    @RequestParam String code, @RequestParam(defaultValue = "1") int count) {
         validateClientId(clientId);
-        if (!botAdminCode.equals(code)) throw new BusinessException(ErrorCode.INVALID_INPUT, "봇 관리자 코드가 올바르지 않습니다");
+        boolean master = botAdminCode.equals(code);
+        if (!master && !botCodes.isValid(code))
+            throw new BusinessException(ErrorCode.INVALID_INPUT, "봇 관리자 코드 또는 1회성 코드가 올바르지 않습니다");
         MafiaService g = rooms.require(roomCode);
-        g.addBots(count);
+        g.addBots(count);                 // 실패(대기방 아님/정원 초과) 시 여기서 예외 → 코드 미소비
+        if (!master) botCodes.consume(code); // 성공 시에만 1회성 코드 소비
         return ApiResponse.success(g.me(clientId));
     }
 
