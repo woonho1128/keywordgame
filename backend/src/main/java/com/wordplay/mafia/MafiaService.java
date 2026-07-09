@@ -609,59 +609,80 @@ public class MafiaService implements RoomGame {
         return -1;
     }
 
-    // --- 프롬프트(정보 격리: 각 좌석이 아는 것만) ---
+    // --- 프롬프트(닉네임 기준, 정보 격리: 각 사람이 아는 것만) ---
     private String buildChatPrompt(Player p) {
-        return commonContext()
-                + "\n너는 '" + p.nick + "'(" + (seatOf(p) + 1) + "번)이다. " + rolePrivate(p)
-                + "\n지금 토론방에 자연스럽게 한 줄만 보내라. 다른 설명 없이 대사만.";
+        List<String> others = new ArrayList<>();
+        for (int i : aliveSeats()) if (i != seatOf(p)) others.add(players.get(i).nick);
+        String last = lastOtherSpeaker(p);
+        return chatContext()
+                + "\n\n[너의 정보] 이 대화에서 너의 이름은 '" + p.nick + "'다. " + rolePrivate(p)
+                + "\n[중요 규칙]"
+                + "\n- 너는 '" + p.nick + "'다. 절대 너 자신('" + p.nick + "')을 의심하거나 남처럼 3인칭으로 부르지 마라."
+                + "\n- 의심하거나 언급할 수 있는 상대는 너를 뺀 이들뿐: " + String.join(", ", others) + "."
+                + "\n- 이미 대화에 나온 말을 그대로 반복하지 마라. 매번 새로운 내용이나 앞사람 말에 대한 반응을 말해라."
+                + (last != null ? "\n- 방금 '" + last + "'가 말했다. 특히 너에게 묻거나 너를 지목한 말이 있으면 회피하지 말고 그 말에 직접 대꾸해라." : "")
+                + "\n지금 토론방에 사람처럼 딱 한 줄만 보내라. 설명·따옴표 없이 대사만.";
     }
 
     private String buildVotePrompt(Player p) {
-        List<Integer> cand = aliveSeats().stream().filter(i -> i != seatOf(p)).map(i -> i + 1).toList();
-        return commonContext()
-                + "\n너는 '" + p.nick + "'(" + (seatOf(p) + 1) + "번)이다. " + rolePrivate(p)
-                + "\n이제 처형할 사람을 정한다. 다음 좌석 번호 중 하나만 숫자로 답하라: " + cand
-                + ". 기권은 0. 숫자만 출력.";
+        StringBuilder map = new StringBuilder();
+        for (int i : aliveSeats()) if (i != seatOf(p))
+            map.append(i + 1).append("=").append(players.get(i).nick).append("  ");
+        return chatContext()
+                + "\n\n[너의 정보] 너의 이름은 '" + p.nick + "'다. " + rolePrivate(p)
+                + "\n이제 처형 투표다. 후보(번호=이름): " + map.toString().trim()
+                + "\n누굴 처형할지 위 번호 중 하나만 숫자로 답하라. 기권은 0. 다른 말 없이 숫자만 출력.";
     }
 
-    /** 모든 역할이 공유하는 공개 정보(생존자·최근 이력·이번 라운드 토론). */
-    private String commonContext() {
+    /** 이름(닉네임) 기준의 공개 상황·대화 로그. 좌석번호는 넣지 않아 혼동을 막는다. */
+    private String chatContext() {
         StringBuilder sb = new StringBuilder();
-        sb.append(round).append("일차. 생존자: ");
+        sb.append(round).append("일차 낮 토론. 지금 살아있는 사람: ");
         List<String> alive = new ArrayList<>();
-        for (int i : aliveSeats()) alive.add((i + 1) + "번 " + players.get(i).nick);
+        for (int i : aliveSeats()) alive.add(players.get(i).nick);
         sb.append(String.join(", ", alive)).append(".");
-        int from = Math.max(0, history.size() - 6);
+        int from = Math.max(0, history.size() - 5);
         if (from < history.size()) {
-            sb.append("\n[상황]");
+            sb.append("\n[지금까지 밤·처형 결과]");
             for (int i = from; i < history.size(); i++) sb.append("\n- ").append(history.get(i));
         }
         List<ChatMsg> today = chat.stream().filter(c -> c.round() == round).toList();
-        if (today.isEmpty()) sb.append("\n[대화] 아직 아무도 말하지 않았다.");
+        if (today.isEmpty()) sb.append("\n[대화] 아직 아무도 말하지 않았다. 네가 먼저 말을 꺼내라.");
         else {
-            sb.append("\n[대화]");
+            sb.append("\n[대화 내용]");
             for (ChatMsg c : today) sb.append("\n").append(c.nick()).append(": ").append(c.text());
         }
         return sb.toString();
     }
 
-    /** viewer가 실제로 아는 자기 역할·비밀 정보(정보 격리). */
+    /** 이번 라운드에서 나 아닌 사람이 마지막으로 한 발언자 닉네임. 없으면 null. */
+    private String lastOtherSpeaker(Player p) {
+        for (int i = chat.size() - 1; i >= 0; i--) {
+            ChatMsg c = chat.get(i);
+            if (c.round() == round && c.seat() != seatOf(p)) return c.nick();
+        }
+        return null;
+    }
+
+    /** viewer가 실제로 아는 자기 역할·비밀 정보(정보 격리). 닉네임 기준. */
     private String rolePrivate(Player p) {
         switch (p.role) {
             case MAFIA -> {
                 List<String> fellows = new ArrayList<>();
                 for (int i = 0; i < players.size(); i++)
                     if (i != seatOf(p) && players.get(i).role == Role.MAFIA)
-                        fellows.add((i + 1) + "번 " + players.get(i).nick);
-                String team = fellows.isEmpty() ? "동료 마피아는 없다(너 혼자)." : "동료 마피아: " + String.join(", ", fellows) + ".";
-                return "너의 정체는 [마피아]. " + team + " 정체를 숨기고 시민인 척하며 남을 의심하게 유도하라. 동료는 은근히 감싸라.";
+                        fellows.add(players.get(i).nick);
+                String team = fellows.isEmpty() ? "동료 마피아는 없다(너 혼자다)."
+                        : "동료 마피아는 " + String.join(", ", fellows) + "다(이들은 절대 의심 말고 은근히 감싸라).";
+                return "너의 정체는 [마피아]. " + team + " 정체를 숨기고 시민인 척하며 다른 사람을 의심하게 유도하라.";
             }
             case POLICE -> {
                 List<String> found = new ArrayList<>();
                 for (var e : copFindings.entrySet())
-                    found.add((e.getKey() + 1) + "번 " + players.get(e.getKey()).nick + "=" + (e.getValue() ? "마피아" : "시민"));
-                String info = found.isEmpty() ? "아직 조사 결과가 없다." : "너의 조사 결과: " + String.join(", ", found) + ".";
-                return "너의 정체는 [경찰]. " + info + " 결과를 활용하되 대놓고 경찰이라 밝히면 밤에 죽으니 조심히 몰아가라.";
+                    found.add(players.get(e.getKey()).nick + "은(는) " + (e.getValue() ? "마피아" : "시민"));
+                String info = found.isEmpty() ? "아직 조사 결과가 없다."
+                        : "너의 밤 조사 결과: " + String.join(", ", found) + ". 이 사실을 근거로 삼아라.";
+                return "너의 정체는 [경찰]. " + info + " 단, 대놓고 '나 경찰'이라 밝히면 밤에 죽으니 조심히 몰아가라.";
             }
             case DOCTOR -> {
                 return "너의 정체는 [의사]. 정체를 숨기고 일반 시민처럼 추리에 참여하라.";
