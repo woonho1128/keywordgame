@@ -326,15 +326,15 @@ export default function HalliGalliPage() {
                   <button onClick={handleRemoveAi} disabled={busy || !st.players.some((p) => p.nick.startsWith('🤖'))}
                     className="text-xs text-gray-500 underline disabled:opacity-30">AI 제거</button>
                 </div>
-                <div className="grid grid-cols-3 gap-2">
-                  {[['EASY', '초급', 'bg-emerald-400'], ['NORMAL', '중급', 'bg-amber-400'], ['HARD', '고급', 'bg-rose-400']].map(([lv, label, cls]) => (
+                <div className="grid grid-cols-4 gap-2">
+                  {[['EASY', '초급', 'bg-emerald-400'], ['NORMAL', '중급', 'bg-amber-400'], ['HARD', '고급', 'bg-rose-400'], ['EXTREME', '초월', 'bg-purple-600']].map(([lv, label, cls]) => (
                     <button key={lv} onClick={() => handleAddAi(lv)} disabled={busy || st.playerCount >= 6}
                       className={`${cls} text-white font-bold py-2 rounded-lg text-sm shadow-[0_2px_0_rgba(0,0,0,0.15)] active:translate-y-0.5 disabled:opacity-40`}>
                       {label}
                     </button>
                   ))}
                 </div>
-                <p className="text-[11px] text-gray-400 mt-2 text-center">혼자서도 봇과 연습 · 고급은 반응속도가 매우 빨라요</p>
+                <p className="text-[11px] text-gray-400 mt-2 text-center">혼자서도 봇과 연습 · 초월은 사람이 이기기 매우 어려워요</p>
               </div>
               <button onClick={handleStart} disabled={busy || st.playerCount < 2} className="w-full bg-hit text-white font-bold py-3 rounded-lg disabled:opacity-40">
                 {st.playerCount >= 2 ? '게임 시작' : '최소 2명 필요 (AI 추가 가능)'}

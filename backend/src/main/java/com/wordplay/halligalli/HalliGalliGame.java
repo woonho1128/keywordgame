@@ -60,9 +60,10 @@ public class HalliGalliGame implements RoomGame {
     private final Map<Integer, Long> botRingAt = new HashMap<>(); // 봇 좌석 -> 이번 5에 종 칠 시각
     // 난이도별 [생각시간base, 생각jitter, 반응base, 반응jitter, 놓칠확률%]
     private static final Map<String, int[]> AI_TUNE = Map.of(
-            "EASY",   new int[]{1000, 500, 1000, 600, 22},
-            "NORMAL", new int[]{1000, 350, 850,  350, 8},
-            "HARD",   new int[]{650,  200, 550,  180, 2}
+            "EASY",    new int[]{1000, 500, 1000, 600, 22},
+            "NORMAL",  new int[]{1000, 350, 850,  350, 8},
+            "HARD",    new int[]{650,  200, 550,  180, 2},
+            "EXTREME", new int[]{420,  150, 280,  120, 0}   // 초월: 반응 0.28~0.4s, 실수 0
     );
 
     // =================== 명령 ===================
@@ -145,11 +146,11 @@ public class HalliGalliGame implements RoomGame {
     private static String normalizeLevel(String level) {
         if (level == null) return "NORMAL";
         String u = level.trim().toUpperCase();
-        return switch (u) { case "EASY", "NORMAL", "HARD" -> u; default -> "NORMAL"; };
+        return switch (u) { case "EASY", "NORMAL", "HARD", "EXTREME" -> u; default -> "NORMAL"; };
     }
 
     private static String levelLabel(String lvl) {
-        return switch (lvl) { case "EASY" -> "초급"; case "HARD" -> "고급"; default -> "중급"; };
+        return switch (lvl) { case "EASY" -> "초급"; case "HARD" -> "고급"; case "EXTREME" -> "초월"; default -> "중급"; };
     }
 
     /** 내 차례에 맨 위 카드 1장 공개. */
