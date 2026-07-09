@@ -96,13 +96,14 @@ public class DrawGame implements RoomGame {
     // =================== 명령 ===================
 
     public synchronized DrawGameStateResponse newGame(String clientId, String nick, String mode, String topicMode,
-                                                      Integer writeSec, Integer drawSec) {
+                                                      Integer writeSec, Integer drawSec, Integer roundSec) {
         reset();
         phase = Phase.LOBBY;
         this.mode = "CATCHMIND".equalsIgnoreCase(mode) ? Mode.CATCHMIND : Mode.GARTIC;
         this.topicMode = "RANDOM".equalsIgnoreCase(topicMode) ? "RANDOM" : "FREE";
         this.writeMs = clampSec(writeSec, 20, 180, 60) * 1000L;
         this.drawMs = clampSec(drawSec, 30, 300, 150) * 1000L;
+        this.roundMs = clampSec(roundSec, 20, 300, 90) * 1000L;
         hostClientId = clientId;
         addPlayer(clientId, nick);
         touch();

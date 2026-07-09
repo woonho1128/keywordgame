@@ -17,7 +17,7 @@ public class DrawGameRoomManager {
 
     public String create(String clientId, NewDrawGameRequest req) {
         DrawGame game = new DrawGame();
-        game.newGame(clientId, req.nick(), req.mode(), req.topicMode(), req.writeSec(), req.drawSec());
+        game.newGame(clientId, req.nick(), req.mode(), req.topicMode(), req.writeSec(), req.drawSec(), req.roundSec());
         try {
             return reg.add(game);
         } catch (IllegalStateException e) {

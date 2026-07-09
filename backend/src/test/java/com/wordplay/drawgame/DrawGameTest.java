@@ -13,7 +13,7 @@ class DrawGameTest {
 
     private DrawGame started3(String topic) {
         DrawGame g = new DrawGame();
-        g.newGame("host", "p0", "GARTIC", topic, 60, 120);
+        g.newGame("host", "p0", "GARTIC", topic, 60, 120, 90);
         g.join("c1", "p1");
         g.join("c2", "p2");
         g.start("host");
@@ -25,7 +25,7 @@ class DrawGameTest {
     @Test
     void 최소인원_미달() {
         DrawGame g = new DrawGame();
-        g.newGame("host", "p0", "GARTIC", "FREE", 60, 120);
+        g.newGame("host", "p0", "GARTIC", "FREE", 60, 120, 90);
         assertThatThrownBy(() -> g.start("host")).hasMessageContaining("최소 3명");
     }
 
@@ -54,7 +54,7 @@ class DrawGameTest {
     @Test
     void 캐치마인드_흐름_정답_점수_라운드진행() {
         DrawGame g = new DrawGame();
-        g.newGame("host", "p0", "CATCHMIND", "FREE", null, null);
+        g.newGame("host", "p0", "CATCHMIND", "FREE", null, null, 30);
         g.join("c1", "p1");
         g.join("c2", "p2");
         g.start("host");

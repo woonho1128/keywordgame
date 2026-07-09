@@ -56,6 +56,10 @@ export default function GarticPage() {
   const [showCreate, setShowCreate] = useState(false);
   const [mode, setMode] = useState('GARTIC');
   const [topicMode, setTopicMode] = useState('FREE');
+  const [showAdv, setShowAdv] = useState(false);
+  const [roundSec, setRoundSec] = useState(60);
+  const [writeSec, setWriteSec] = useState(60);
+  const [drawSec, setDrawSec] = useState(150);
   const [showRules, setShowRules] = useState(false);
   const [showAdmin, setShowAdmin] = useState(false);
   const [adminInput, setAdminInput] = useState('');
@@ -129,7 +133,7 @@ export default function GarticPage() {
     try {
       const res = await api<{ roomCode: string; state: GState }>(
         `/api/v1/drawgame/new?clientId=${cid()}`,
-        { method: 'POST', body: JSON.stringify({ nick: n, mode, topicMode }) });
+        { method: 'POST', body: JSON.stringify({ nick: n, mode, topicMode, roundSec, writeSec, drawSec }) });
       changeRoom(res.roomCode); setSt(res.state); setShowCreate(false);
     } catch (e) { setError(e instanceof Error ? e.message : '방 생성 실패'); } finally { setBusy(false); }
   };
@@ -240,6 +244,42 @@ export default function GarticPage() {
                 </div>
               </div>
             )}
+            <div>
+              <button onClick={() => setShowAdv((v) => !v)} className="text-sm text-gray-400 underline">고급 설정 {showAdv ? '▲' : '▼'}</button>
+              {showAdv && (
+                <div className="mt-2 space-y-3 rounded-lg bg-gray-50 p-3">
+                  {mode === 'CATCHMIND' ? (
+                    <div>
+                      <p className="text-xs font-bold text-gray-500 mb-1">⏱ 라운드 시간</p>
+                      <div className="grid grid-cols-4 gap-1">
+                        {[30, 45, 60, 90].map((s) => (
+                          <button key={s} onClick={() => setRoundSec(s)} className={`py-2 rounded-lg text-sm border ${roundSec === s ? 'border-hit bg-hit/5 text-hit font-bold' : 'border-gray-200 text-gray-500'}`}>{s}초</button>
+                        ))}
+                      </div>
+                    </div>
+                  ) : (
+                    <>
+                      <div>
+                        <p className="text-xs font-bold text-gray-500 mb-1">⏱ 문장 시간</p>
+                        <div className="grid grid-cols-4 gap-1">
+                          {[30, 45, 60, 90].map((s) => (
+                            <button key={s} onClick={() => setWriteSec(s)} className={`py-2 rounded-lg text-sm border ${writeSec === s ? 'border-hit bg-hit/5 text-hit font-bold' : 'border-gray-200 text-gray-500'}`}>{s}초</button>
+                          ))}
+                        </div>
+                      </div>
+                      <div>
+                        <p className="text-xs font-bold text-gray-500 mb-1">🎨 그림 시간</p>
+                        <div className="grid grid-cols-4 gap-1">
+                          {[90, 120, 150, 240].map((s) => (
+                            <button key={s} onClick={() => setDrawSec(s)} className={`py-2 rounded-lg text-sm border ${drawSec === s ? 'border-hit bg-hit/5 text-hit font-bold' : 'border-gray-200 text-gray-500'}`}>{s}초</button>
+                          ))}
+                        </div>
+                      </div>
+                    </>
+                  )}
+                </div>
+              )}
+            </div>
             <div className="flex gap-2">
               <button onClick={() => setShowCreate(false)} className="flex-1 border border-gray-300 py-3 rounded-lg">취소</button>
               <button onClick={handleCreate} disabled={busy} className="flex-[2] bg-hit text-white font-bold py-3 rounded-lg disabled:opacity-40">
