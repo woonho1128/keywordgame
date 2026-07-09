@@ -3,6 +3,9 @@ package com.wordplay.drawgame;
 import com.wordplay.drawgame.dto.DrawGameStateResponse;
 import org.junit.jupiter.api.Test;
 
+import java.util.ArrayList;
+import java.util.List;
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
@@ -46,6 +49,30 @@ class DrawGameTest {
         assertThat(s.round()).isEqualTo(1);
         assertThat(s.taskType()).isEqualTo("DRAW");
         assertThat(s.promptText()).isNotBlank(); // 자동 제시어
+    }
+
+    @Test
+    void 캐치마인드_흐름_정답_점수_라운드진행() {
+        DrawGame g = new DrawGame();
+        g.newGame("host", "p0", "CATCHMIND", "FREE", null, null);
+        g.join("c1", "p1");
+        g.join("c2", "p2");
+        g.start("host");
+        List<String> clis = List.of("host", "c1", "c2");
+        int drawer = g.me("host").drawerSeat();       // 1-based
+        String drawerClient = clis.get(drawer - 1);
+        String word = g.me(drawerClient).myWord();     // 그리는 사람만 제시어 봄
+        assertThat(word).isNotBlank();
+        assertThat(g.me("c1").myWord() == null || g.me("c2").myWord() == null).isTrue();
+        // 그리는 사람은 못 맞힘
+        assertThatThrownBy(() -> g.guess(drawerClient, word)).hasMessageContaining("그리는 사람");
+        List<String> guessers = new ArrayList<>(clis);
+        guessers.remove(drawerClient);
+        g.guess(guessers.get(0), "엉뚱한답");           // 오답
+        g.guess(guessers.get(0), word);                // 정답(첫 정답 +3)
+        DrawGameStateResponse fin = g.guess(guessers.get(1), word); // 전원 정답 → 다음 라운드
+        assertThat(fin.round()).isEqualTo(2);
+        assertThat(fin.scores()).anyMatch(s -> s.score() >= 3);
     }
 
     @Test

@@ -8,7 +8,7 @@ const COLORS = ['#111827', '#ef4444', '#f59e0b', '#22c55e', '#3b82f6', '#a855f7'
 const WIDTHS = [3, 6, 12, 22];
 
 /** 마우스·터치·펜 지원 간단 드로잉 캔버스. toDataURL로 PNG 추출. */
-const DrawCanvas = forwardRef<DrawCanvasHandle, { size?: number }>(function DrawCanvas({ size = 320 }, ref) {
+const DrawCanvas = forwardRef<DrawCanvasHandle, { size?: number; onStrokeEnd?: () => void }>(function DrawCanvas({ size = 320, onStrokeEnd }, ref) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const drawing = useRef(false);
   const last = useRef<{ x: number; y: number } | null>(null);
@@ -61,7 +61,7 @@ const DrawCanvas = forwardRef<DrawCanvasHandle, { size?: number }>(function Draw
     ctx.stroke();
     last.current = p;
   };
-  const up = () => { drawing.current = false; last.current = null; };
+  const up = () => { if (drawing.current) { drawing.current = false; last.current = null; onStrokeEnd?.(); } };
 
   return (
     <div className="flex flex-col items-center gap-2">

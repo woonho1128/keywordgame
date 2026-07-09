@@ -72,6 +72,27 @@ public class DrawGame implements RoomGame {
 
     private long writeMs = 60_000, drawMs = 150_000;
 
+    // 캐치마인드
+    static final class Guess {
+        final int seat; final String nick; final String text; final boolean correct;
+        Guess(int seat, String nick, String text, boolean correct) { this.seat = seat; this.nick = nick; this.text = text; this.correct = correct; }
+    }
+    private static final String[] CM_WORDS = {
+            "사과", "자전거", "우산", "코끼리", "기차", "안경", "피자", "로봇", "해바라기", "고래",
+            "케이크", "축구공", "등대", "선물상자", "피아노", "눈사람", "비행기", "햄버거", "공룡", "선인장",
+            "낚싯대", "풍선", "무지개", "튤립", "다리미", "청진기", "왕관", "촛불", "달팽이", "우주선",
+            "고양이", "수박", "기린", "자물쇠", "나침반", "돛단배", "전구", "선풍기", "부메랑", "종이비행기",
+    };
+    private final List<Integer> drawOrder = new ArrayList<>();
+    private int roundIndex = 0;
+    private String answer = null;
+    private String snapshot = null;
+    private final List<Guess> guesses = new ArrayList<>();
+    private final Set<Integer> correctSeats = new HashSet<>();
+    private final Map<Integer, Integer> scores = new HashMap<>();
+    private String lastAnswer = null;
+    private long roundMs = 90_000;
+
     // =================== 명령 ===================
 
     public synchronized DrawGameStateResponse newGame(String clientId, String nick, String mode, String topicMode,
@@ -104,8 +125,8 @@ public class DrawGame implements RoomGame {
     public synchronized DrawGameStateResponse start(String clientId) {
         if (phase != Phase.LOBBY) throw bad("지금 시작할 수 없습니다");
         if (!clientId.equals(hostClientId)) throw bad("방장만 시작할 수 있습니다");
-        if (mode == Mode.CATCHMIND) throw bad("캐치마인드 모드는 곧 추가됩니다");
         if (players.size() < 3) throw bad("최소 3명이 필요합니다");
+        if (mode == Mode.CATCHMIND) return startCatchmind(clientId);
 
         int n = players.size();
         albums.clear();
@@ -128,7 +149,99 @@ public class DrawGame implements RoomGame {
         return me(clientId);
     }
 
-    /** 이번 라운드 내 앨범에 제출(텍스트 또는 그림). */
+    // =================== 캐치마인드 ===================
+
+    private DrawGameStateResponse startCatchmind(String clientId) {
+        int n = players.size();
+        drawOrder.clear();
+        for (int i = 0; i < n; i++) drawOrder.add(i);
+        Collections.shuffle(drawOrder);
+        roundIndex = 0;
+        totalRounds = n;
+        scores.clear();
+        for (int i = 0; i < n; i++) scores.put(i, 0);
+        lastAnswer = null;
+        beginCmRound();
+        phase = Phase.PLAYING;
+        touch();
+        return me(clientId);
+    }
+
+    private void beginCmRound() {
+        answer = CM_WORDS[ThreadLocalRandom.current().nextInt(CM_WORDS.length)];
+        snapshot = null;
+        guesses.clear();
+        correctSeats.clear();
+        deadline = System.currentTimeMillis() + roundMs;
+    }
+
+    private int drawerSeat() {
+        if (roundIndex < 0 || roundIndex >= drawOrder.size()) return -1;
+        return drawOrder.get(roundIndex);
+    }
+
+    /** 그리는 사람이 현재 캔버스 스냅샷을 올린다. */
+    public synchronized DrawGameStateResponse snapshotImg(String clientId, String image) {
+        tick();
+        Integer seat = seats.get(clientId);
+        if (seat == null) throw bad("참가하지 않은 기기입니다");
+        if (phase != Phase.PLAYING || mode != Mode.CATCHMIND) throw bad("지금은 그릴 수 없습니다");
+        if (seat != drawerSeat()) throw bad("그리는 사람만 그릴 수 있습니다");
+        if (image != null && image.startsWith("data:image") && image.length() <= 700_000) {
+            snapshot = image;
+            lastActiveMs = System.currentTimeMillis();
+        }
+        return build(clientId);
+    }
+
+    /** 맞히는 사람이 추측을 보낸다. */
+    public synchronized DrawGameStateResponse guess(String clientId, String text) {
+        tick();
+        Integer seat = seats.get(clientId);
+        if (seat == null) throw bad("참가하지 않은 기기입니다");
+        if (phase != Phase.PLAYING || mode != Mode.CATCHMIND) throw bad("지금은 맞힐 수 없습니다");
+        if (seat == drawerSeat()) throw bad("그리는 사람은 맞힐 수 없습니다");
+        if (correctSeats.contains(seat)) return build(clientId); // 이미 맞힘
+        String t = text == null ? "" : text.trim();
+        if (t.isEmpty()) return build(clientId);
+        if (t.length() > 40) t = t.substring(0, 40);
+        String nick = players.get(seat).nick;
+        if (norm(t).equals(norm(answer))) {
+            correctSeats.add(seat);
+            int pts = correctSeats.size() == 1 ? 3 : 1; // 첫 정답 3, 이후 1
+            scores.merge(seat, pts, Integer::sum);
+            guesses.add(new Guess(seat, nick, "정답! 🎉 (+" + pts + ")", true));
+            maybeEndCmRound();
+        } else {
+            guesses.add(new Guess(seat, nick, t, false));
+            if (guesses.size() > 60) guesses.remove(0);
+        }
+        touch();
+        return build(clientId);
+    }
+
+    private void maybeEndCmRound() {
+        // 그리는 사람 제외 전원 정답 → 라운드 종료
+        if (correctSeats.size() >= players.size() - 1) endCmRound();
+    }
+
+    private void endCmRound() {
+        if (!correctSeats.isEmpty()) scores.merge(drawerSeat(), 2, Integer::sum); // 맞힌 사람 있으면 화가 +2
+        lastAnswer = answer;
+        roundIndex++;
+        if (roundIndex >= totalRounds) {
+            phase = Phase.REVEAL;
+            deadline = 0;
+        } else {
+            beginCmRound();
+        }
+    }
+
+    private static String norm(String s) {
+        return s == null ? "" : s.replaceAll("\\s+", "").toLowerCase();
+    }
+
+    /** 이번 라운드 내 앨범에 제출(텍스트 또는 그림) — 갈틱폰. */
     public synchronized DrawGameStateResponse submit(String clientId, String type, String content) {
         tick();
         Integer seat = seats.get(clientId);
@@ -169,6 +282,10 @@ public class DrawGame implements RoomGame {
 
     private void tick() {
         if (phase != Phase.PLAYING) return;
+        if (mode == Mode.CATCHMIND) {
+            if (deadline > 0 && System.currentTimeMillis() >= deadline) endCmRound();
+            return;
+        }
         if (deadline > 0 && System.currentTimeMillis() >= deadline) {
             // 미제출자 자동 채움(빈 값)
             for (int p = 0; p < players.size(); p++) {
@@ -217,12 +334,16 @@ public class DrawGame implements RoomGame {
         boolean joined = mySeat != null;
 
         List<PlayerView> pv = new ArrayList<>();
-        for (int i = 0; i < players.size(); i++)
-            pv.add(new PlayerView(i + 1, players.get(i).nick, submitted.contains(i)));
+        for (int i = 0; i < players.size(); i++) {
+            boolean flag = mode == Mode.CATCHMIND ? correctSeats.contains(i) : submitted.contains(i);
+            pv.add(new PlayerView(i + 1, players.get(i).nick, flag));
+        }
 
         String taskType = null, promptText = null, promptImage = null;
         boolean mySubmitted = false;
-        if (phase == Phase.PLAYING && joined) {
+
+        // 갈틱폰 과제
+        if (mode == Mode.GARTIC && phase == Phase.PLAYING && joined) {
             mySubmitted = submitted.contains(mySeat);
             String need = stepType(round);
             if (round == 0) {
@@ -236,7 +357,7 @@ public class DrawGame implements RoomGame {
         }
 
         List<AlbumView> albumViews = new ArrayList<>();
-        if (phase == Phase.REVEAL) {
+        if (mode == Mode.GARTIC && phase == Phase.REVEAL) {
             for (Album al : albums) {
                 List<StepView> sv = new ArrayList<>();
                 for (Step s : al.steps)
@@ -245,13 +366,37 @@ public class DrawGame implements RoomGame {
             }
         }
 
+        // 캐치마인드 필드
+        int drawer = 0; boolean amDrawer = false; String myWord = null, snap = null;
+        List<DrawGameStateResponse.GuessView> guessViews = List.of();
+        List<DrawGameStateResponse.ScoreView> scoreViews = List.of();
+        int roundNo = round; int totalNo = totalRounds;
+        if (mode == Mode.CATCHMIND) {
+            if (phase == Phase.PLAYING) {
+                int ds = drawerSeat();
+                drawer = ds + 1;
+                amDrawer = joined && mySeat == ds;
+                if (amDrawer || (joined && correctSeats.contains(mySeat))) myWord = answer;
+                if (!amDrawer) snap = snapshot;
+                guessViews = new ArrayList<>();
+                for (Guess gg : guesses) guessViews.add(new DrawGameStateResponse.GuessView(gg.nick, gg.text, gg.correct));
+                roundNo = roundIndex + 1;
+            }
+            scoreViews = new ArrayList<>();
+            List<Integer> order = new ArrayList<>(scores.keySet());
+            order.sort((x, y) -> scores.get(y) - scores.get(x));
+            for (int s : order) scoreViews.add(new DrawGameStateResponse.ScoreView(s + 1, players.get(s).nick, scores.get(s)));
+        }
+
         return new DrawGameStateResponse(
                 phase.name(), mode.name(), topicMode, now,
                 clientId.equals(hostClientId), joined,
                 joined ? mySeat + 1 : 0, joined ? players.get(mySeat).nick : null,
-                pv, round, totalRounds,
+                pv, roundNo, totalNo,
                 taskType, promptText, promptImage, mySubmitted,
-                submitted.size(), deadline, albumViews, players.size(), version
+                submitted.size(), deadline, albumViews, players.size(), version,
+                drawer, amDrawer, myWord, snap, guessViews, scoreViews, lastAnswer,
+                joined && correctSeats.contains(mySeat)
         );
     }
 
@@ -279,6 +424,8 @@ public class DrawGame implements RoomGame {
         phase = null; mode = Mode.GARTIC; topicMode = "FREE";
         hostClientId = null; players.clear(); seats.clear();
         albums.clear(); round = 0; totalRounds = 0; deadline = 0; submitted.clear(); version = 0;
+        drawOrder.clear(); roundIndex = 0; answer = null; snapshot = null;
+        guesses.clear(); correctSeats.clear(); scores.clear(); lastAnswer = null;
     }
 
     private static BusinessException bad(String msg) { return new BusinessException(ErrorCode.INVALID_INPUT, msg); }

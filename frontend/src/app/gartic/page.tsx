@@ -7,6 +7,8 @@ import DrawCanvas, { DrawCanvasHandle } from '@/components/DrawCanvas';
 type PlayerView = { seat: number; nick: string; submitted: boolean };
 type StepView = { type: string; content: string; authorNick: string };
 type AlbumView = { ownerNick: string; steps: StepView[] };
+type GuessView = { nick: string; text: string; correct: boolean };
+type ScoreView = { seat: number; nick: string; score: number };
 type RoomSummary = { code: string; status: string; playerCount: number; host: string };
 
 type GState = {
@@ -18,6 +20,9 @@ type GState = {
   taskType: string | null; promptText: string | null; promptImage: string | null;
   mySubmitted: boolean; submittedCount: number; deadline: number;
   albums: AlbumView[]; playerCount: number; version: number;
+  // 캐치마인드
+  drawerSeat: number; amDrawer: boolean; myWord: string | null; snapshot: string | null;
+  guesses: GuessView[]; scores: ScoreView[]; lastAnswer: string | null; iGuessedCorrect: boolean;
 };
 
 const CLIENT_ID_KEY = 'gartic_client_id';
@@ -104,6 +109,7 @@ export default function GarticPage() {
     }
   }, [st]);
 
+
   const cid = () => encodeURIComponent(clientId);
   const rp = () => `roomCode=${roomCode}&clientId=${cid()}`;
   const saveNick = (n: string) => { try { localStorage.setItem(NICK_KEY, n); } catch {} };
@@ -141,6 +147,27 @@ export default function GarticPage() {
   };
   const handleSubmitText = () => { if (!textInput.trim()) return setError('내용을 입력하세요'); submit('TEXT', textInput.trim()); };
   const handleSubmitDraw = () => { const url = canvasRef.current?.toDataURL(); if (url) submit('IMAGE', url); };
+
+  // 캐치마인드: 그리는 사람이 스냅샷 push
+  const pushSnapshot = useCallback(async () => {
+    const code = roomRef.current; if (!code) return;
+    const url = canvasRef.current?.toDataURL(); if (!url) return;
+    try { await api(`/api/v1/drawgame/snapshot?roomCode=${code}&clientId=${cid()}`, { method: 'POST', body: JSON.stringify({ type: 'IMAGE', content: url }) }); } catch {}
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [clientId]);
+  const handleGuess = async () => {
+    const t = textInput.trim(); if (!t) return;
+    setTextInput('');
+    const r = await post(`/api/v1/drawgame/guess?${rp()}`, { type: 'TEXT', content: t });
+    if (r) setSt(r);
+  };
+
+  // 캐치마인드: 그리는 사람이면 스냅샷 주기적 push(획 종료 + 2초 안전망)
+  useEffect(() => {
+    if (st?.status !== 'PLAYING' || st?.mode !== 'CATCHMIND' || !st?.amDrawer) return;
+    const iv = setInterval(() => pushSnapshot(), 2000);
+    return () => clearInterval(iv);
+  }, [st?.status, st?.mode, st?.amDrawer, pushSnapshot]);
 
   const handleAdminReset = async () => {
     const code = adminInput.trim(); if (!code) return;
@@ -199,8 +226,8 @@ export default function GarticPage() {
                 <button onClick={() => setMode('GARTIC')} className={`py-3 rounded-lg border-2 text-sm font-bold ${mode === 'GARTIC' ? 'border-hit bg-hit/5 text-hit' : 'border-gray-200 text-gray-500'}`}>
                   🎨 갈틱폰<br /><span className="text-[11px] font-normal">그림 텔레폰</span>
                 </button>
-                <button onClick={() => setMode('CATCHMIND')} className={`py-3 rounded-lg border-2 text-sm font-bold border-gray-200 text-gray-400`}>
-                  ✏️ 캐치마인드<br /><span className="text-[11px] font-normal">곧 추가 예정</span>
+                <button onClick={() => setMode('CATCHMIND')} className={`py-3 rounded-lg border-2 text-sm font-bold ${mode === 'CATCHMIND' ? 'border-hit bg-hit/5 text-hit' : 'border-gray-200 text-gray-500'}`}>
+                  ✏️ 캐치마인드<br /><span className="text-[11px] font-normal">실시간 그림 맞히기</span>
                 </button>
               </div>
             </div>
@@ -215,8 +242,8 @@ export default function GarticPage() {
             )}
             <div className="flex gap-2">
               <button onClick={() => setShowCreate(false)} className="flex-1 border border-gray-300 py-3 rounded-lg">취소</button>
-              <button onClick={handleCreate} disabled={busy || mode === 'CATCHMIND'} className="flex-[2] bg-hit text-white font-bold py-3 rounded-lg disabled:opacity-40">
-                {mode === 'CATCHMIND' ? '준비 중' : '방 만들기'}
+              <button onClick={handleCreate} disabled={busy} className="flex-[2] bg-hit text-white font-bold py-3 rounded-lg disabled:opacity-40">
+                방 만들기
               </button>
             </div>
           </div>
@@ -254,6 +281,16 @@ export default function GarticPage() {
   if (!st) return <main className="min-h-screen flex items-center justify-center"><p className="text-gray-400">불러오는 중...</p></main>;
 
   const remain = st.deadline > 0 ? Math.max(0, Math.ceil((st.deadline - (Date.now() + clockOffset.current)) / 1000)) : null;
+  const scoreBoard = () => st.scores.length > 0 && (
+    <div className="rounded-lg bg-gray-50 p-2 text-sm">
+      <p className="text-xs text-gray-400 font-bold mb-1">🏆 점수</p>
+      <div className="flex flex-wrap gap-2">
+        {st.scores.map((s) => (
+          <span key={s.seat} className={`px-2 py-0.5 rounded-full ${s.seat === st.seat ? 'bg-hit text-white' : 'bg-white border border-gray-200 text-gray-600'}`}>{s.nick} {s.score}</span>
+        ))}
+      </div>
+    </div>
+  );
 
   return (
     <main className="min-h-screen flex flex-col items-center p-4 max-w-lg mx-auto w-full">
@@ -263,7 +300,8 @@ export default function GarticPage() {
           <span className="text-xs bg-gray-100 rounded px-2 py-1 tracking-wider font-bold shrink-0">{roomCode}</span>
           <button onClick={() => { changeRoom(null); setSt(null); }} className="text-xs text-gray-400 underline shrink-0">나가기</button>
         </div>
-        {st.status === 'PLAYING' && <span className="text-xs text-gray-500 font-bold">{st.round === 0 ? '시작' : `${st.round}`}/{st.totalRounds - 1} 라운드{remain != null && ` · ⏱${remain}s`}</span>}
+        {st.status === 'PLAYING' && st.mode === 'GARTIC' && <span className="text-xs text-gray-500 font-bold">{st.round === 0 ? '시작' : `${st.round}`}/{st.totalRounds - 1} 라운드{remain != null && ` · ⏱${remain}s`}</span>}
+        {st.status === 'PLAYING' && st.mode === 'CATCHMIND' && remain != null && <span className="text-xs text-gray-500 font-bold">⏱{remain}s</span>}
       </div>
 
       {st.status === 'LOBBY' && (
@@ -292,7 +330,7 @@ export default function GarticPage() {
         </div>
       )}
 
-      {st.status === 'PLAYING' && (
+      {st.status === 'PLAYING' && st.mode === 'GARTIC' && (
         <div className="w-full space-y-3">
           {st.mySubmitted || !st.joined ? (
             <div className="text-center py-10 space-y-2">
@@ -330,7 +368,59 @@ export default function GarticPage() {
         </div>
       )}
 
-      {st.status === 'REVEAL' && st.albums.length > 0 && (
+      {st.status === 'PLAYING' && st.mode === 'CATCHMIND' && (
+        <div className="w-full space-y-3">
+          <p className="text-center text-sm text-gray-500">🎨 <b>{st.players[st.drawerSeat - 1]?.nick}</b>님이 그리는 중 · {st.round}/{st.totalRounds}라운드</p>
+          {st.amDrawer ? (
+            <div className="space-y-2">
+              <p className="text-center text-lg font-extrabold text-hit bg-hit/5 rounded-lg py-2">제시어: {st.myWord}</p>
+              <DrawCanvas ref={canvasRef} size={320} onStrokeEnd={pushSnapshot} />
+              <p className="text-center text-xs text-gray-400">그림은 자동 공유돼요. 글씨·힌트는 금지!</p>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              <div className="w-72 h-72 max-w-full mx-auto rounded-xl border-2 border-gray-200 bg-white flex items-center justify-center overflow-hidden">
+                {st.snapshot ? <img src={st.snapshot} alt="drawing" className="w-full h-full object-contain" /> : <span className="text-gray-300 text-sm">그리는 중...</span>}
+              </div>
+              {st.iGuessedCorrect ? (
+                <p className="text-center text-green-600 font-bold">✅ 정답! “{st.myWord}”</p>
+              ) : (
+                <div className="flex gap-2">
+                  <input value={textInput} onChange={(e) => setTextInput(e.target.value)} maxLength={40}
+                    onKeyDown={(e) => e.key === 'Enter' && handleGuess()} placeholder="정답 입력!"
+                    className="flex-1 border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:border-hit" />
+                  <button onClick={handleGuess} disabled={busy} className="bg-hit text-white font-bold px-5 rounded-lg disabled:opacity-50">보내기</button>
+                </div>
+              )}
+            </div>
+          )}
+          <div className="rounded-lg border border-gray-200 p-2 h-28 overflow-y-auto text-sm space-y-0.5">
+            {st.guesses.length === 0 && <p className="text-gray-300 text-center text-xs py-2">아직 추측이 없어요</p>}
+            {st.guesses.map((gg, i) => (
+              <p key={i} className={gg.correct ? 'text-green-600 font-bold' : 'text-gray-600'}><b>{gg.nick}</b>: {gg.text}</p>
+            ))}
+          </div>
+          {scoreBoard()}
+          {error && <p className="text-red-500 text-sm text-center">{error}</p>}
+        </div>
+      )}
+
+      {st.status === 'REVEAL' && st.mode === 'CATCHMIND' && (
+        <div className="w-full space-y-3 text-center">
+          <p className="text-xl font-extrabold text-hit">🏁 게임 종료!</p>
+          <div className="rounded-xl border border-gray-200 p-4 space-y-2">
+            {st.scores.map((s, i) => (
+              <div key={s.seat} className="flex items-center justify-between">
+                <span className="font-bold">{i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `${i + 1}.`} {s.nick}{s.seat === st.seat && ' (나)'}</span>
+                <span className="text-hit font-bold">{s.score}점</span>
+              </div>
+            ))}
+          </div>
+          <button onClick={() => { changeRoom(null); setSt(null); setShowCreate(true); }} className="w-full bg-hit text-white font-bold py-3 rounded-lg">🔄 새 방 만들기</button>
+        </div>
+      )}
+
+      {st.status === 'REVEAL' && st.mode === 'GARTIC' && st.albums.length > 0 && (
         <div className="w-full space-y-3">
           <p className="text-center text-xl font-extrabold text-hit">🎉 결과 공개!</p>
           <div className="flex gap-1 flex-wrap justify-center">

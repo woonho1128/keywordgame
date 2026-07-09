@@ -59,6 +59,20 @@ public class DrawGameController {
         return ApiResponse.success(rooms.require(roomCode).submit(clientId, req.type(), req.content()));
     }
 
+    @PostMapping("/snapshot")
+    public ApiResponse<DrawGameStateResponse> snapshot(@RequestParam String roomCode, @RequestParam String clientId,
+                                                       @RequestBody SubmitRequest req) {
+        validateClientId(clientId);
+        return ApiResponse.success(rooms.require(roomCode).snapshotImg(clientId, req.content()));
+    }
+
+    @PostMapping("/guess")
+    public ApiResponse<DrawGameStateResponse> guess(@RequestParam String roomCode, @RequestParam String clientId,
+                                                    @RequestBody SubmitRequest req) {
+        validateClientId(clientId);
+        return ApiResponse.success(rooms.require(roomCode).guess(clientId, req.content()));
+    }
+
     @GetMapping("/me")
     public ApiResponse<DrawGameStateResponse> me(@RequestParam String roomCode, @RequestParam String clientId) {
         validateClientId(clientId);
