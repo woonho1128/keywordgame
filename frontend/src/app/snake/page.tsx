@@ -18,7 +18,7 @@ type Vec = { x: number; y: number };
 type Snake = {
   path: Vec[]; segs: number; angle: number; target: number;
   r: number; color: string; alive: boolean; bot: boolean; name: string;
-  score: number; respawnAt: number;
+  score: number; respawnAt: number; invulnUntil: number;
 };
 type Food = { x: number; y: number; r: number; c: string };
 type Obstacle = { x: number; y: number; r: number };
@@ -50,12 +50,24 @@ export default function SnakePage() {
   const spawnFood = (foods: Food[]) => {
     foods.push({ x: rand(20, W - 20), y: rand(20, W - 20), r: rand(4, 6), c: COLORS[Math.floor(Math.random() * COLORS.length)] });
   };
-  const newSnake = (name: string, bot: boolean, color: string): Snake => {
-    const x = rand(150, W - 150), y = rand(150, W - 150);
+  const newSnake = (name: string, bot: boolean, color: string, pos?: Vec, invulnMs = 0): Snake => {
+    const x = pos ? pos.x : rand(150, W - 150), y = pos ? pos.y : rand(150, W - 150);
     const angle = rand(0, Math.PI * 2);
     const path: Vec[] = [];
     for (let i = 0; i < START_SEG * SEG_GAP + 5; i++) path.push({ x: x - Math.cos(angle) * i, y: y - Math.sin(angle) * i });
-    return { path, segs: START_SEG, angle, target: angle, r: BASE_R, color, alive: true, bot, name, score: 0, respawnAt: 0 };
+    return { path, segs: START_SEG, angle, target: angle, r: BASE_R, color, alive: true, bot, name, score: 0, respawnAt: 0, invulnUntil: performance.now() + invulnMs };
+  };
+
+  // 플레이어·장애물에서 충분히 떨어진 스폰 위치(스폰 즉사 방지)
+  const safePos = (g: typeof gameRef.current): Vec => {
+    for (let t = 0; t < 30; t++) {
+      const p = { x: rand(150, W - 150), y: rand(150, W - 150) };
+      let ok = true;
+      if (g.me && g.me.alive) for (const b of body(g.me)) if ((b.x - p.x) ** 2 + (b.y - p.y) ** 2 < 150 ** 2) { ok = false; break; }
+      if (ok) for (const o of g.obstacles) if ((o.x - p.x) ** 2 + (o.y - p.y) ** 2 < (o.r + 50) ** 2) { ok = false; break; }
+      if (ok) return p;
+    }
+    return { x: rand(150, W - 150), y: rand(150, W - 150) };
   };
 
   const submitScore = useCallback(async (sc: number) => {
@@ -79,11 +91,19 @@ export default function SnakePage() {
     try { localStorage.setItem('arcade_nick', n); } catch {}
     const g = gameRef.current;
     g.foods = []; for (let i = 0; i < FOOD_N; i++) spawnFood(g.foods);
-    g.obstacles = [];
-    for (let i = 0; i < 5; i++) g.obstacles.push({ x: rand(150, W - 150), y: rand(150, W - 150), r: rand(24, 44) });
-    g.me = newSnake(n.slice(0, 16), false, '#111827');
+    // 플레이어 먼저(중앙 시작) + 시작 5초 무적
+    g.me = newSnake(n.slice(0, 16), false, '#111827', { x: W / 2, y: W / 2 }, 5000);
     g.snakes = [g.me];
-    for (let i = 0; i < BOT_N; i++) g.snakes.push(newSnake('봇' + (i + 1), true, COLORS[i % COLORS.length]));
+    // 장애물은 플레이어 시작 위치를 피해 배치
+    g.obstacles = [];
+    for (let i = 0; i < 5; i++) {
+      let p = { x: rand(150, W - 150), y: rand(150, W - 150) };
+      const hh = head(g.me);
+      for (let t = 0; t < 20; t++) { p = { x: rand(150, W - 150), y: rand(150, W - 150) }; if ((p.x - hh.x) ** 2 + (p.y - hh.y) ** 2 > 180 ** 2) break; }
+      g.obstacles.push({ x: p.x, y: p.y, r: rand(24, 44) });
+    }
+    // 봇은 플레이어에게서 떨어진 안전 위치 + 2초 무적
+    for (let i = 0; i < BOT_N; i++) g.snakes.push(newSnake('봇' + (i + 1), true, COLORS[i % COLORS.length], safePos(g), 2000));
     setScore(0); setMyRank(null);
     setPhase('playing');
   };
@@ -140,47 +160,59 @@ export default function SnakePage() {
         if (s.path.length > maxLen) s.path.length = maxLen;
         s.r = BASE_R + Math.min(6, s.segs / 40);
       }
-      // 먹이 섭취
+      // 먹이 섭취(머리·몸통·꼬리 어디든 닿으면 먹음 → 몸 밑에 끼어 안 사라지는 문제 해결)
       for (const s of g.snakes) {
         if (!s.alive) continue;
-        const h = head(s);
+        const parts = body(s);
         for (let i = g.foods.length - 1; i >= 0; i--) {
           const f = g.foods[i];
-          if ((f.x - h.x) ** 2 + (f.y - h.y) ** 2 < (s.r + f.r) ** 2) {
-            g.foods.splice(i, 1); s.segs = Math.min(500, s.segs + 3); s.score += 1;
-            if (s === g.me) setScore(s.score);
-            spawnFood(g.foods);
+          const rr = s.r + f.r;
+          for (let j = 0; j < parts.length; j++) {
+            const p = parts[j];
+            if ((f.x - p.x) ** 2 + (f.y - p.y) ** 2 < rr * rr) {
+              g.foods.splice(i, 1); s.segs = Math.min(500, s.segs + 3); s.score += 1;
+              if (s === g.me) setScore(s.score);
+              spawnFood(g.foods);
+              break;
+            }
           }
         }
       }
       // 충돌 판정(머리 → 벽/장애물/다른 뱀 몸/자기 몸)
+      const nowT = performance.now();
       for (const s of g.snakes) {
         if (!s.alive) continue;
+        if (nowT < s.invulnUntil) continue;   // 무적 동안엔 죽지 않음
         const h = head(s);
         let dead = false;
+        let killer: Snake | null = null;
         if (h.x < 0 || h.x > W || h.y < 0 || h.y > W) dead = true;
-        for (const o of g.obstacles) if ((o.x - h.x) ** 2 + (o.y - h.y) ** 2 < (o.r + s.r) ** 2) dead = true;
+        if (!dead) for (const o of g.obstacles) if ((o.x - h.x) ** 2 + (o.y - h.y) ** 2 < (o.r + s.r) ** 2) { dead = true; break; }
         if (!dead) for (const other of g.snakes) {
           if (!other.alive) continue;
           const segs = body(other);
           const startI = other === s ? 8 : 0; // 자기 몸은 앞부분 제외
           for (let i = startI; i < segs.length; i++) {
             const b = segs[i];
-            if ((b.x - h.x) ** 2 + (b.y - h.y) ** 2 < (other.r + s.r) ** 2 * 0.7) { dead = true; break; }
+            if ((b.x - h.x) ** 2 + (b.y - h.y) ** 2 < (other.r + s.r) ** 2 * 0.7) { dead = true; killer = other === s ? null : other; break; }
           }
           if (dead) break;
         }
         if (dead) {
           s.alive = false;
           for (const b of body(s)) if (Math.random() < 0.5) g.foods.push({ x: b.x, y: b.y, r: 5, c: s.color });
+          if (killer && killer.alive && killer !== s) {   // 내 몸에 부딪혀 죽은 경우 킬 보너스 +10
+            killer.score += 10;
+            if (killer === g.me) setScore(killer.score);
+          }
           if (s === g.me) { endGame(s.score); return; }
           else s.respawnAt = performance.now() + 2500;
         }
       }
-      // 봇 리스폰
+      // 봇 리스폰(플레이어에게서 떨어진 안전 위치 + 2초 무적)
       for (const s of g.snakes) {
         if (s.bot && !s.alive && performance.now() > s.respawnAt && s.respawnAt > 0) {
-          const ns = newSnake(s.name, true, s.color);
+          const ns = newSnake(s.name, true, s.color, safePos(g), 2000);
           Object.assign(s, ns);
         }
       }
@@ -192,13 +224,22 @@ export default function SnakePage() {
       for (const f of g.foods) { ctx.fillStyle = f.c; ctx.beginPath(); ctx.arc(f.x, f.y, f.r, 0, Math.PI * 2); ctx.fill(); }
       for (const s of g.snakes) {
         if (!s.alive) continue;
+        const inv = performance.now() < s.invulnUntil;
         const segs = body(s);
+        const h = head(s);
+        ctx.save();
+        if (inv) ctx.globalAlpha = 0.45 + 0.35 * Math.abs(Math.sin(performance.now() / 120));
         ctx.fillStyle = s.color;
         for (let i = segs.length - 1; i >= 0; i--) { ctx.beginPath(); ctx.arc(segs[i].x, segs[i].y, s.r, 0, Math.PI * 2); ctx.fill(); }
-        const h = head(s);
         ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(h.x + Math.cos(s.angle) * 2, h.y + Math.sin(s.angle) * 2, s.r * 0.4, 0, Math.PI * 2); ctx.fill();
+        ctx.restore();
+        if (inv) { ctx.strokeStyle = '#fbbf24'; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(h.x, h.y, s.r + 4, 0, Math.PI * 2); ctx.stroke(); }
         ctx.fillStyle = '#334155'; ctx.font = '12px sans-serif'; ctx.textAlign = 'center';
         ctx.fillText(s.name, h.x, h.y - s.r - 4);
+        if (inv && s === g.me) {
+          ctx.fillStyle = '#f59e0b'; ctx.font = 'bold 12px sans-serif';
+          ctx.fillText('🛡️ ' + Math.ceil((s.invulnUntil - performance.now()) / 1000) + 's', h.x, h.y - s.r - 18);
+        }
       }
       g.raf = requestAnimationFrame(step);
     };
@@ -230,7 +271,7 @@ export default function SnakePage() {
       {phase === 'playing' ? (
         <>
           <canvas ref={canvasRef} width={W} height={W} className="w-full rounded-xl border border-gray-200 bg-slate-50 touch-none" style={{ aspectRatio: '1/1' }} />
-          <p className="text-xs text-gray-400 mt-2 text-center">마우스로 방향 조준 · WASD/방향키도 가능 · 벽·장애물·몸에 닿으면 끝!</p>
+          <p className="text-xs text-gray-400 mt-2 text-center">마우스/WASD로 조준 · 벽·장애물·몸에 닿으면 끝! · 🛡️ 시작 5초 무적 · 상대를 잡으면 +10점</p>
         </>
       ) : (
         <div className="w-full space-y-4">
