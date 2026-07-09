@@ -27,7 +27,18 @@ function rand(a: number, b: number) { return a + Math.random() * (b - a); }
 function head(s: Snake) { return s.path[0]; }
 function body(s: Snake): Vec[] {
   const out: Vec[] = [];
-  for (let i = 0; i < s.segs; i++) { const idx = i * SEG_GAP; if (idx < s.path.length) out.push(s.path[idx]); }
+  const n = Math.floor(s.segs);
+  for (let i = 0; i < n; i++) { const idx = i * SEG_GAP; if (idx < s.path.length) out.push(s.path[idx]); }
+  // 마지막 꼬리 세그먼트를 소수부만큼 부드럽게 연장 → 성장 시 꼬리가 뒤로 툭 튀는 것 방지
+  const frac = s.segs - n;
+  if (frac > 0.01) {
+    const idx = n * SEG_GAP;
+    if (idx < s.path.length && out.length) {
+      const prev = out[out.length - 1];
+      const p = s.path[idx];
+      out.push({ x: prev.x + (p.x - prev.x) * frac, y: prev.y + (p.y - prev.y) * frac });
+    }
+  }
   return out;
 }
 
