@@ -61,8 +61,8 @@ public class HalliGalliGame implements RoomGame {
     // 난이도별 [생각시간base, 생각jitter, 반응base, 반응jitter, 놓칠확률%]
     private static final Map<String, int[]> AI_TUNE = Map.of(
             "EASY",   new int[]{1400, 500, 1700, 600, 22},
-            "NORMAL", new int[]{1000, 350, 950,  350, 6},
-            "HARD",   new int[]{650,  200, 430,  180, 0}
+            "NORMAL", new int[]{1000, 350, 1000, 350, 8},
+            "HARD",   new int[]{650,  200, 550,  180, 2}
     );
 
     // =================== 명령 ===================
