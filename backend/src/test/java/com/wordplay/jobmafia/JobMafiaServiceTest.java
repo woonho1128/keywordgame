@@ -20,7 +20,7 @@ class JobMafiaServiceTest {
         JobMafiaService svc = new JobMafiaService();
         clients.clear();
         // 범위 고정: 마피아1·정신병자1·관종1 → 6인이면 각 1명 + 시민1 (결정적)
-        svc.newGame("host", new NewJobMafiaRequest("방장", null, null, null, 1, 1, 1, 1, 1, 1));
+        svc.newGame("host", new NewJobMafiaRequest("방장", null, null, null, 1, 1, 1, 1, 1, 1, 0, 0));
         clients.add("host");
         for (int i = 1; i <= 5; i++) { svc.join("c" + i, "p" + i); clients.add("c" + i); }
         svc.start("host");
@@ -45,6 +45,38 @@ class JobMafiaServiceTest {
     private String clientAtSeat(JobMafiaService svc, int seatIdx0) {
         for (String c : clients) if (svc.me(c).seat() == seatIdx0 + 1) return c;
         throw new IllegalStateException("no client at seat " + seatIdx0);
+    }
+
+    @SuppressWarnings({"unchecked", "rawtypes"})
+    private void setRole(JobMafiaService svc, int seat, String roleName) throws Exception {
+        Field pf = JobMafiaService.class.getDeclaredField("players");
+        pf.setAccessible(true);
+        Object player = ((List<?>) pf.get(svc)).get(seat);
+        Field rf = player.getClass().getDeclaredField("role");
+        rf.setAccessible(true);
+        Class<?> roleEnum = Class.forName("com.wordplay.jobmafia.JobMafiaService$Role");
+        rf.set(player, Enum.valueOf((Class) roleEnum, roleName));
+    }
+
+    private void forcePhaseEnd(JobMafiaService svc) throws Exception {
+        Field ef = JobMafiaService.class.getDeclaredField("phaseEndsAt");
+        ef.setAccessible(true);
+        ef.setLong(svc, 1L);
+    }
+
+    @Test
+    void 도적꾼_직업_강탈() throws Exception {
+        JobMafiaService svc = start6();
+        setRole(svc, 0, "THIEF");
+        setRole(svc, 1, "DOCTOR");
+        setRole(svc, 2, "MAFIA"); // 마피아 생존 보장(게임 계속)
+        String thief = clientAtSeat(svc, 0);
+        svc.nightAction(thief, 2); // 1-based 좌석 2 = 의사(seat1) 지목
+        forcePhaseEnd(svc);
+        svc.me(thief);             // tick → resolveNight(강탈)
+        List<String> roles = trueRoles(svc);
+        assertThat(roles.get(0)).isEqualTo("DOCTOR");  // 도적꾼이 의사가 됨
+        assertThat(roles.get(1)).isEqualTo("CITIZEN"); // 피해자는 무직
     }
 
     @Test
@@ -103,7 +135,7 @@ class JobMafiaServiceTest {
     @Test
     void 최소인원_미달_시작불가() {
         JobMafiaService svc = new JobMafiaService();
-        svc.newGame("host", new NewJobMafiaRequest("방장", null, null, null, null, null, null, null, null, null));
+        svc.newGame("host", new NewJobMafiaRequest("방장", null, null, null, null, null, null, null, null, null, null, null));
         for (int i = 1; i <= 3; i++) svc.join("c" + i, "p" + i);
         assertThatThrownBy(() -> svc.start("host")).hasMessageContaining("최소 5명");
     }

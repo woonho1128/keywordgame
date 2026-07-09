@@ -18,5 +18,7 @@ public record NewJobMafiaRequest(
         Integer psychoMin,
         Integer psychoMax,
         Integer attentionMin,
-        Integer attentionMax
+        Integer attentionMax,
+        Integer thiefMin,
+        Integer thiefMax
 ) {}

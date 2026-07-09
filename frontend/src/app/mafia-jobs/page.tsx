@@ -36,6 +36,7 @@ type JobState = {
   winner: string | null;
   aliveCount: number;
   playerCount: number;
+  myHistory: string[];
 };
 
 type RoomSummary = { code: string; status: string; playerCount: number; host: string };
@@ -68,6 +69,7 @@ const ROLE_META: Record<string, { label: string; emoji: string; color: string; d
   PSYCHO: { label: '정신병자', emoji: '🤪', color: 'text-purple-500', desc: '시민팀. 본인은 다른 직업인 줄 알지만 능력이 통하지 않습니다.' },
   MAFIA: { label: '마피아', emoji: '🔪', color: 'text-red-500', desc: '밤마다 동료와 함께 1명을 제거합니다.' },
   ATTENTION: { label: '관종', emoji: '📢', color: 'text-amber-500', desc: '중립. 낮 투표로 자신이 처형되면 혼자 승리합니다!' },
+  THIEF: { label: '도적꾼', emoji: '🕵️', color: 'text-teal-600', desc: '중립. 밤에 딱 한 번, 한 명의 직업을 훔칩니다. 그 사람은 무직(시민)이 되고 당신은 그 직업이 됩니다(그 밤의 능력은 유지).' },
 };
 
 const PHASE_LABEL: Record<Phase, string> = {
@@ -79,6 +81,7 @@ const ACTION_LABEL: Record<string, string> = {
   MAFIA_KILL: '🔪 제거할 대상을 고르세요',
   POLICE_CHECK: '🔎 조사할 대상을 고르세요',
   DOCTOR_SAVE: '🩺 보호할 대상을 고르세요',
+  THIEF_STEAL: '🕵️ 직업을 훔칠 대상을 고르세요 (밤 1회)',
   CITIZEN_WATCH: '🌙 밤 - 지켜볼 사람을 한 명 고르세요',
   VOTE: '🗳️ 처형할 사람에게 투표하세요',
 };
@@ -106,6 +109,8 @@ export default function MafiaJobsPage() {
   const [psychoMax, setPsychoMax] = useState(1);
   const [attentionMin, setAttentionMin] = useState(0);
   const [attentionMax, setAttentionMax] = useState(1);
+  const [thiefMin, setThiefMin] = useState(0);
+  const [thiefMax, setThiefMax] = useState(1);
   const [showRoles, setShowRoles] = useState(false);
 
   const [showAdmin, setShowAdmin] = useState(false);
@@ -205,7 +210,7 @@ export default function MafiaJobsPage() {
     try {
       const res = await api<{ roomCode: string; state: JobState }>(
         `/api/v1/jobmafia/new?clientId=${encodeURIComponent(clientId)}`,
-        { method: 'POST', body: JSON.stringify({ nick: n, nightSec, discussSec, voteSec, mafiaMin, mafiaMax, psychoMin, psychoMax, attentionMin, attentionMax }) }
+        { method: 'POST', body: JSON.stringify({ nick: n, nightSec, discussSec, voteSec, mafiaMin, mafiaMax, psychoMin, psychoMax, attentionMin, attentionMax, thiefMin, thiefMax }) }
       );
       changeRoom(res.roomCode);
       setSt(res.state);
@@ -349,6 +354,13 @@ export default function MafiaJobsPage() {
         </div>
       )}
 
+      {st.myHistory && st.myHistory.length > 0 && (
+        <div className="w-full mb-4 rounded-xl border border-teal-300 bg-teal-50 p-3 text-sm text-teal-800 space-y-1">
+          <p className="text-xs text-teal-500 font-bold">🔒 내 기록 (나만 봄)</p>
+          {st.myHistory.map((h, i) => <p key={i}>{h}</p>)}
+        </div>
+      )}
+
       <div className="flex-1 w-full">
         {phase === 'NOT_STARTED' && renderNotStarted()}
         {phase === 'LOBBY' && renderLobby()}
@@ -470,6 +482,7 @@ export default function MafiaJobsPage() {
           {rangeRow('🔪 마피아', mafiaMin, setMafiaMin, mafiaMax, setMafiaMax, 0, 5)}
           {rangeRow('🤪 정신병자', psychoMin, setPsychoMin, psychoMax, setPsychoMax, 0, 3)}
           {rangeRow('📢 관종', attentionMin, setAttentionMin, attentionMax, setAttentionMax, 0, 3)}
+          {rangeRow('🕵️ 도적꾼', thiefMin, setThiefMin, thiefMax, setThiefMax, 0, 3)}
           <p className="text-xs text-gray-400">경찰·의사는 항상 1명씩, 나머지는 시민입니다.</p>
         </div>
 

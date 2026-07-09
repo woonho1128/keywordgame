@@ -32,7 +32,7 @@ import java.util.concurrent.ThreadLocalRandom;
 public class JobMafiaService implements RoomGame {
 
     enum Phase { LOBBY, NIGHT, MORNING, DISCUSS, VOTE, EXECUTE, ENDED }
-    enum Role { CITIZEN, POLICE, DOCTOR, PSYCHO, MAFIA, ATTENTION }
+    enum Role { CITIZEN, POLICE, DOCTOR, PSYCHO, MAFIA, ATTENTION, THIEF }
 
     private static final long MORNING_MS = 6_000;
     private static final long EXECUTE_MS = 6_000;
@@ -58,6 +58,7 @@ public class JobMafiaService implements RoomGame {
     private int mafiaMin = 1, mafiaMax = 2;
     private int psychoMin = 0, psychoMax = 1;
     private int attentionMin = 0, attentionMax = 1;
+    private int thiefMin = 0, thiefMax = 1;
     private boolean revealOnDeath = true;
 
     // 밤 상태
@@ -97,6 +98,8 @@ public class JobMafiaService implements RoomGame {
         psychoMax = clampInt(req.psychoMax(), psychoMin, 4, Math.max(psychoMin, 1));
         attentionMin = clampInt(req.attentionMin(), 0, 4, 0);
         attentionMax = clampInt(req.attentionMax(), attentionMin, 4, Math.max(attentionMin, 1));
+        thiefMin = clampInt(req.thiefMin(), 0, 4, 0);
+        thiefMax = clampInt(req.thiefMax(), thiefMin, 4, Math.max(thiefMin, 1));
         addPlayer(clientId, req.nick());
         return me(clientId);
     }
@@ -123,14 +126,16 @@ public class JobMafiaService implements RoomGame {
         int mafia = Math.max(1, randRange(mafiaMin, mafiaMax)); // 마피아는 최소 1 보장
         int psycho = randRange(psychoMin, psychoMax);
         int attention = randRange(attentionMin, attentionMax);
+        int thief = randRange(thiefMin, thiefMax);
         // 인원 초과 시 특수직업부터 줄임(마피아는 1까지만 감축)
-        while (mafia + psycho + attention + 2 > n) {
-            if (attention > 0) attention--;
+        while (mafia + psycho + attention + thief + 2 > n) {
+            if (thief > 0) thief--;
+            else if (attention > 0) attention--;
             else if (psycho > 0) psycho--;
             else if (mafia > 1) mafia--;
             else break;
         }
-        if (mafia + psycho + attention + 2 > n)
+        if (mafia + psycho + attention + thief + 2 > n)
             throw new BusinessException(ErrorCode.INVALID_INPUT, "인원이 부족합니다");
 
         List<Role> roles = new ArrayList<>();
@@ -139,6 +144,7 @@ public class JobMafiaService implements RoomGame {
         roles.add(Role.DOCTOR);
         for (int i = 0; i < psycho; i++) roles.add(Role.PSYCHO);
         for (int i = 0; i < attention; i++) roles.add(Role.ATTENTION);
+        for (int i = 0; i < thief; i++) roles.add(Role.THIEF);
         while (roles.size() < n) roles.add(Role.CITIZEN);
         Collections.shuffle(roles);
 
@@ -155,6 +161,7 @@ public class JobMafiaService implements RoomGame {
         round = 1;
         copLog.clear();
         psychoCopLogs.clear();
+        thiefLogs.clear();
         prepareNight();
         startPhase(Phase.NIGHT);
         return me(clientId);
@@ -293,7 +300,31 @@ public class JobMafiaService implements RoomGame {
             if (t != null && t >= 0)
                 psychoCopLogBySeat(ps).add(round + "일차: " + players.get(t).nick + " → " + fakeScan());
         }
+
+        // 도적꾼: 대상의 직업을 훔쳐온다. 이 밤의 다른 능력은 위에서 이미 처리됐으므로 결과는 유지된다.
+        // (예: 피해자가 의사로 A를 살렸다면 그 치료는 반영되고, 다음 아침부터 피해자는 무직 시민이 된다.)
+        for (int i = 0; i < players.size(); i++) {
+            Player thief = players.get(i);
+            if (thief.role != Role.THIEF || !thief.alive) continue;
+            Integer t = nightTargetBySeat.get(i);
+            if (t == null || t < 0 || t >= players.size() || t == i) continue;
+            Player victim = players.get(t);
+            Role stolen = victim.role;
+            if (stolen == null) continue;
+            thief.role = stolen;
+            victim.role = Role.CITIZEN;
+            // 정신병자 상태 이관(훔친 직업이 정신병자면 도적꾼이 가짜직업을 물려받는다)
+            psychoFakeRoles.remove(i);
+            if (stolen == Role.PSYCHO) {
+                psychoFakeRoles.put(i, psychoFakeRoles.getOrDefault(t, Role.POLICE));
+            }
+            psychoFakeRoles.remove(t);
+            thiefLog(i).add(round + "일차 🕵️ " + victim.nick + "의 직업(" + jobLabel(stolen) + ")을 훔쳤다!");
+        }
     }
+
+    private final Map<Integer, List<String>> thiefLogs = new HashMap<>();
+    private List<String> thiefLog(int seat) { return thiefLogs.computeIfAbsent(seat, k -> new ArrayList<>()); }
 
     private String jobLabel(Role r) {
         return switch (r) {
@@ -303,6 +334,7 @@ public class JobMafiaService implements RoomGame {
             case PSYCHO -> "정신병자";
             case MAFIA -> "마피아";
             case ATTENTION -> "관종";
+            case THIEF -> "도적꾼";
         };
     }
 
@@ -424,6 +456,7 @@ public class JobMafiaService implements RoomGame {
                     case MAFIA -> "MAFIA_KILL";
                     case POLICE -> "POLICE_CHECK";
                     case DOCTOR -> "DOCTOR_SAVE";
+                    case THIEF -> "THIEF_STEAL";
                     default -> "CITIZEN_WATCH"; // 시민/관종(위장 지목)
                 };
                 selectable = selectableSeats(seatOf(me), display).stream().map(s -> s + 1).toList();
@@ -493,7 +526,8 @@ public class JobMafiaService implements RoomGame {
                 tally,
                 ended ? winner : null,
                 (int) players.stream().filter(p -> p.alive).count(),
-                players.size()
+                players.size(),
+                joined && thiefLogs.containsKey(mySeatIdx) ? List.copyOf(thiefLogs.get(mySeatIdx)) : List.of()
         );
     }
 
@@ -507,7 +541,7 @@ public class JobMafiaService implements RoomGame {
     private String teamOf(Role r) {
         return switch (r) {
             case MAFIA -> "MAFIA";
-            case ATTENTION -> "NEUTRAL";
+            case ATTENTION, THIEF -> "NEUTRAL";
             default -> "CITIZEN";
         };
     }
@@ -561,6 +595,7 @@ public class JobMafiaService implements RoomGame {
         nightTargetBySeat.clear();
         copLog.clear();
         psychoCopLogs.clear();
+        thiefLogs.clear();
         nightActed.clear();
         psychoFakeRoles.clear();
         votes.clear();
