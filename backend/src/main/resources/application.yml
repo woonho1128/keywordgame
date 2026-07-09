@@ -64,8 +64,9 @@ app:
     # text-embedding-3-small (1536d, $0.02/1M) 또는 text-embedding-3-large (3072d, $0.13/1M)
     model: ${OPENAI_MODEL:text-embedding-3-large}
     timeout-ms: 10000
-    # 마피아 AI 봇 대화/투표용 채팅 모델(임베딩 모델과 별개). 소형 모델 권장.
-    chat-model: ${OPENAI_CHAT_MODEL:gpt-4o-mini}
+    # 마피아 AI 봇 대화/투표용 채팅 모델(임베딩 모델과 별개).
+    # 기본 gpt-4o(대화 품질↑). 비용 아끼려면 OPENAI_CHAT_MODEL=gpt-4o-mini 로 내릴 수 있음.
+    chat-model: ${OPENAI_CHAT_MODEL:gpt-4o}
     chat-timeout-ms: 15000
 
 ---
