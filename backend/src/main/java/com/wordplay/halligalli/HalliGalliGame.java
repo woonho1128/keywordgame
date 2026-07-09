@@ -58,12 +58,12 @@ public class HalliGalliGame implements RoomGame {
     private long flipReadyAt = 0;                  // 현재 봇이 카드를 넘길 시각(사람이면 0)
     private long fiveAppearedMs = 0;               // 현재 5가 뜬 시각(없으면 0)
     private final Map<Integer, Long> botRingAt = new HashMap<>(); // 봇 좌석 -> 이번 5에 종 칠 시각
-    // 난이도별 [생각시간base, 생각jitter, 반응base, 반응jitter, 놓칠확률%]
+    // 난이도별 [생각시간base, 생각jitter, 반응base, 반응jitter, 놓칠확률‰(천분율)]
     private static final Map<String, int[]> AI_TUNE = Map.of(
-            "EASY",    new int[]{1000, 500, 1000, 600, 22},
-            "NORMAL",  new int[]{1000, 350, 850,  350, 8},
-            "HARD",    new int[]{650,  200, 550,  180, 2},
-            "EXTREME", new int[]{420,  150, 280,  120, 0}   // 초월: 반응 0.28~0.4s, 실수 0
+            "EASY",    new int[]{1000, 500, 1000, 600, 220},
+            "NORMAL",  new int[]{1000, 350, 850,  350, 80},
+            "HARD",    new int[]{650,  200, 550,  180, 20},
+            "EXTREME", new int[]{420,  150, 280,  120, 5}   // 초월: 반응 0.28~0.4s, 실수 0.5%
     );
 
     // =================== 명령 ===================
@@ -281,7 +281,7 @@ public class HalliGalliGame implements RoomGame {
                     Player p = players.get(i);
                     if (!p.ai || !p.alive()) continue;
                     int[] t = AI_TUNE.getOrDefault(p.aiLevel, AI_TUNE.get("NORMAL"));
-                    if (ThreadLocalRandom.current().nextInt(100) < t[4]) {
+                    if (ThreadLocalRandom.current().nextInt(1000) < t[4]) {
                         botRingAt.put(i, Long.MAX_VALUE); // 이번엔 놓침
                     } else {
                         botRingAt.put(i, now + t[2] + ThreadLocalRandom.current().nextInt(t[3] + 1));
