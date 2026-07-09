@@ -68,6 +68,7 @@ export default function GarticPage() {
   const [revealIdx, setRevealIdx] = useState(0);
   const [, setNowTick] = useState(0);
   const canvasRef = useRef<DrawCanvasHandle>(null);
+  const chatRef = useRef<HTMLDivElement>(null);
   const cidRef = useRef('');
   const clockOffset = useRef(0);
   const taskKeyRef = useRef('');
@@ -172,6 +173,12 @@ export default function GarticPage() {
     const iv = setInterval(() => pushSnapshot(), 2000);
     return () => clearInterval(iv);
   }, [st?.status, st?.mode, st?.amDrawer, pushSnapshot]);
+
+  // 채팅 새 글 오면 자동으로 맨 아래로
+  useEffect(() => {
+    const el = chatRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
+  }, [st?.guesses?.length]);
 
   const handleAdminReset = async () => {
     const code = adminInput.trim(); if (!code) return;
@@ -434,7 +441,7 @@ export default function GarticPage() {
               )}
             </div>
           )}
-          <div className="rounded-lg border border-gray-200 p-2 h-28 overflow-y-auto text-sm space-y-0.5">
+          <div ref={chatRef} className="rounded-lg border border-gray-200 p-2 h-44 sm:h-64 overflow-y-auto text-sm space-y-0.5">
             {st.guesses.length === 0 && <p className="text-gray-300 text-center text-xs py-2">아직 추측이 없어요</p>}
             {st.guesses.map((gg, i) => (
               <p key={i} className={gg.correct ? 'text-green-600 font-bold' : 'text-gray-600'}><b>{gg.nick}</b>: {gg.text}</p>
