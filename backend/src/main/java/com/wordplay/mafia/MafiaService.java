@@ -45,8 +45,20 @@ public class MafiaService implements RoomGame {
         Role role;
         boolean alive = true;
         boolean ai = false;         // AI 봇 여부
+        String persona = null;      // AI 봇 성격(말투/태도), 사람은 null
         Player(String clientId, String nick) { this.clientId = clientId; this.nick = nick; }
     }
+
+    /** AI 봇 성격 프리셋(랜덤 배정). */
+    private static final List<String> PERSONAS = List.of(
+            "공격적인 저격수. 의심 가는 사람을 세게 몰아붙이고 직설적으로 말한다.",
+            "냉철한 논리파. 근거와 앞뒤 모순을 조목조목 따진다. 감정 표현은 거의 없다.",
+            "장난기 많은 개그형. 'ㅋㅋ'를 자주 쓰고 농담을 섞어 가볍게 말한다.",
+            "조용한 관찰자. 말수가 적고 핵심만 짧게 던진다. 차분한 말투.",
+            "소심하고 우유부단. 확신 없이 '음.. 글쎄', '나도 잘 모르겠는데' 식으로 눈치를 본다.",
+            "다혈질에 감정적. 발끈하고 억울해하며 강하게 반응한다.",
+            "능글맞은 여우. 은근슬쩍 화제를 돌리고 남을 유도한다. 여유로운 말투.",
+            "분위기를 주도하는 리더형. 상황을 정리하고 '오늘은 누구 가자'며 투표를 이끈다.");
 
     /** 토론 채팅 한 줄. */
     private record ChatMsg(int seat, String nick, String text, boolean ai, long round, long ts) {}
@@ -221,6 +233,7 @@ public class MafiaService implements RoomGame {
             int n = botCounter.incrementAndGet();
             Player b = new Player("bot::" + n + "::" + System.nanoTime(), "🤖 봇" + n);
             b.ai = true;
+            b.persona = pickPersona();
             players.add(b);
             clientSeats.put(b.clientId, players.size() - 1);
         }
@@ -616,6 +629,7 @@ public class MafiaService implements RoomGame {
         String last = lastOtherSpeaker(p);
         return chatContext()
                 + "\n\n[너의 정보] 이 대화에서 너의 이름은 '" + p.nick + "'다. " + rolePrivate(p)
+                + (p.persona != null ? "\n[너의 성격] " + p.persona + " 이 성격이 말투와 태도에 자연스럽게 드러나게 해라." : "")
                 + "\n[중요 규칙]"
                 + "\n- 너는 '" + p.nick + "'다. 절대 너 자신('" + p.nick + "')을 의심하거나 남처럼 3인칭으로 부르지 마라."
                 + "\n- 의심하거나 언급할 수 있는 상대는 너를 뺀 이들뿐: " + String.join(", ", others) + "."
@@ -630,6 +644,7 @@ public class MafiaService implements RoomGame {
             map.append(i + 1).append("=").append(players.get(i).nick).append("  ");
         return chatContext()
                 + "\n\n[너의 정보] 너의 이름은 '" + p.nick + "'다. " + rolePrivate(p)
+                + (p.persona != null ? "\n[너의 성격] " + p.persona : "")
                 + "\n이제 처형 투표다. 후보(번호=이름): " + map.toString().trim()
                 + "\n누굴 처형할지 위 번호 중 하나만 숫자로 답하라. 기권은 0. 다른 말 없이 숫자만 출력.";
     }
@@ -691,6 +706,16 @@ public class MafiaService implements RoomGame {
                 return "너의 정체는 [시민]. 특별한 정보는 없다. 대화의 모순과 투표 행태로 마피아를 추리하라.";
             }
         }
+    }
+
+    /** 이미 배정된 성격을 피해 랜덤 배정(다 쓰면 중복 허용). */
+    private String pickPersona() {
+        Set<String> used = new HashSet<>();
+        for (Player p : players) if (p.ai && p.persona != null) used.add(p.persona);
+        List<String> pool = new ArrayList<>();
+        for (String s : PERSONAS) if (!used.contains(s)) pool.add(s);
+        if (pool.isEmpty()) pool = PERSONAS;
+        return pool.get(rnd(pool.size()));
     }
 
     private static int rnd(int bound) { return bound <= 0 ? 0 : ThreadLocalRandom.current().nextInt(bound); }
