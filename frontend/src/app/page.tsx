@@ -86,6 +86,14 @@ export default function HomePage() {
           <h2 className="text-2xl font-bold mb-2">🔔 할리갈리</h2>
           <p className="text-gray-600">같은 과일 5개가 뜨면 먼저 종을 치는 실시간 순발력 게임 (2~6인).</p>
         </Link>
+
+        <Link
+          href="/gartic"
+          className="border-2 border-gray-200 rounded-xl p-8 hover:border-hit transition"
+        >
+          <h2 className="text-2xl font-bold mb-2">🎨 그림 텔레폰</h2>
+          <p className="text-gray-600">문장을 그림으로, 그림을 문장으로 넘기며 엉뚱하게 변해가는 갈틱폰 (3~10인).</p>
+        </Link>
       </div>
     </main>
   );
