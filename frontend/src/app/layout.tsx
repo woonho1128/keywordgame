@@ -7,8 +7,8 @@ export const metadata: Metadata = {
   description: '친구들과 모여 하는 파티·보드게임 (마피아, 아발론, 코드네임, 스파이폴 등)',
 };
 
-// GTM 컨테이너 ID (환경변수). 설정 안 하면 로드하지 않음.
-const GTM_ID = process.env.NEXT_PUBLIC_GTM_ID;
+// GTM 컨테이너 ID. 기본값으로 실제 컨테이너를 쓰고, 환경변수로 덮어쓸 수 있음.
+const GTM_ID = process.env.NEXT_PUBLIC_GTM_ID || 'GTM-5QMQ5XWZ';
 
 export default function RootLayout({
   children,
