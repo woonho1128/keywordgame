@@ -37,7 +37,8 @@ public record JobMafiaStateResponse(
         String winner,                 // ENDED: CITIZEN/MAFIA/NEUTRAL
         int aliveCount,
         int playerCount,
-        List<String> myHistory         // 나만 보는 개인 기록(도적꾼 훔친 기록 등)
+        List<String> myHistory,        // 나만 보는 개인 기록(내 능력·투표)
+        List<String> history           // 전체 공개 진행 이력(오래된 순)
 ) {
     public record PlayerView(int seat, String nick, boolean alive, String role) {}
     public record VoteView(int targetSeat, int count) {}
@@ -46,6 +47,6 @@ public record JobMafiaStateResponse(
         return new JobMafiaStateResponse(
                 "NOT_STARTED", 0, 0, now, false, false, 0, null, null, null, false,
                 List.of(), "NONE", List.of(), -1, List.of(), List.of(), List.of(),
-                null, -1, -1, List.of(), null, 0, 0, List.of());
+                null, -1, -1, List.of(), null, 0, 0, List.of(), List.of());
     }
 }

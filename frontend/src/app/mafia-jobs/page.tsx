@@ -37,6 +37,7 @@ type JobState = {
   aliveCount: number;
   playerCount: number;
   myHistory: string[];
+  history: string[];
 };
 
 type RoomSummary = { code: string; status: string; playerCount: number; host: string };
@@ -355,10 +356,12 @@ export default function MafiaJobsPage() {
       )}
 
       {st.myHistory && st.myHistory.length > 0 && (
-        <div className="w-full mb-4 rounded-xl border border-teal-300 bg-teal-50 p-3 text-sm text-teal-800 space-y-1">
-          <p className="text-xs text-teal-500 font-bold">🔒 내 기록 (나만 봄)</p>
-          {st.myHistory.map((h, i) => <p key={i}>{h}</p>)}
-        </div>
+        <details open className="w-full mb-4 rounded-xl border border-teal-300 bg-teal-50">
+          <summary className="cursor-pointer select-none px-3 py-2 text-xs text-teal-500 font-bold">🔒 내 행동 기록 ({st.myHistory.length}) · 나만 봄</summary>
+          <div className="px-3 pb-3 max-h-56 overflow-y-auto text-sm text-teal-800 space-y-1">
+            {st.myHistory.map((h, i) => <p key={i}>{h}</p>)}
+          </div>
+        </details>
       )}
 
       <div className="flex-1 w-full">
@@ -372,6 +375,17 @@ export default function MafiaJobsPage() {
         {phase === 'ENDED' && renderEnded()}
         {error && <p className="text-red-500 text-sm mt-4 text-center">{error}</p>}
       </div>
+
+      {st.history && st.history.length > 0 && phase !== 'LOBBY' && phase !== 'NOT_STARTED' && (
+        <details className="w-full mt-6 rounded-xl border border-gray-200">
+          <summary className="cursor-pointer select-none px-4 py-3 text-sm font-bold text-gray-600">📜 진행 이력 ({st.history.length})</summary>
+          <div className="px-4 pb-3 max-h-64 overflow-y-auto">
+            {st.history.map((h, i) => (
+              <p key={i} className="text-sm text-gray-600 border-t border-gray-50 py-1.5">{h}</p>
+            ))}
+          </div>
+        </details>
+      )}
 
       <div className="w-full mt-8 pt-4 border-t border-gray-100 flex justify-center">
         {showAdmin ? (

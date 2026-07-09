@@ -83,6 +83,11 @@ public class JobMafiaService implements RoomGame {
     private int executedSeat = -1;
     private String winner = null;
 
+    // 이력
+    private final List<String> history = new ArrayList<>();             // 공개 진행 이력
+    private final Map<Integer, List<String>> myLogs = new HashMap<>();  // 좌석별 개인 이력
+    private List<String> myLog(int seat) { return myLogs.computeIfAbsent(seat, k -> new ArrayList<>()); }
+
     // =================== 명령 ===================
 
     public synchronized JobMafiaStateResponse newGame(String clientId, NewJobMafiaRequest req) {
@@ -161,7 +166,11 @@ public class JobMafiaService implements RoomGame {
         round = 1;
         copLog.clear();
         psychoCopLogs.clear();
-        thiefLogs.clear();
+        myLogs.clear();
+        history.clear();
+        history.add("🎬 게임 시작 · " + n + "명 (마피아 " + mafia + "명"
+                + (psycho > 0 ? " · 정신병자 " + psycho : "") + (attention > 0 ? " · 관종 " + attention : "")
+                + (thief > 0 ? " · 도적꾼 " + thief : "") + ")");
         prepareNight();
         startPhase(Phase.NIGHT);
         return me(clientId);
@@ -245,6 +254,7 @@ public class JobMafiaService implements RoomGame {
                 resolveVote();
                 if (executedSeat >= 0 && players.get(executedSeat).role == Role.ATTENTION) {
                     winner = "NEUTRAL"; phase = Phase.ENDED; phaseEndsAt = 0; // 관종 처형 → 관종 승
+                    history.add("🏁 관종 단독 승리!");
                 } else if (!checkWin()) {
                     startPhase(Phase.EXECUTE);
                 }
@@ -284,21 +294,40 @@ public class JobMafiaService implements RoomGame {
         } else {
             nightMessage = "평화로운 밤이었습니다. 아무도 죽지 않았습니다.";
         }
+        history.add(round + "일차 🌙 " + nightMessage);
+
+        // 개인 밤 행동 기록(자기만 봄) — 도적꾼 스왑 전 직업 기준
+        int docSeat = aliveSeatOfRole(Role.DOCTOR);
+        if (docSeat >= 0 && doctorTarget >= 0) {
+            boolean saved = mafiaTarget >= 0 && mafiaTarget == doctorTarget;
+            myLog(docSeat).add(round + "일차 💉 보호: " + players.get(doctorTarget).nick + (saved ? " (마피아 공격을 막았다!)" : ""));
+        }
+        String killResult = nightDeadSeat >= 0 ? players.get(nightDeadSeat).nick + " 처치 성공" : "아무도 죽지 않음(보호/실패)";
+        for (int i = 0; i < players.size(); i++) {
+            if (players.get(i).role != Role.MAFIA) continue;
+            Integer t = nightTargetBySeat.get(i);
+            if (t != null && t >= 0)
+                myLog(i).add(round + "일차 🔪 지목: " + players.get(t).nick + " · 결과: " + killResult);
+        }
 
         // 경찰 조사(진짜: 직업 후보 2개 중 하나가 진짜) — 아침에 결과 1줄
         int copSeat = aliveSeatOfRole(Role.POLICE);
         if (copSeat >= 0) {
             Integer t = nightTargetBySeat.get(copSeat);
-            if (t != null && t >= 0)
+            if (t != null && t >= 0) {
                 copLog.add(round + "일차: " + players.get(t).nick + " → " + realScan(t));
+                myLog(copSeat).add(round + "일차 🔎 조사: " + players.get(t).nick + " → " + copLog.get(copLog.size() - 1).split(" → ")[1]);
+            }
         }
         // 정신병자(가짜 경찰) 가짜 조사 — 직업 2개 동등확률(우연히 진짜가 섞일 수도)
         for (var e : psychoFakeRoles.entrySet()) {
             int ps = e.getKey();
             if (e.getValue() != Role.POLICE || !players.get(ps).alive) continue;
             Integer t = nightTargetBySeat.get(ps);
-            if (t != null && t >= 0)
+            if (t != null && t >= 0) {
                 psychoCopLogBySeat(ps).add(round + "일차: " + players.get(t).nick + " → " + fakeScan());
+                myLog(ps).add(round + "일차 🔎 조사: " + players.get(t).nick + " → " + psychoCopLogBySeat(ps).get(psychoCopLogBySeat(ps).size() - 1).split(" → ")[1]);
+            }
         }
 
         // 도적꾼: 대상의 직업을 훔쳐온다. 이 밤의 다른 능력은 위에서 이미 처리됐으므로 결과는 유지된다.
@@ -319,12 +348,9 @@ public class JobMafiaService implements RoomGame {
                 psychoFakeRoles.put(i, psychoFakeRoles.getOrDefault(t, Role.POLICE));
             }
             psychoFakeRoles.remove(t);
-            thiefLog(i).add(round + "일차 🕵️ " + victim.nick + "의 직업(" + jobLabel(stolen) + ")을 훔쳤다!");
+            myLog(i).add(round + "일차 🕵️ " + victim.nick + "의 직업(" + jobLabel(stolen) + ")을 훔쳤다!");
         }
     }
-
-    private final Map<Integer, List<String>> thiefLogs = new HashMap<>();
-    private List<String> thiefLog(int seat) { return thiefLogs.computeIfAbsent(seat, k -> new ArrayList<>()); }
 
     private String jobLabel(Role r) {
         return switch (r) {
@@ -402,6 +428,20 @@ public class JobMafiaService implements RoomGame {
         executedSeat = -1;
         Map<Integer, Integer> tally = new HashMap<>();
         for (int t : votes.values()) if (t != -1) tally.merge(t, 1, Integer::sum);
+        // 개인 투표 기록
+        for (var e : votes.entrySet())
+            myLog(e.getKey()).add(round + "일차 🗳️ 투표: " + (e.getValue() < 0 ? "기권" : players.get(e.getValue()).nick));
+        // 공개 집계
+        if (!tally.isEmpty()) {
+            List<Map.Entry<Integer, Integer>> es = new ArrayList<>(tally.entrySet());
+            es.sort((a, b) -> b.getValue() - a.getValue());
+            StringBuilder sb = new StringBuilder();
+            for (var en : es) {
+                if (sb.length() > 0) sb.append(" · ");
+                sb.append(players.get(en.getKey()).nick).append(" ").append(en.getValue()).append("표");
+            }
+            history.add(round + "일차 🗳️ 집계: " + sb);
+        }
         int max = 0, top = -1;
         boolean tie = false;
         for (var e : tally.entrySet()) {
@@ -411,14 +451,17 @@ public class JobMafiaService implements RoomGame {
         if (top >= 0 && !tie && max > 0) {
             players.get(top).alive = false;
             executedSeat = top;
+            history.add(round + "일차 ☀️ " + players.get(top).nick + "님 처형 (정체: " + jobLabel(players.get(top).role) + ")");
+        } else {
+            history.add(round + "일차 ☀️ 처형 없음 (동표 또는 기권)");
         }
     }
 
     private boolean checkWin() {
         long mafiaAlive = players.stream().filter(p -> p.alive && p.role == Role.MAFIA).count();
         long nonMafiaAlive = players.stream().filter(p -> p.alive && p.role != Role.MAFIA).count();
-        if (mafiaAlive == 0) { winner = "CITIZEN"; phase = Phase.ENDED; phaseEndsAt = 0; return true; }
-        if (mafiaAlive >= nonMafiaAlive) { winner = "MAFIA"; phase = Phase.ENDED; phaseEndsAt = 0; return true; }
+        if (mafiaAlive == 0) { winner = "CITIZEN"; phase = Phase.ENDED; phaseEndsAt = 0; history.add("🏁 시민팀 승리!"); return true; }
+        if (mafiaAlive >= nonMafiaAlive) { winner = "MAFIA"; phase = Phase.ENDED; phaseEndsAt = 0; history.add("🏁 마피아팀 승리!"); return true; }
         return false;
     }
 
@@ -527,7 +570,8 @@ public class JobMafiaService implements RoomGame {
                 ended ? winner : null,
                 (int) players.stream().filter(p -> p.alive).count(),
                 players.size(),
-                joined && thiefLogs.containsKey(mySeatIdx) ? List.copyOf(thiefLogs.get(mySeatIdx)) : List.of()
+                joined && myLogs.containsKey(mySeatIdx) ? List.copyOf(myLogs.get(mySeatIdx)) : List.of(),
+                List.copyOf(history)
         );
     }
 
@@ -595,7 +639,8 @@ public class JobMafiaService implements RoomGame {
         nightTargetBySeat.clear();
         copLog.clear();
         psychoCopLogs.clear();
-        thiefLogs.clear();
+        myLogs.clear();
+        history.clear();
         nightActed.clear();
         psychoFakeRoles.clear();
         votes.clear();
