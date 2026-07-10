@@ -186,7 +186,7 @@ export default function SnakePage() {
             if ((f.x - p.x) ** 2 + (f.y - p.y) ** 2 < rr * rr) {
               g.foods.splice(i, 1);
               s.score += 1;
-              s.grow = Math.min(s.grow + (j === 0 ? 3 : 1), 30);
+              s.grow = Math.min(s.grow + (j === 0 ? 1 : 0.3), 15); // 성장 속도 완화(점수 대비 너무 길어지지 않게)
               if (s === g.me) setScore(s.score);
               spawnFood(g.foods);
               break;
@@ -281,7 +281,6 @@ export default function SnakePage() {
       <div className="w-full flex items-center justify-between mb-3">
         <h1 className="text-xl font-bold">🐍 지렁이</h1>
         {phase === 'playing' && <span className="text-sm font-bold text-hit">점수 {score}</span>}
-        <a href="/" className="text-xs text-gray-400 underline">홈</a>
       </div>
 
       {phase === 'playing' ? (

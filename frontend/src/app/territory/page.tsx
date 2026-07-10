@@ -183,7 +183,6 @@ export default function TerritoryPage() {
       <div className="w-full flex items-center justify-between mb-3">
         <h1 className="text-xl font-bold">🗺️ 땅따먹기</h1>
         {phase === 'playing' && <span className="text-sm font-bold text-hit">내 땅 {score}칸 ({Math.round(score / (G * G) * 100)}%)</span>}
-        <a href="/" className="text-xs text-gray-400 underline">홈</a>
       </div>
 
       {phase === 'playing' ? (

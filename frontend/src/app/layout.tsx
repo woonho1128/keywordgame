@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import Script from 'next/script';
 import './globals.css';
+import HomeButton from '@/components/HomeButton';
 
 export const metadata: Metadata = {
   title: 'gg — 파티·보드게임',
@@ -36,6 +37,7 @@ export default function RootLayout({
           </noscript>
         )}
         {children}
+        <HomeButton />
       </body>
     </html>
   );
