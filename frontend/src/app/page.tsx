@@ -80,6 +80,14 @@ export default function HomePage() {
         </Link>
 
         <Link
+          href="/othello"
+          className="border-2 border-gray-200 rounded-xl p-8 hover:border-hit transition"
+        >
+          <h2 className="text-2xl font-bold mb-2">⚫⚪ 오델로</h2>
+          <p className="text-gray-600">돌을 뒤집어 더 많이 차지하는 8×8 리버시. 봇(초·중·고급) 또는 유저와 대전 (2인).</p>
+        </Link>
+
+        <Link
           href="/gartic"
           className="border-2 border-gray-200 rounded-xl p-8 hover:border-hit transition"
         >
