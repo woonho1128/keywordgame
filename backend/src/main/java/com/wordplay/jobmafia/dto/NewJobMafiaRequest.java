@@ -25,5 +25,10 @@ public record NewJobMafiaRequest(
         // 어떤 중립 직업이 나올지는 게임이 랜덤으로 정한다(관종/도적꾼 개별 설정 무시).
         Boolean neutralGrouped,
         Integer neutralMin,
-        Integer neutralMax
+        Integer neutralMax,
+        // 마피아 총원 안에서 배정되는 특수 마피아 인원
+        Integer mafiaCopMin,     // 경찰마피아(조사/살해 택1)
+        Integer mafiaCopMax,
+        Integer mafiaShadowMin,  // 그림자마피아(살해 시 정체 은폐)
+        Integer mafiaShadowMax
 ) {}

@@ -20,7 +20,7 @@ class JobMafiaServiceTest {
         JobMafiaService svc = new JobMafiaService();
         clients.clear();
         // 범위 고정: 마피아1·정신병자1·관종1 → 6인이면 각 1명 + 시민1 (결정적)
-        svc.newGame("host", new NewJobMafiaRequest("방장", null, null, null, 1, 1, 1, 1, 1, 1, 0, 0, null, null, null));
+        svc.newGame("host", new NewJobMafiaRequest("방장", null, null, null, 1, 1, 1, 1, 1, 1, 0, 0, null, null, null, null, null, null, null));
         clients.add("host");
         for (int i = 1; i <= 5; i++) { svc.join("c" + i, "p" + i); clients.add("c" + i); }
         svc.start("host");
@@ -33,13 +33,30 @@ class JobMafiaServiceTest {
             JobMafiaService svc = new JobMafiaService();
             clients.clear();
             // 마피아1·정신병자0, 중립(관종·도적꾼) 통합 정확히 1명
-            svc.newGame("host", new NewJobMafiaRequest("방장", null, null, null, 1, 1, 0, 0, 0, 0, 0, 0, true, 1, 1));
+            svc.newGame("host", new NewJobMafiaRequest("방장", null, null, null, 1, 1, 0, 0, 0, 0, 0, 0, true, 1, 1, null, null, null, null));
             clients.add("host");
             for (int i = 1; i <= 5; i++) { svc.join("c" + i, "p" + i); clients.add("c" + i); }
             svc.start("host");
             List<String> roles = trueRoles(svc);
             long neutral = roles.stream().filter(r -> "ATTENTION".equals(r) || "THIEF".equals(r)).count();
             org.assertj.core.api.Assertions.assertThat(neutral).isEqualTo(1); // 관종+도적꾼 합이 정확히 1
+        }
+    }
+
+    @org.junit.jupiter.api.Test
+    void 특수마피아_마피아총원_안에서_배정() throws Exception {
+        for (int trial = 0; trial < 10; trial++) {
+            JobMafiaService svc = new JobMafiaService();
+            clients.clear();
+            // 마피아 정확히 2명, 그중 경찰마피아1 + 그림자마피아1 → 일반 마피아 0
+            svc.newGame("host", new NewJobMafiaRequest("방장", null, null, null, 2, 2, 0, 0, 0, 0, 0, 0, null, null, null, 1, 1, 1, 1));
+            clients.add("host");
+            for (int i = 1; i <= 6; i++) { svc.join("c" + i, "p" + i); clients.add("c" + i); }
+            svc.start("host");
+            List<String> roles = trueRoles(svc);
+            org.assertj.core.api.Assertions.assertThat(roles.stream().filter("MAFIA_COP"::equals).count()).isEqualTo(1);
+            org.assertj.core.api.Assertions.assertThat(roles.stream().filter("MAFIA_SHADOW"::equals).count()).isEqualTo(1);
+            org.assertj.core.api.Assertions.assertThat(roles.stream().filter("MAFIA"::equals).count()).isEqualTo(0);
         }
     }
 
@@ -151,7 +168,7 @@ class JobMafiaServiceTest {
     @Test
     void 최소인원_미달_시작불가() {
         JobMafiaService svc = new JobMafiaService();
-        svc.newGame("host", new NewJobMafiaRequest("방장", null, null, null, null, null, null, null, null, null, null, null, null, null, null));
+        svc.newGame("host", new NewJobMafiaRequest("방장", null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null));
         for (int i = 1; i <= 3; i++) svc.join("c" + i, "p" + i);
         assertThatThrownBy(() -> svc.start("host")).hasMessageContaining("최소 5명");
     }

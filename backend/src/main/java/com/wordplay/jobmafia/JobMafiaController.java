@@ -67,6 +67,14 @@ public class JobMafiaController {
         return ApiResponse.success(rooms.require(roomCode).nightAction(clientId, req.target()));
     }
 
+    /** 경찰마피아 밤 모드 선택(살해/조사). */
+    @PostMapping("/cop-mode")
+    public ApiResponse<JobMafiaStateResponse> copMode(@RequestParam String roomCode, @RequestParam String clientId,
+                                                      @RequestParam boolean investigate) {
+        validateClientId(clientId);
+        return ApiResponse.success(rooms.require(roomCode).setCopMafiaMode(clientId, investigate));
+    }
+
     @PostMapping("/vote")
     public ApiResponse<JobMafiaStateResponse> vote(@RequestParam String roomCode, @RequestParam String clientId,
                                                    @RequestBody TargetRequest req) {

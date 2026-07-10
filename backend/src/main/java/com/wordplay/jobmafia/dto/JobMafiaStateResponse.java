@@ -25,6 +25,7 @@ public record JobMafiaStateResponse(
         boolean alive,
         List<PlayerView> players,
         String actionKind,
+        boolean copMafiaInvestigate,   // 경찰마피아: 이번 밤 조사모드 여부(살해모드=false)
         List<Integer> selectable,
         int myTarget,
         List<Integer> fellowMafia,
@@ -46,7 +47,7 @@ public record JobMafiaStateResponse(
     public static JobMafiaStateResponse notStarted(long now) {
         return new JobMafiaStateResponse(
                 "NOT_STARTED", 0, 0, now, false, false, 0, null, null, null, false,
-                List.of(), "NONE", List.of(), -1, List.of(), List.of(), List.of(),
+                List.of(), "NONE", false, List.of(), -1, List.of(), List.of(), List.of(),
                 null, -1, -1, List.of(), null, 0, 0, List.of(), List.of());
     }
 }

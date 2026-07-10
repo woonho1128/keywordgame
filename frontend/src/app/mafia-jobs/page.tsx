@@ -24,6 +24,7 @@ type JobState = {
   alive: boolean;
   players: PlayerView[];
   actionKind: string;
+  copMafiaInvestigate: boolean;
   selectable: number[];
   myTarget: number;
   fellowMafia: number[];
@@ -69,6 +70,8 @@ const ROLE_META: Record<string, { label: string; emoji: string; color: string; d
   DOCTOR: { label: '의사', emoji: '🩺', color: 'text-green-600', desc: '밤마다 1명을 치료해 마피아 공격을 막습니다(자신 포함).' },
   PSYCHO: { label: '정신병자', emoji: '🤪', color: 'text-purple-500', desc: '시민팀. 본인은 다른 직업인 줄 알지만 능력이 통하지 않습니다.' },
   MAFIA: { label: '마피아', emoji: '🔪', color: 'text-red-500', desc: '밤마다 동료와 함께 1명을 제거합니다.' },
+  MAFIA_COP: { label: '경찰마피아', emoji: '🕵️‍♂️', color: 'text-red-500', desc: '마피아팀. 밤마다 살해에 가담하거나(동료와 함께) 대신 한 명을 조사할 수 있습니다(둘 중 하나만).' },
+  MAFIA_SHADOW: { label: '그림자마피아', emoji: '🥷', color: 'text-red-500', desc: '마피아팀. 이 마피아가 살아서 살해에 가담하면, 죽은 사람의 정체가 공개되지 않습니다.' },
   ATTENTION: { label: '관종', emoji: '📢', color: 'text-amber-500', desc: '중립. 낮 투표로 자신이 처형되면 혼자 승리합니다!' },
   THIEF: { label: '도적꾼', emoji: '🕵️', color: 'text-teal-600', desc: '중립. 밤에 딱 한 번, 한 명의 직업을 훔칩니다. 그 사람은 무직(시민)이 되고 당신은 그 직업이 됩니다(그 밤의 능력은 유지).' },
 };
@@ -80,6 +83,7 @@ const PHASE_LABEL: Record<Phase, string> = {
 
 const ACTION_LABEL: Record<string, string> = {
   MAFIA_KILL: '🔪 제거할 대상을 고르세요',
+  MAFIA_COP: '🕵️‍♂️ 살해 또는 조사를 선택하세요',
   POLICE_CHECK: '🔎 조사할 대상을 고르세요',
   DOCTOR_SAVE: '🩺 보호할 대상을 고르세요',
   THIEF_STEAL: '🕵️ 직업을 훔칠 대상을 고르세요 (밤 1회)',
@@ -115,6 +119,10 @@ export default function MafiaJobsPage() {
   const [neutralGrouped, setNeutralGrouped] = useState(false);
   const [neutralMin, setNeutralMin] = useState(0);
   const [neutralMax, setNeutralMax] = useState(1);
+  const [mafiaCopMin, setMafiaCopMin] = useState(0);
+  const [mafiaCopMax, setMafiaCopMax] = useState(0);
+  const [mafiaShadowMin, setMafiaShadowMin] = useState(0);
+  const [mafiaShadowMax, setMafiaShadowMax] = useState(0);
   const [showRoles, setShowRoles] = useState(false);
 
   const [showAdmin, setShowAdmin] = useState(false);
@@ -214,7 +222,7 @@ export default function MafiaJobsPage() {
     try {
       const res = await api<{ roomCode: string; state: JobState }>(
         `/api/v1/jobmafia/new?clientId=${encodeURIComponent(clientId)}`,
-        { method: 'POST', body: JSON.stringify({ nick: n, nightSec, discussSec, voteSec, mafiaMin, mafiaMax, psychoMin, psychoMax, attentionMin, attentionMax, thiefMin, thiefMax, neutralGrouped, neutralMin, neutralMax }) }
+        { method: 'POST', body: JSON.stringify({ nick: n, nightSec, discussSec, voteSec, mafiaMin, mafiaMax, psychoMin, psychoMax, attentionMin, attentionMax, thiefMin, thiefMax, neutralGrouped, neutralMin, neutralMax, mafiaCopMin, mafiaCopMax, mafiaShadowMin, mafiaShadowMax }) }
       );
       changeRoom(res.roomCode);
       setSt(res.state);
@@ -236,6 +244,8 @@ export default function MafiaJobsPage() {
   const handleStart = () => post(`/api/v1/jobmafia/start?roomCode=${roomCode}&clientId=${encodeURIComponent(clientId)}`);
   const handleAct = (target: number) =>
     post(`/api/v1/jobmafia/night-action?roomCode=${roomCode}&clientId=${encodeURIComponent(clientId)}`, { target });
+  const handleCopMode = (investigate: boolean) =>
+    post(`/api/v1/jobmafia/cop-mode?roomCode=${roomCode}&clientId=${encodeURIComponent(clientId)}&investigate=${investigate}`);
   const handleVote = (target: number) =>
     post(`/api/v1/jobmafia/vote?roomCode=${roomCode}&clientId=${encodeURIComponent(clientId)}`, { target });
 
@@ -497,6 +507,9 @@ export default function MafiaJobsPage() {
         <div className="space-y-3 bg-gray-50 rounded-lg p-4">
           <p className="text-sm font-medium">직업 인원 <span className="text-gray-400 font-normal text-xs">(범위 안에서 랜덤)</span></p>
           {rangeRow('🔪 마피아', mafiaMin, setMafiaMin, mafiaMax, setMafiaMax, 0, 5)}
+          {rangeRow('🕵️‍♂️ ⌞경찰마피아', mafiaCopMin, setMafiaCopMin, mafiaCopMax, setMafiaCopMax, 0, 4)}
+          {rangeRow('🥷 ⌞그림자마피아', mafiaShadowMin, setMafiaShadowMin, mafiaShadowMax, setMafiaShadowMax, 0, 4)}
+          <p className="text-[11px] text-gray-400 -mt-1">경찰마피아·그림자마피아는 마피아 총원 안에서 배정돼요(나머지는 일반 마피아).</p>
           {rangeRow('🤪 정신병자', psychoMin, setPsychoMin, psychoMax, setPsychoMax, 0, 3)}
           <label className="flex items-center gap-2 text-xs text-gray-600 pt-1">
             <input type="checkbox" checked={neutralGrouped} onChange={(e) => setNeutralGrouped(e.target.checked)} />
@@ -634,13 +647,28 @@ export default function MafiaJobsPage() {
       );
     }
     const kind = st!.actionKind;
-    const isMafia = kind === 'MAFIA_KILL';
+    const isCop = kind === 'MAFIA_COP';
+    const investigating = st!.copMafiaInvestigate;
+    const isMafia = kind === 'MAFIA_KILL' || (isCop && !investigating); // 살해모드 경찰마피아 포함
     return (
       <div className="mt-2 space-y-4">
         <p className="font-bold text-center">{ACTION_LABEL[kind] ?? '🌙 밤입니다'}</p>
-        {isMafia && st!.fellowMafia.length > 1 && (
+        {isCop && (
+          <div className="grid grid-cols-2 gap-2">
+            <button onClick={() => handleCopMode(false)} disabled={busy}
+              className={`py-2 rounded-lg border-2 text-sm font-bold ${!investigating ? 'border-red-500 bg-red-50 text-red-600' : 'border-gray-200 text-gray-500'}`}>🔪 살해</button>
+            <button onClick={() => handleCopMode(true)} disabled={busy}
+              className={`py-2 rounded-lg border-2 text-sm font-bold ${investigating ? 'border-blue-500 bg-blue-50 text-blue-600' : 'border-gray-200 text-gray-500'}`}>🔎 조사</button>
+          </div>
+        )}
+        {(kind === 'MAFIA_KILL' || (isCop && !investigating)) && st!.fellowMafia.length > 1 && (
           <p className="text-center text-xs text-red-400">
             동료 마피아: {st!.fellowMafia.map(nickOf).join(', ')} · 실시간으로 지목이 공유됩니다
+          </p>
+        )}
+        {isCop && (
+          <p className="text-center text-xs text-gray-400">
+            {investigating ? '🔎 한 명을 조사해요(살해엔 가담하지 않음). 결과는 아침에 내 기록에 나와요.' : '🔪 동료와 함께 살해에 가담해요.'}
           </p>
         )}
         {targetButtons(st!.selectable, handleAct, st!.myTarget)}
