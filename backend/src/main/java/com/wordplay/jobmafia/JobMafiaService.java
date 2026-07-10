@@ -59,6 +59,8 @@ public class JobMafiaService implements RoomGame {
     private int psychoMin = 0, psychoMax = 1;
     private int attentionMin = 0, attentionMax = 1;
     private int thiefMin = 0, thiefMax = 1;
+    private boolean neutralGrouped = false;   // 중립(관종·도적꾼) 통합 랜덤
+    private int neutralMin = 0, neutralMax = 1;
     private boolean revealOnDeath = true;
 
     // 밤 상태
@@ -105,6 +107,9 @@ public class JobMafiaService implements RoomGame {
         attentionMax = clampInt(req.attentionMax(), attentionMin, 4, Math.max(attentionMin, 1));
         thiefMin = clampInt(req.thiefMin(), 0, 4, 0);
         thiefMax = clampInt(req.thiefMax(), thiefMin, 4, Math.max(thiefMin, 1));
+        neutralGrouped = req.neutralGrouped() != null && req.neutralGrouped();
+        neutralMin = clampInt(req.neutralMin(), 0, 6, 0);
+        neutralMax = clampInt(req.neutralMax(), neutralMin, 6, Math.max(neutralMin, 1));
         addPlayer(clientId, req.nick());
         return me(clientId);
     }
@@ -130,8 +135,18 @@ public class JobMafiaService implements RoomGame {
         // 범위 안에서 랜덤으로 각 직업 인원 결정
         int mafia = Math.max(1, randRange(mafiaMin, mafiaMax)); // 마피아는 최소 1 보장
         int psycho = randRange(psychoMin, psychoMax);
-        int attention = randRange(attentionMin, attentionMax);
-        int thief = randRange(thiefMin, thiefMax);
+        int attention, thief;
+        if (neutralGrouped) {
+            // 중립 통합: 총 인원만 뽑고, 각 자리를 관종/도적꾼 중 랜덤으로 채움
+            int neutralTotal = randRange(neutralMin, neutralMax);
+            attention = 0; thief = 0;
+            for (int k = 0; k < neutralTotal; k++) {
+                if (ThreadLocalRandom.current().nextBoolean()) attention++; else thief++;
+            }
+        } else {
+            attention = randRange(attentionMin, attentionMax);
+            thief = randRange(thiefMin, thiefMax);
+        }
         // 인원 초과 시 특수직업부터 줄임(마피아는 1까지만 감축)
         while (mafia + psycho + attention + thief + 2 > n) {
             if (thief > 0) thief--;

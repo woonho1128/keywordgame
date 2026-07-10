@@ -112,6 +112,9 @@ export default function MafiaJobsPage() {
   const [attentionMax, setAttentionMax] = useState(1);
   const [thiefMin, setThiefMin] = useState(0);
   const [thiefMax, setThiefMax] = useState(1);
+  const [neutralGrouped, setNeutralGrouped] = useState(false);
+  const [neutralMin, setNeutralMin] = useState(0);
+  const [neutralMax, setNeutralMax] = useState(1);
   const [showRoles, setShowRoles] = useState(false);
 
   const [showAdmin, setShowAdmin] = useState(false);
@@ -211,7 +214,7 @@ export default function MafiaJobsPage() {
     try {
       const res = await api<{ roomCode: string; state: JobState }>(
         `/api/v1/jobmafia/new?clientId=${encodeURIComponent(clientId)}`,
-        { method: 'POST', body: JSON.stringify({ nick: n, nightSec, discussSec, voteSec, mafiaMin, mafiaMax, psychoMin, psychoMax, attentionMin, attentionMax, thiefMin, thiefMax }) }
+        { method: 'POST', body: JSON.stringify({ nick: n, nightSec, discussSec, voteSec, mafiaMin, mafiaMax, psychoMin, psychoMax, attentionMin, attentionMax, thiefMin, thiefMax, neutralGrouped, neutralMin, neutralMax }) }
       );
       changeRoom(res.roomCode);
       setSt(res.state);
@@ -495,8 +498,18 @@ export default function MafiaJobsPage() {
           <p className="text-sm font-medium">직업 인원 <span className="text-gray-400 font-normal text-xs">(범위 안에서 랜덤)</span></p>
           {rangeRow('🔪 마피아', mafiaMin, setMafiaMin, mafiaMax, setMafiaMax, 0, 5)}
           {rangeRow('🤪 정신병자', psychoMin, setPsychoMin, psychoMax, setPsychoMax, 0, 3)}
-          {rangeRow('📢 관종', attentionMin, setAttentionMin, attentionMax, setAttentionMax, 0, 3)}
-          {rangeRow('🕵️ 도적꾼', thiefMin, setThiefMin, thiefMax, setThiefMax, 0, 3)}
+          <label className="flex items-center gap-2 text-xs text-gray-600 pt-1">
+            <input type="checkbox" checked={neutralGrouped} onChange={(e) => setNeutralGrouped(e.target.checked)} />
+            중립(📢관종·🕵️도적꾼) 통합 랜덤 — 총 인원만 정하고 어떤 게 나올진 랜덤
+          </label>
+          {neutralGrouped
+            ? rangeRow('😈 중립 (관종/도적꾼)', neutralMin, setNeutralMin, neutralMax, setNeutralMax, 0, 4)
+            : (
+              <>
+                {rangeRow('📢 관종', attentionMin, setAttentionMin, attentionMax, setAttentionMax, 0, 3)}
+                {rangeRow('🕵️ 도적꾼', thiefMin, setThiefMin, thiefMax, setThiefMax, 0, 3)}
+              </>
+            )}
           <p className="text-xs text-gray-400">경찰·의사는 항상 1명씩, 나머지는 시민입니다.</p>
         </div>
 

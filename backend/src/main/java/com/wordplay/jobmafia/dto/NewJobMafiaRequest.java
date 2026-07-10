@@ -20,5 +20,10 @@ public record NewJobMafiaRequest(
         Integer attentionMin,
         Integer attentionMax,
         Integer thiefMin,
-        Integer thiefMax
+        Integer thiefMax,
+        // 중립(관종·도적꾼) 통합 설정: true면 아래 총 인원 범위에서 랜덤으로 뽑고,
+        // 어떤 중립 직업이 나올지는 게임이 랜덤으로 정한다(관종/도적꾼 개별 설정 무시).
+        Boolean neutralGrouped,
+        Integer neutralMin,
+        Integer neutralMax
 ) {}
