@@ -41,6 +41,13 @@ const SUIT = [
 ];
 const suitOf = (id: number) => Math.floor(id / 15);
 const numOf = (id: number) => (id % 15) + 1;
+const nRank = (n: number) => (n >= 3 ? n - 3 : n === 1 ? 13 : 14); // 세기: 3<…<15<1<2
+const sortKeyOf = (id: number, mode: 'STRENGTH' | 'NUMBER' | 'SUIT') => {
+  const n = numOf(id), s = suitOf(id);
+  if (mode === 'NUMBER') return n * 4 + s;   // 자연 숫자 1→15
+  if (mode === 'SUIT') return s * 100 + n;   // 무늬끼리 묶어 숫자순
+  return nRank(n) * 4 + s;                    // 세기순(기본)
+};
 
 function Tile({ id, theme, selected, small, onClick }: { id: number; theme: 'BLACK' | 'WHITE'; selected?: boolean; small?: boolean; onClick?: () => void }) {
   const s = SUIT[suitOf(id)];
@@ -87,6 +94,7 @@ export default function LexioPage() {
   const [scoreMode, setScoreMode] = useState<'SINGLE' | 'ACCUMULATE'>('SINGLE');
   const [turnSec, setTurnSec] = useState(40);
   const [sel, setSel] = useState<number[]>([]);
+  const [sortMode, setSortMode] = useState<'STRENGTH' | 'NUMBER' | 'SUIT'>('STRENGTH');
   const [showJokbo, setShowJokbo] = useState(false);
   const [remaining, setRemaining] = useState(0);
   const [showAdmin, setShowAdmin] = useState(false);
@@ -334,9 +342,21 @@ export default function LexioPage() {
           {/* 내 손패 */}
           {st.joined && st.myTiles.length > 0 && (
             <div>
-              <p className="text-xs text-gray-400 mb-1">내 손패 ({st.myTiles.length}장){sel.length > 0 && ` · ${sel.length}장 선택`}</p>
+              <div className="flex items-center justify-between mb-1">
+                <p className="text-xs text-gray-400">내 손패 ({st.myTiles.length}장){sel.length > 0 && ` · ${sel.length}장 선택`}</p>
+                <div className="flex items-center gap-1">
+                  <span className="text-[11px] text-gray-400">정렬</span>
+                  {(['STRENGTH', 'NUMBER', 'SUIT'] as const).map((m) => (
+                    <button key={m} onClick={() => setSortMode(m)} className={`text-[11px] px-2 py-0.5 rounded border ${sortMode === m ? 'border-hit text-hit font-bold' : 'border-gray-200 text-gray-400'}`}>
+                      {m === 'STRENGTH' ? '세기' : m === 'NUMBER' ? '숫자' : '무늬'}순
+                    </button>
+                  ))}
+                </div>
+              </div>
               <div className="flex flex-wrap gap-1 justify-center">
-                {st.myTiles.map((id) => <Tile key={id} id={id} theme={th} selected={sel.includes(id)} onClick={phase === 'PLAYING' && st.myTurn ? () => toggleTile(id) : undefined} />)}
+                {[...st.myTiles].sort((a, b) => sortKeyOf(a, sortMode) - sortKeyOf(b, sortMode)).map((id) => (
+                  <Tile key={id} id={id} theme={th} selected={sel.includes(id)} onClick={phase === 'PLAYING' && st.myTurn ? () => toggleTile(id) : undefined} />
+                ))}
               </div>
             </div>
           )}
