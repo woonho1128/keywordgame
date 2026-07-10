@@ -380,31 +380,54 @@ public class JobMafiaService implements RoomGame {
         };
     }
 
-    /** 이 게임에 실제로 존재하는 직업 라벨들(중복 제거). */
-    private List<String> presentJobLabels() {
-        LinkedHashSet<String> set = new LinkedHashSet<>();
-        for (Player p : players) if (p.role != null) set.add(jobLabel(p.role));
-        return new ArrayList<>(set);
+    /** 이 게임에 존재하는 직업 라벨을 팀(시민/마피아/중립)별로 모은다(중복 제거). */
+    private Map<String, List<String>> presentLabelsByTeam() {
+        Map<String, List<String>> m = new HashMap<>();
+        for (Player p : players) {
+            if (p.role == null) continue;
+            String lbl = jobLabel(p.role);
+            List<String> list = m.computeIfAbsent(teamOf(p.role), k -> new ArrayList<>());
+            if (!list.contains(lbl)) list.add(lbl);
+        }
+        return m;
     }
 
-    /** 진짜 경찰: 진짜 직업 + 랜덤 미끼 1개(동등확률), 순서 무작위. */
+    private static String pickRandom(List<String> xs) { return xs.get(ThreadLocalRandom.current().nextInt(xs.size())); }
+
+    /**
+     * 진짜 경찰: 진짜 직업 + '다른 팀'의 미끼 직업 1개. 순서 무작위.
+     * 두 후보는 항상 서로 다른 팀(시민/마피아/중립)이라, 팀까지 확정되지 않고 2팀 중 하나로만 좁혀진다.
+     */
     private String realScan(int targetSeat) {
-        String truth = jobLabel(players.get(targetSeat).role);
-        List<String> pool = presentJobLabels();
-        pool.remove(truth);
-        String decoy = pool.isEmpty() ? truth : pool.get(ThreadLocalRandom.current().nextInt(pool.size()));
+        Role truthRole = players.get(targetSeat).role;
+        String truth = jobLabel(truthRole);
+        String truthTeam = teamOf(truthRole);
+        Map<String, List<String>> byTeam = presentLabelsByTeam();
+        List<String> otherTeams = new ArrayList<>(byTeam.keySet());
+        otherTeams.remove(truthTeam);
+        String decoy = otherTeams.isEmpty() ? truth : pickRandom(byTeam.get(pickRandom(otherTeams)));
         List<String> two = new ArrayList<>(List.of(truth, decoy));
         Collections.shuffle(two);
         return two.get(0) + " | " + two.get(1);
     }
 
-    /** 정신병자 가짜 경찰: 존재하는 직업 중 2개 동등확률(진짜가 섞일 수도 있음). */
+    /** 정신병자 가짜 경찰: 서로 다른 두 팀에서 각각 1개(진짜 경찰과 형식을 맞춰 위장 유지). */
     private String fakeScan() {
-        List<String> pool = presentJobLabels();
-        Collections.shuffle(pool);
-        String a = pool.get(0);
-        String b = pool.size() > 1 ? pool.get(1) : a;
-        return a + " | " + b;
+        Map<String, List<String>> byTeam = presentLabelsByTeam();
+        List<String> teams = new ArrayList<>(byTeam.keySet());
+        Collections.shuffle(teams);
+        String a, b;
+        if (teams.size() >= 2) {
+            a = pickRandom(byTeam.get(teams.get(0)));
+            b = pickRandom(byTeam.get(teams.get(1)));
+        } else {
+            List<String> only = teams.isEmpty() ? List.of("시민") : byTeam.get(teams.get(0));
+            a = only.get(0);
+            b = only.size() > 1 ? only.get(1) : a;
+        }
+        List<String> two = new ArrayList<>(List.of(a, b));
+        Collections.shuffle(two);
+        return two.get(0) + " | " + two.get(1);
     }
 
     private int aliveSeatOfRole(Role r) {
