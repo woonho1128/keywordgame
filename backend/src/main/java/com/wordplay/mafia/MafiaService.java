@@ -354,7 +354,8 @@ public class MafiaService implements RoomGame {
         int docSeat = seatOfRole(Role.DOCTOR);
         if (docSeat >= 0 && doctorTarget >= 0) {
             boolean saved = mafiaTarget >= 0 && mafiaTarget == doctorTarget;
-            myLog(docSeat).add(round + "일차 💉 보호: " + players.get(doctorTarget).nick + (saved ? " (마피아 공격을 막았다!)" : ""));
+            myLog(docSeat).add(round + "일차 💉 보호: " + players.get(doctorTarget).nick
+                    + (saved ? " ⭕ 성공 (마피아 공격을 막음!)" : " ❌ (마피아가 노린 대상이 아니었음)"));
         }
         String killResult = nightDeadSeat >= 0 ? players.get(nightDeadSeat).nick + " 처치 성공" : "아무도 죽지 않음(보호/실패)";
         for (var e : mafiaPicks.entrySet())
