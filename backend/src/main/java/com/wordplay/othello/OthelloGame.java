@@ -201,47 +201,63 @@ public class OthelloGame implements RoomGame {
         if ("EASY".equals(level)) return moves.get(ThreadLocalRandom.current().nextInt(moves.size()));
         if ("MASTER".equals(level)) return pickMasterMove(color);
         if ("HARD".equals(level)) {
-            int best = moves.get(0); long bestScore = Long.MIN_VALUE;
-            for (int m : moves) {
+            long[] sc = new long[moves.size()];
+            for (int k = 0; k < moves.size(); k++) {
                 int[] sim = board.clone();
-                sim[m] = color; for (int f : flipsFor(color, m)) sim[f] = color;
-                long sc = 0;
-                for (int i = 0; i < 64; i++) sc += sim[i] == color ? WEIGHT[i] : sim[i] == (3 - color) ? -WEIGHT[i] : 0;
-                if (sc > bestScore) { bestScore = sc; best = m; }
+                sim[moves.get(k)] = color; for (int f : flipsFor(color, moves.get(k))) sim[f] = color;
+                long s = 0;
+                for (int i = 0; i < 64; i++) s += sim[i] == color ? WEIGHT[i] : sim[i] == (3 - color) ? -WEIGHT[i] : 0;
+                sc[k] = s;
             }
-            return best;
+            return pickAmongBest(moves, sc, 6);  // 최선급 여러 수 중 랜덤
         }
         // NORMAL: 가장 많이 뒤집되 코너 우선, X칸 회피
-        int best = moves.get(0); long bestScore = Long.MIN_VALUE;
-        for (int m : moves) {
-            long sc = flipsFor(color, m).size();
-            if (isCorner(m)) sc += 30;
-            if (isXSquare(m)) sc -= 15;
-            if (sc > bestScore) { bestScore = sc; best = m; }
+        long[] sc = new long[moves.size()];
+        for (int k = 0; k < moves.size(); k++) {
+            long s = flipsFor(color, moves.get(k)).size();
+            if (isCorner(moves.get(k))) s += 30;
+            if (isXSquare(moves.get(k))) s -= 15;
+            sc[k] = s;
         }
-        return best;
+        return pickAmongBest(moves, sc, 2);
+    }
+
+    /** 최고점에서 margin 이내인 수들 중 하나를 랜덤 선택(결정론 → 변주). */
+    private static int pickAmongBest(List<Integer> moves, long[] scores, long margin) {
+        long best = Long.MIN_VALUE;
+        for (long s : scores) if (s > best) best = s;
+        List<Integer> cand = new ArrayList<>();
+        for (int k = 0; k < moves.size(); k++) if (scores[k] >= best - margin) cand.add(moves.get(k));
+        return cand.get(ThreadLocalRandom.current().nextInt(cand.size()));
     }
 
     // =================== 초고수(MASTER): 알파-베타 미니맥스 ===================
 
-    /** 종반에는 끝까지, 중반에는 깊게 읽어 최선수를 고른다. */
+    /** 종반에는 끝까지, 중반에는 깊게 읽어 최선급 수 중 하나를 고른다(변주 포함). */
     private int pickMasterMove(int color) {
         List<Integer> moves = validMoves(color);
         if (moves.isEmpty()) return -1;
         int empties = 0; for (int v : board) if (v == 0) empties++;
+        boolean endgame = empties <= 11;
         // 남은 칸 11개 이하면 끝까지 완전탐색, 아니면 중반 깊이(오프닝은 살짝 얕게)
-        int depth = empties <= 11 ? empties : (empties >= 45 ? 6 : 7);
+        int depth = endgame ? empties : (empties >= 45 ? 6 : 7);
+        // 종반(증명된 최적수)엔 동점만, 중반엔 근소차 수까지 후보로 → 매판 경로가 달라짐
+        long margin = endgame ? 0 : 12;
         moves.sort((a, b) -> Integer.compare(WEIGHT[b], WEIGHT[a])); // 이동 정렬로 가지치기 강화
-        int opp = 3 - color, best = moves.get(0);
-        long bestScore = NEG, alpha = NEG, beta = POS;
-        for (int m : moves) {
+        int opp = 3 - color;
+        long best = NEG;
+        long[] scores = new long[moves.size()];
+        for (int k = 0; k < moves.size(); k++) {
+            int m = moves.get(k);
             int[] nb = board.clone();
             nb[m] = color; for (int f : flipsFor(color, m)) nb[f] = color;
-            long v = -negamax(nb, opp, depth - 1, -beta, -alpha);
-            if (v > bestScore) { bestScore = v; best = m; }
-            if (bestScore > alpha) alpha = bestScore;
+            // 루트에서 alpha를 margin만큼 완화 → 최선-margin 이상인 수는 정확히 평가(그 이하만 가지치기)
+            long a = Math.max(best - margin, NEG);
+            long v = -negamax(nb, opp, depth - 1, -POS, -a);
+            scores[k] = v;
+            if (v > best) best = v;
         }
-        return best;
+        return pickAmongBest(moves, scores, margin);
     }
 
     private static final long NEG = Long.MIN_VALUE / 4, POS = Long.MAX_VALUE / 4;
@@ -417,6 +433,7 @@ public class OthelloGame implements RoomGame {
     int countForTest(int color) { return count(color); }
     List<Integer> validForTest(int color) { return validMoves(color); }
     synchronized void forceBotNowForTest() { botActAt = 0; } // 봇 착수 지연 무시(테스트 진행용)
+    synchronized int pickMoveForTest(int color, String level) { return pickMove(color, level); }
 
     // =================== 유틸 ===================
 

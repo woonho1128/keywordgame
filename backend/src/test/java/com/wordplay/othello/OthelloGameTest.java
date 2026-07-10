@@ -78,4 +78,16 @@ class OthelloGameTest {
         assertThat(end.blackCount() + end.whiteCount()).isGreaterThan(0);
         assertThat(end.winner()).isBetween(1, 3);
     }
+
+    @Test
+    void 초고수_봇은_오프닝을_매번_똑같이_두지_않는다() {
+        OthelloGame g = new OthelloGame();
+        g.newGame("host", "나", "WHITE", 60); // 방장 백 → 봇(흑=1)이 선
+        g.addBot("host", "MASTER");
+        g.start("host");
+        java.util.Set<Integer> seen = new java.util.HashSet<>();
+        for (int i = 0; i < 40; i++) seen.add(g.pickMoveForTest(1, "MASTER"));
+        // 대칭인 흑 첫수 4개가 동점이라 랜덤 분포 → 최소 2가지 이상 나와야 함
+        assertThat(seen).hasSizeGreaterThan(1);
+    }
 }
