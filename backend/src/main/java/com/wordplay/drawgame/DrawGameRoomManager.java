@@ -38,4 +38,6 @@ public class DrawGameRoomManager {
     public void resetAll() { reg.clear(); }
 
     public boolean closeRoom(String code) { return reg.remove(code); }
+
+    public void leave(String code, String clientId) { reg.leave(code, clientId); }
 }

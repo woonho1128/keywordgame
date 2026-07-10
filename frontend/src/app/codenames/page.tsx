@@ -278,7 +278,7 @@ export default function CodenamesPage() {
         <div className="flex items-center gap-2">
           <h1 className="text-xl font-bold">🔡 코드네임</h1>
           <span className="text-xs bg-gray-100 rounded px-2 py-1 tracking-wider font-bold">{roomCode}</span>
-          <button onClick={() => { changeRoom(null); setSt(null); }} className="text-xs text-gray-400 underline">나가기</button>
+          <button onClick={() => { api(`/api/v1/codenames/leave?roomCode=${roomCode}&clientId=${cid()}`, { method: 'POST' }).catch(() => {}); changeRoom(null); setSt(null); }} className="text-xs text-gray-400 underline">나가기</button>
         </div>
         {(phase === 'CLUE' || phase === 'GUESS') && (
           <div className="text-right text-sm font-bold">

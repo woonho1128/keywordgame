@@ -71,6 +71,7 @@ public class MafiaService implements RoomGame {
     private String hostClientId = null;
     private final List<Player> players = new ArrayList<>();          // seat = index
     private final Map<String, Integer> clientSeats = new HashMap<>(); // clientId -> seat
+    private final Set<String> leftClients = new HashSet<>();          // 진행/종료 중 방을 나간 클라이언트
 
     // 설정
     private long nightMs = 30_000, discussMs = 90_000, voteMs = 30_000;
@@ -272,10 +273,25 @@ public class MafiaService implements RoomGame {
         if (phase == null || phase == Phase.LOBBY) return "WAITING";
         return phase == Phase.ENDED ? "ENDED" : "PLAYING";
     }
-    @Override public synchronized int playerCount() { return players.size(); }
+    @Override public synchronized int playerCount() {
+        return (int) players.stream().filter(p -> !leftClients.contains(p.clientId)).count();
+    }
     @Override public synchronized String hostLabel() { return players.isEmpty() ? "" : players.get(0).nick; }
     @Override public synchronized boolean isEnded() { return phase == Phase.ENDED; }
     @Override public synchronized long lastActiveMs() { return lastActiveMs; }
+    @Override public synchronized void leave(String clientId) {
+        Integer seat = clientSeats.get(clientId);
+        if (seat == null) return;
+        lastActiveMs = System.currentTimeMillis();
+        if (phase == null || phase == Phase.LOBBY) {
+            players.remove((int) seat);
+            clientSeats.clear();
+            for (int i = 0; i < players.size(); i++) clientSeats.put(players.get(i).clientId, i);
+            if (clientId.equals(hostClientId)) hostClientId = players.isEmpty() ? null : players.get(0).clientId;
+        } else {
+            leftClients.add(clientId);
+        }
+    }
 
     // =================== 타이머/진행 ===================
 
@@ -863,6 +879,7 @@ public class MafiaService implements RoomGame {
         hostClientId = null;
         players.clear();
         clientSeats.clear();
+        leftClients.clear();
         nightMs = 60_000; discussMs = 90_000; voteMs = 30_000;
         configMafiaCount = 0;
         revealOnDeath = true;

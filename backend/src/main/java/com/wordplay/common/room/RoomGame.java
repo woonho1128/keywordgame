@@ -7,4 +7,7 @@ public interface RoomGame {
     String hostLabel();
     boolean isEnded();
     long lastActiveMs();
+
+    /** 클라이언트가 방에서 나감. 대기방이면 목록에서 제거, 진행/종료 중이면 '떠남' 표시. */
+    default void leave(String clientId) {}
 }

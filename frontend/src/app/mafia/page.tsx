@@ -384,7 +384,7 @@ export default function MafiaPage() {
         <div className="flex items-center gap-2">
           <h1 className="text-2xl font-bold">🎭 마피아</h1>
           <span className="text-xs bg-gray-100 rounded px-2 py-1 tracking-wider font-bold">{roomCode}</span>
-          <button onClick={() => { changeRoom(null); setSt(null); }} className="text-xs text-gray-400 underline">나가기</button>
+          <button onClick={() => { api(`/api/v1/mafia/leave?roomCode=${roomCode}&clientId=${encodeURIComponent(clientId)}`, { method: 'POST' }).catch(() => {}); changeRoom(null); setSt(null); }} className="text-xs text-gray-400 underline">나가기</button>
         </div>
         {phase !== 'NOT_STARTED' && phase !== 'LOBBY' && (
           <div className="text-right">

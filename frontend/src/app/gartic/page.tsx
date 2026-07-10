@@ -345,7 +345,7 @@ export default function GarticPage() {
         <div className="flex items-center gap-2 min-w-0">
           <h1 className="text-lg font-bold shrink-0">🎨 그림 텔레폰</h1>
           <span className="text-xs bg-gray-100 rounded px-2 py-1 tracking-wider font-bold shrink-0">{roomCode}</span>
-          <button onClick={() => { changeRoom(null); setSt(null); }} className="text-xs text-gray-400 underline shrink-0">나가기</button>
+          <button onClick={() => { api(`/api/v1/drawgame/leave?roomCode=${roomCode}&clientId=${cid()}`, { method: 'POST' }).catch(() => {}); changeRoom(null); setSt(null); }} className="text-xs text-gray-400 underline shrink-0">나가기</button>
         </div>
         {st.status === 'PLAYING' && st.mode === 'GARTIC' && <span className="text-xs text-gray-500 font-bold">{st.round === 0 ? '시작' : `${st.round}`}/{st.totalRounds - 1} 라운드{remain != null && ` · ⏱${remain}s`}</span>}
         {st.status === 'PLAYING' && st.mode === 'CATCHMIND' && remain != null && <span className="text-xs text-gray-500 font-bold">⏱{remain}s</span>}

@@ -52,6 +52,8 @@ public class HalliGalliRoomManager {
         return reg.remove(code);
     }
 
+    public void leave(String code, String clientId) { reg.leave(code, clientId); }
+
     // ---------- SSE ----------
 
     public SseEmitter subscribe(String code, String clientId) {

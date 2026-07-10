@@ -47,6 +47,7 @@ public class HalliGalliGame implements RoomGame {
     private String hostClientId = null;
     private final List<Player> players = new ArrayList<>();
     private final Map<String, Integer> seats = new HashMap<>();
+    private final java.util.Set<String> leftClients = new java.util.HashSet<>();
     private int currentSeat = 0;
     private int winnerSeat = -1;
     private String lastAction = null;
@@ -383,7 +384,22 @@ public class HalliGalliGame implements RoomGame {
         if (phase == null || phase == Phase.LOBBY) return "WAITING";
         return phase == Phase.ENDED ? "ENDED" : "PLAYING";
     }
-    @Override public synchronized int playerCount() { return players.size(); }
+    @Override public synchronized int playerCount() {
+        return (int) players.stream().filter(p -> !leftClients.contains(p.clientId)).count();
+    }
+    @Override public synchronized void leave(String clientId) {
+        Integer seat = seats.get(clientId);
+        if (seat == null) return;
+        lastActiveMs = System.currentTimeMillis();
+        if (phase == null || phase == Phase.LOBBY) {
+            players.remove((int) seat);
+            seats.clear();
+            for (int i = 0; i < players.size(); i++) seats.put(players.get(i).clientId, i);
+            if (clientId.equals(hostClientId)) hostClientId = players.isEmpty() ? null : players.get(0).clientId;
+        } else {
+            leftClients.add(clientId);
+        }
+    }
     @Override public synchronized String hostLabel() { return players.isEmpty() ? "" : players.get(0).nick; }
     @Override public synchronized boolean isEnded() { return phase == Phase.ENDED; }
     @Override public synchronized long lastActiveMs() { return lastActiveMs; }
@@ -413,7 +429,7 @@ public class HalliGalliGame implements RoomGame {
 
     private void reset() {
         phase = null; hostClientId = null;
-        players.clear(); seats.clear();
+        players.clear(); seats.clear(); leftClients.clear();
         currentSeat = 0; winnerSeat = -1; lastAction = null; version = 0;
         aiCounter = 0; turnStartMs = 0; flipReadyAt = 0; fiveAppearedMs = 0;
         botRingAt.clear();

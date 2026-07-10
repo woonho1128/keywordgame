@@ -462,7 +462,7 @@ export default function RummikubPage() {
         <div className="flex items-center gap-2 min-w-0">
           <h1 className="text-lg sm:text-xl font-bold shrink-0">🁢 루미큐브</h1>
           <span className="text-xs bg-gray-100 rounded px-2 py-1 tracking-wider font-bold shrink-0">{roomCode}</span>
-          <button onClick={() => { changeRoom(null); setSt(null); }} className="text-xs text-gray-400 underline shrink-0">나가기</button>
+          <button onClick={() => { api(`/api/v1/rummikub/leave?roomCode=${roomCode}&clientId=${cid()}`, { method: 'POST' }).catch(() => {}); changeRoom(null); setSt(null); }} className="text-xs text-gray-400 underline shrink-0">나가기</button>
         </div>
         <div className="flex items-center gap-2 shrink-0">
           <button onClick={toggleWide} title="가로/세로 보기 전환"

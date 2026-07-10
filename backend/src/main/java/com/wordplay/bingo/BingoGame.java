@@ -40,6 +40,7 @@ public class BingoGame implements RoomGame {
     private String hostClientId = null;
     private final List<Player> players = new ArrayList<>();
     private final Map<String, Integer> seats = new HashMap<>();
+    private final Set<String> leftClients = new HashSet<>();
 
     private int size = 5;
     private int range = 50;
@@ -295,7 +296,22 @@ public class BingoGame implements RoomGame {
         if (phase == null || phase == Phase.LOBBY) return "WAITING";
         return phase == Phase.ENDED ? "ENDED" : "PLAYING";
     }
-    @Override public synchronized int playerCount() { return players.size(); }
+    @Override public synchronized int playerCount() {
+        return (int) players.stream().filter(p -> !leftClients.contains(p.clientId)).count();
+    }
+    @Override public synchronized void leave(String clientId) {
+        Integer seat = seats.get(clientId);
+        if (seat == null) return;
+        lastActiveMs = System.currentTimeMillis();
+        if (phase == null || phase == Phase.LOBBY) {
+            players.remove((int) seat);
+            seats.clear();
+            for (int i = 0; i < players.size(); i++) seats.put(players.get(i).clientId, i);
+            if (clientId.equals(hostClientId)) hostClientId = players.isEmpty() ? null : players.get(0).clientId;
+        } else {
+            leftClients.add(clientId);
+        }
+    }
     @Override public synchronized String hostLabel() { return players.isEmpty() ? "" : players.get(0).nick; }
     @Override public synchronized boolean isEnded() { return phase == Phase.ENDED; }
     @Override public synchronized long lastActiveMs() { return lastActiveMs; }
@@ -316,7 +332,7 @@ public class BingoGame implements RoomGame {
 
     private void reset() {
         phase = null; hostClientId = null;
-        players.clear(); seats.clear();
+        players.clear(); seats.clear(); leftClients.clear();
         size = 5; range = 50; target = 3; mode = Mode.AUTO;
         drawn.clear(); drawnSet.clear(); nextDrawAt = 0;
         currentTurnSeat = -1; turnEndsAt = 0; winnerSeat = -1; version = 0;

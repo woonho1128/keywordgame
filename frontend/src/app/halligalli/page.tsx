@@ -296,7 +296,7 @@ export default function HalliGalliPage() {
         <div className="flex items-center gap-2 min-w-0">
           <h1 className="text-lg sm:text-xl font-bold shrink-0">🔔 할리갈리</h1>
           <span className="text-xs bg-gray-100 rounded px-2 py-1 tracking-wider font-bold shrink-0">{roomCode}</span>
-          <button onClick={() => { changeRoom(null); setSt(null); }} className="text-xs text-gray-400 underline shrink-0">나가기</button>
+          <button onClick={() => { api(`/api/v1/halligalli/leave?roomCode=${roomCode}&clientId=${encodeURIComponent(clientId)}`, { method: 'POST' }).catch(() => {}); changeRoom(null); setSt(null); }} className="text-xs text-gray-400 underline shrink-0">나가기</button>
         </div>
       </div>
 

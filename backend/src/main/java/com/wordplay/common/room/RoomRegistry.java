@@ -18,8 +18,8 @@ public class RoomRegistry<T extends RoomGame> {
 
     private static final int MAX_ROOMS = 100;
     private static final long IDLE_MS = 30 * 60_000L;       // 30분 방치 → 제거
-    private static final long ENDED_IDLE_MS = 5 * 60_000L;  // 종료 후 5분 → 제거
-    private static final long EMPTY_IDLE_MS = 60_000L;      // 빈 방 1분 → 제거
+    private static final long ENDED_IDLE_MS = 40_000L;      // 종료 후 40초 → 제거
+    private static final long EMPTY_IDLE_MS = 20_000L;      // 빈 방 20초 → 제거
 
     private final Map<String, T> rooms = new HashMap<>();
 
@@ -59,6 +59,15 @@ public class RoomRegistry<T extends RoomGame> {
     /** 특정 방 제거. 실제로 지웠으면 true. */
     public synchronized boolean remove(String code) {
         return code != null && rooms.remove(code.toUpperCase()) != null;
+    }
+
+    /** 클라이언트를 방에서 내보내고, 남은 인원이 0이면 방을 즉시 제거한다. */
+    public synchronized void leave(String code, String clientId) {
+        T g = find(code);
+        if (g == null) return;
+        g.leave(clientId);
+        if (g.playerCount() == 0) rooms.remove(code.toUpperCase());
+        purge();
     }
 
     private void purge() {

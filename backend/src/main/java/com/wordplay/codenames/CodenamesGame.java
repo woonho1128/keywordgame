@@ -42,6 +42,7 @@ public class CodenamesGame implements RoomGame {
     private String hostClientId = null;
     private final List<Player> players = new ArrayList<>();
     private final Map<String, Integer> clientSeats = new HashMap<>();
+    private final java.util.Set<String> leftClients = new java.util.HashSet<>();
 
     private final List<BoardCell> board = new ArrayList<>();
     private String startTeam = null, currentTeam = null;
@@ -287,7 +288,22 @@ public class CodenamesGame implements RoomGame {
         if (phase == null || phase == Phase.LOBBY) return "WAITING";
         return phase == Phase.ENDED ? "ENDED" : "PLAYING";
     }
-    @Override public synchronized int playerCount() { return players.size(); }
+    @Override public synchronized int playerCount() {
+        return (int) players.stream().filter(p -> !leftClients.contains(p.clientId)).count();
+    }
+    @Override public synchronized void leave(String clientId) {
+        Integer seat = clientSeats.get(clientId);
+        if (seat == null) return;
+        lastActiveMs = System.currentTimeMillis();
+        if (phase == null || phase == Phase.LOBBY) {
+            players.remove((int) seat);
+            clientSeats.clear();
+            for (int i = 0; i < players.size(); i++) clientSeats.put(players.get(i).clientId, i);
+            if (clientId.equals(hostClientId)) hostClientId = players.isEmpty() ? null : players.get(0).clientId;
+        } else {
+            leftClients.add(clientId);
+        }
+    }
     @Override public synchronized String hostLabel() { return players.isEmpty() ? "" : players.get(0).nick; }
     @Override public synchronized boolean isEnded() { return phase == Phase.ENDED; }
     @Override public synchronized long lastActiveMs() { return lastActiveMs; }
@@ -310,6 +326,7 @@ public class CodenamesGame implements RoomGame {
         hostClientId = null;
         players.clear();
         clientSeats.clear();
+        leftClients.clear();
         board.clear();
         startTeam = currentTeam = null;
         clueWord = null;

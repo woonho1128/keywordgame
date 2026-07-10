@@ -62,6 +62,7 @@ public class DrawGame implements RoomGame {
     private String hostClientId = null;
     private final List<Player> players = new ArrayList<>();
     private final Map<String, Integer> seats = new HashMap<>();
+    private final Set<String> leftClients = new HashSet<>();
 
     private final List<Album> albums = new ArrayList<>();
     private int round = 0;
@@ -407,7 +408,22 @@ public class DrawGame implements RoomGame {
         if (phase == null || phase == Phase.LOBBY) return "WAITING";
         return phase == Phase.REVEAL ? "ENDED" : "PLAYING";
     }
-    @Override public synchronized int playerCount() { return players.size(); }
+    @Override public synchronized int playerCount() {
+        return (int) players.stream().filter(p -> !leftClients.contains(p.clientId)).count();
+    }
+    @Override public synchronized void leave(String clientId) {
+        Integer seat = seats.get(clientId);
+        if (seat == null) return;
+        lastActiveMs = System.currentTimeMillis();
+        if (phase == null || phase == Phase.LOBBY) {
+            players.remove((int) seat);
+            seats.clear();
+            for (int i = 0; i < players.size(); i++) seats.put(players.get(i).clientId, i);
+            if (clientId.equals(hostClientId)) hostClientId = players.isEmpty() ? null : players.get(0).clientId;
+        } else {
+            leftClients.add(clientId);
+        }
+    }
     @Override public synchronized String hostLabel() { return players.isEmpty() ? "" : players.get(0).nick; }
     @Override public synchronized boolean isEnded() { return phase == Phase.REVEAL; }
     @Override public synchronized long lastActiveMs() { return lastActiveMs; }
@@ -423,7 +439,7 @@ public class DrawGame implements RoomGame {
 
     private void reset() {
         phase = null; mode = Mode.GARTIC; topicMode = "FREE";
-        hostClientId = null; players.clear(); seats.clear();
+        hostClientId = null; players.clear(); seats.clear(); leftClients.clear();
         albums.clear(); round = 0; totalRounds = 0; deadline = 0; submitted.clear(); version = 0;
         drawOrder.clear(); roundIndex = 0; answer = null; snapshot = null;
         guesses.clear(); correctSeats.clear(); scores.clear(); lastAnswer = null;

@@ -320,7 +320,7 @@ export default function AvalonPage() {
         <div className="flex items-center gap-2">
           <h1 className="text-2xl font-bold">🏰 아발론</h1>
           <span className="text-xs bg-gray-100 rounded px-2 py-1 tracking-wider font-bold">{roomCode}</span>
-          <button onClick={() => { changeRoom(null); setSt(null); }} className="text-xs text-gray-400 underline">나가기</button>
+          <button onClick={() => { api(`/api/v1/avalon/leave?roomCode=${roomCode}&clientId=${cid()}`, { method: 'POST' }).catch(() => {}); changeRoom(null); setSt(null); }} className="text-xs text-gray-400 underline">나가기</button>
         </div>
         {phase !== 'NOT_STARTED' && phase !== 'LOBBY' && (
           <div className="text-right">
@@ -716,7 +716,7 @@ export default function AvalonPage() {
             })}
           </div>
         </div>
-        <button onClick={() => { setShowCreate(true); setSt({ ...st!, status: 'NOT_STARTED' }); }}
+        <button onClick={() => { changeRoom(null); setSt(null); setShowCreate(true); }}
           className="w-full bg-blue-600 text-white font-bold py-3 rounded-lg hover:opacity-90">🔄 새 방 만들기</button>
       </div>
     );

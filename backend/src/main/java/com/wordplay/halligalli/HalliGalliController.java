@@ -123,6 +123,13 @@ public class HalliGalliController {
         return ApiResponse.success(rooms.closeRoom(roomCode));
     }
 
+    @PostMapping("/leave")
+    public ApiResponse<Boolean> leave(@RequestParam String roomCode, @RequestParam String clientId) {
+        validateClientId(clientId);
+        rooms.leave(roomCode, clientId);
+        return ApiResponse.success(true);
+    }
+
     private void validateClientId(String clientId) {
         if (clientId == null || clientId.isBlank() || clientId.length() > 64)
             throw new BusinessException(ErrorCode.INVALID_INPUT, "clientId가 올바르지 않습니다");
