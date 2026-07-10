@@ -217,12 +217,12 @@ export default function OthelloPage() {
               {st.players.length < 2 && (
                 <div>
                   <p className="text-xs text-gray-400 mb-1 text-center">🤖 AI 봇과 대전 (난이도)</p>
-                  <div className="grid grid-cols-3 gap-2">
-                    {([['EASY', '초급', 'bg-emerald-400'], ['NORMAL', '중급', 'bg-amber-400'], ['HARD', '고급', 'bg-rose-400']] as const).map(([lv, label, cls]) => (
+                  <div className="grid grid-cols-2 gap-2">
+                    {([['EASY', '초급', 'bg-emerald-400'], ['NORMAL', '중급', 'bg-amber-400'], ['HARD', '고급', 'bg-rose-400'], ['MASTER', '🔥 초고수', 'bg-purple-600']] as const).map(([lv, label, cls]) => (
                       <button key={lv} onClick={() => handleAddBot(lv)} disabled={busy} className={`${cls} text-white text-sm font-bold py-2 rounded-lg hover:opacity-90 disabled:opacity-40`}>{label}</button>
                     ))}
                   </div>
-                  <p className="text-[11px] text-gray-400 mt-1 text-center">초급=랜덤 · 중급=많이 뒤집기+코너 · 고급=위치 전략</p>
+                  <p className="text-[11px] text-gray-400 mt-1 text-center">초급=랜덤 · 중급=많이 뒤집기+코너 · 고급=위치 전략 · 초고수=수읽기(종반 완전탐색)</p>
                 </div>
               )}
               <button onClick={handleStart} disabled={busy || st.players.length < 2} className="w-full bg-hit text-white font-bold py-3 rounded-lg disabled:opacity-40">{st.players.length < 2 ? '상대(봇 또는 유저)를 기다리는 중' : '게임 시작'}</button>

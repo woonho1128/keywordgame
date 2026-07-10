@@ -53,4 +53,29 @@ class OthelloGameTest {
         OthelloGame g = started();
         assertThat(g.validForTest(1)).doesNotContain(cell(0, 0));
     }
+
+    @Test
+    void 초고수_봇은_합법수를_두고_한판을_끝낸다() {
+        OthelloGame g = new OthelloGame();
+        g.newGame("host", "나", "BLACK", 60);
+        g.addBot("host", "MASTER");
+        g.start("host");
+        // 사람(흑)도 매번 첫 유효수를 두며 진행 → 봇이 자동으로 응수해 게임이 끝나야 함
+        long guard = 0;
+        while (!g.me("host").status().equals("ENDED") && guard++ < 200) {
+            var s = g.me("host");
+            if (s.status().equals("ENDED")) break;
+            if (s.myTurn() && !s.validMoves().isEmpty()) {
+                g.place("host", s.validMoves().get(0));
+            } else {
+                // 봇 차례: 봇이 둘 시간이 되도록 데드라인을 당겨 tick 유도
+                g.forceBotNowForTest();
+                g.me("host");
+            }
+        }
+        var end = g.me("host");
+        assertThat(end.status()).isEqualTo("ENDED");
+        assertThat(end.blackCount() + end.whiteCount()).isGreaterThan(0);
+        assertThat(end.winner()).isBetween(1, 3);
+    }
 }

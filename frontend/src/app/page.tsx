@@ -22,7 +22,7 @@ const GAMES: Game[] = [
   { href: '/rummikub', title: '🁢 루미큐브', desc: '타일로 세트를 만들어 먼저 다 내려놓는 사람이 이기는 게임. 봇과 1인~4인.', hover: 'hit', solo: true, soloLabel: '🤖 봇과 1인 가능' },
   { href: '/halligalli', title: '🔔 할리갈리', desc: '같은 과일 5개가 뜨면 먼저 종을 치는 실시간 순발력 게임. 봇과 1인~6인.', hover: 'hit', solo: true, soloLabel: '🤖 봇과 1인 가능' },
   { href: '/lexio', title: '🀫 렉시오', desc: '타일로 족보를 만들어 먼저 다 내려놓는 빅투 계열 게임. 봇과 1인~5인.', hover: 'hit', solo: true, soloLabel: '🤖 봇과 1인 가능' },
-  { href: '/othello', title: '⚫⚪ 오델로', desc: '돌을 뒤집어 더 많이 차지하는 8×8 리버시. 봇(초·중·고급)과 1인 또는 유저 대전.', hover: 'hit', solo: true, soloLabel: '🤖 봇과 1인 가능' },
+  { href: '/othello', title: '⚫⚪ 오델로', desc: '돌을 뒤집어 더 많이 차지하는 8×8 리버시. 봇(초·중·고급·초고수)과 1인 또는 유저 대전.', hover: 'hit', solo: true, soloLabel: '🤖 봇과 1인 가능' },
   { href: '/gartic', title: '🎨 그림 텔레폰', desc: '문장을 그림으로, 그림을 문장으로 넘기며 엉뚱하게 변해가는 갈틱폰 (3~10인).', hover: 'hit', solo: false },
   { href: '/bingo', title: '🔢 빙고', desc: '3×3~5×5 판을 채우고, 뽑히는 숫자로 먼저 빙고 줄을 완성하면 승리 (2~8인).', hover: 'hit', solo: false },
   { href: '/snake', title: '🐍 지렁이', desc: '먹이를 먹고 커지며 봇과 경쟁하는 지렁이 게임. 랭킹 등록 (혼자 플레이).', hover: 'hit', solo: true, soloLabel: '🤖 봇과 1인 가능' },

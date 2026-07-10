@@ -199,6 +199,7 @@ public class OthelloGame implements RoomGame {
         List<Integer> moves = validMoves(color);
         if (moves.isEmpty()) return -1;
         if ("EASY".equals(level)) return moves.get(ThreadLocalRandom.current().nextInt(moves.size()));
+        if ("MASTER".equals(level)) return pickMasterMove(color);
         if ("HARD".equals(level)) {
             int best = moves.get(0); long bestScore = Long.MIN_VALUE;
             for (int m : moves) {
@@ -219,6 +220,110 @@ public class OthelloGame implements RoomGame {
             if (sc > bestScore) { bestScore = sc; best = m; }
         }
         return best;
+    }
+
+    // =================== 초고수(MASTER): 알파-베타 미니맥스 ===================
+
+    /** 종반에는 끝까지, 중반에는 깊게 읽어 최선수를 고른다. */
+    private int pickMasterMove(int color) {
+        List<Integer> moves = validMoves(color);
+        if (moves.isEmpty()) return -1;
+        int empties = 0; for (int v : board) if (v == 0) empties++;
+        // 남은 칸 11개 이하면 끝까지 완전탐색, 아니면 중반 깊이(오프닝은 살짝 얕게)
+        int depth = empties <= 11 ? empties : (empties >= 45 ? 6 : 7);
+        moves.sort((a, b) -> Integer.compare(WEIGHT[b], WEIGHT[a])); // 이동 정렬로 가지치기 강화
+        int opp = 3 - color, best = moves.get(0);
+        long bestScore = NEG, alpha = NEG, beta = POS;
+        for (int m : moves) {
+            int[] nb = board.clone();
+            nb[m] = color; for (int f : flipsFor(color, m)) nb[f] = color;
+            long v = -negamax(nb, opp, depth - 1, -beta, -alpha);
+            if (v > bestScore) { bestScore = v; best = m; }
+            if (bestScore > alpha) alpha = bestScore;
+        }
+        return best;
+    }
+
+    private static final long NEG = Long.MIN_VALUE / 4, POS = Long.MAX_VALUE / 4;
+
+    private long negamax(int[] bd, int color, int depth, long alpha, long beta) {
+        int opp = 3 - color;
+        List<Integer> moves = movesOn(bd, color);
+        if (moves.isEmpty()) {
+            if (movesOn(bd, opp).isEmpty()) return terminalScore(bd, color); // 양쪽 다 못 둠 → 종료
+            return -negamax(bd, opp, depth, -beta, -alpha);                  // 한쪽만 패스
+        }
+        if (depth <= 0) return heuristic(bd, color);
+        moves.sort((a, b) -> Integer.compare(WEIGHT[b], WEIGHT[a]));
+        long best = NEG;
+        for (int m : moves) {
+            int[] nb = bd.clone();
+            nb[m] = color; for (int f : flipsOn(bd, color, m)) nb[f] = color;
+            long v = -negamax(nb, opp, depth - 1, -beta, -alpha);
+            if (v > best) best = v;
+            if (best > alpha) alpha = best;
+            if (alpha >= beta) break;   // 알파-베타 가지치기
+        }
+        return best;
+    }
+
+    /** 게임 종료 국면 평가: 돌 차이가 절대적(승패 우선). */
+    private static long terminalScore(int[] bd, int color) {
+        int my = 0, op = 0;
+        for (int v : bd) { if (v == color) my++; else if (v != 0) op++; }
+        int diff = my - op;
+        long sign = diff > 0 ? 1 : diff < 0 ? -1 : 0;
+        return sign * 10_000_000L + diff * 1000L;
+    }
+
+    /** 중간 국면 휴리스틱: 위치가중치 + 착수가능수(기동력) + 프론티어 + 코너. */
+    private static long heuristic(int[] bd, int color) {
+        int opp = 3 - color;
+        long pos = 0; int myF = 0, opF = 0;
+        for (int i = 0; i < 64; i++) {
+            int v = bd[i];
+            if (v == 0) continue;
+            if (v == color) { pos += WEIGHT[i]; if (isFrontier(bd, i)) myF++; }
+            else { pos -= WEIGHT[i]; if (isFrontier(bd, i)) opF++; }
+        }
+        long mob = movesOn(bd, color).size() - (long) movesOn(bd, opp).size();
+        long frontier = opF - (long) myF;   // 프론티어(빈칸에 접한 돌)는 적을수록 유리
+        long corner = cornerCount(bd, color) - (long) cornerCount(bd, opp);
+        return pos + mob * 15 + frontier * 10 + corner * 80;
+    }
+
+    private static boolean isFrontier(int[] bd, int i) {
+        int r = i / 8, c = i % 8;
+        for (int d = 0; d < 8; d++) { int nr = r + DR[d], nc = c + DC[d]; if (inBoard(nr, nc) && bd[idx(nr, nc)] == 0) return true; }
+        return false;
+    }
+    private static int cornerCount(int[] bd, int color) {
+        int n = 0; for (int c : new int[]{0, 7, 56, 63}) if (bd[c] == color) n++; return n;
+    }
+    private static List<Integer> movesOn(int[] bd, int color) {
+        List<Integer> out = new ArrayList<>();
+        for (int i = 0; i < 64; i++) if (bd[i] == 0 && canFlip(bd, color, i)) out.add(i);
+        return out;
+    }
+    private static boolean canFlip(int[] bd, int color, int cell) {
+        int r = cell / 8, c = cell % 8, opp = 3 - color;
+        for (int d = 0; d < 8; d++) {
+            int nr = r + DR[d], nc = c + DC[d], cnt = 0;
+            while (inBoard(nr, nc) && bd[idx(nr, nc)] == opp) { cnt++; nr += DR[d]; nc += DC[d]; }
+            if (cnt > 0 && inBoard(nr, nc) && bd[idx(nr, nc)] == color) return true;
+        }
+        return false;
+    }
+    private static List<Integer> flipsOn(int[] bd, int color, int cell) {
+        List<Integer> flips = new ArrayList<>();
+        int r = cell / 8, c = cell % 8, opp = 3 - color;
+        for (int d = 0; d < 8; d++) {
+            List<Integer> line = new ArrayList<>();
+            int nr = r + DR[d], nc = c + DC[d];
+            while (inBoard(nr, nc) && bd[idx(nr, nc)] == opp) { line.add(idx(nr, nc)); nr += DR[d]; nc += DC[d]; }
+            if (!line.isEmpty() && inBoard(nr, nc) && bd[idx(nr, nc)] == color) flips.addAll(line);
+        }
+        return flips;
     }
 
     // =================== 규칙 ===================
@@ -311,6 +416,7 @@ public class OthelloGame implements RoomGame {
     int[] boardForTest() { return board; }
     int countForTest(int color) { return count(color); }
     List<Integer> validForTest(int color) { return validMoves(color); }
+    synchronized void forceBotNowForTest() { botActAt = 0; } // 봇 착수 지연 무시(테스트 진행용)
 
     // =================== 유틸 ===================
 
@@ -333,10 +439,10 @@ public class OthelloGame implements RoomGame {
     private static String normalizeLevel(String s) {
         if (s == null) return "NORMAL";
         String u = s.toUpperCase();
-        return (u.equals("EASY") || u.equals("HARD")) ? u : "NORMAL";
+        return (u.equals("EASY") || u.equals("HARD") || u.equals("MASTER")) ? u : "NORMAL";
     }
     private static String levelLabel(String lvl) {
-        return switch (lvl) { case "EASY" -> "초급"; case "HARD" -> "고급"; default -> "중급"; };
+        return switch (lvl) { case "EASY" -> "초급"; case "HARD" -> "고급"; case "MASTER" -> "초고수"; default -> "중급"; };
     }
     private static BusinessException bad(String msg) { return new BusinessException(ErrorCode.INVALID_INPUT, msg); }
     private static String trimNick(String nick) {
