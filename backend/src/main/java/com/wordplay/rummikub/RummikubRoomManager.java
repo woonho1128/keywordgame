@@ -15,8 +15,12 @@ public class RummikubRoomManager {
     private final RoomRegistry<RummikubGame> reg = new RoomRegistry<>();
 
     public String create(String clientId, String nick) {
+        return create(clientId, nick, null);
+    }
+
+    public String create(String clientId, String nick, Integer turnSec) {
         RummikubGame game = new RummikubGame();
-        game.newGame(clientId, nick);
+        game.newGame(clientId, nick, turnSec);
         try {
             return reg.add(game);
         } catch (IllegalStateException e) {

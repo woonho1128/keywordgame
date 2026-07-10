@@ -60,7 +60,8 @@ public class RummikubGame implements RoomGame {
     private final List<Player> players = new ArrayList<>();
     private final Map<String, Integer> clientSeats = new HashMap<>();
 
-    private static final long TURN_MS = 60_000L; // 차례 제한시간 60초
+    private static final long DEFAULT_TURN_MS = 60_000L; // 차례 제한시간 기본 60초
+    private long turnMs = DEFAULT_TURN_MS;                // 방 생성 시 설정 가능
 
     private final List<List<Integer>> table = new ArrayList<>();
     private final List<Integer> drawPile = new ArrayList<>();
@@ -72,9 +73,14 @@ public class RummikubGame implements RoomGame {
     // =================== 명령 ===================
 
     public synchronized RummikubStateResponse newGame(String clientId, String nick) {
+        return newGame(clientId, nick, null);
+    }
+
+    public synchronized RummikubStateResponse newGame(String clientId, String nick, Integer turnSec) {
         reset();
         phase = Phase.LOBBY;
         hostClientId = clientId;
+        this.turnMs = (turnSec == null ? 60 : Math.max(30, Math.min(300, turnSec))) * 1000L;
         addPlayer(clientId, nick);
         return me(clientId);
     }
@@ -113,7 +119,7 @@ public class RummikubGame implements RoomGame {
         winnerSeat = -1;
         lastAction = players.get(0).nick + "님의 차례입니다.";
         phase = Phase.PLAYING;
-        turnDeadlineMs = System.currentTimeMillis() + TURN_MS;
+        turnDeadlineMs = System.currentTimeMillis() + turnMs;
         return me(clientId);
     }
 
@@ -585,7 +591,7 @@ public class RummikubGame implements RoomGame {
 
     private void nextTurn() {
         currentSeat = (currentSeat + 1) % players.size();
-        turnDeadlineMs = System.currentTimeMillis() + TURN_MS;
+        turnDeadlineMs = System.currentTimeMillis() + turnMs;
     }
 
     private void sortRack(Player p) {
@@ -622,6 +628,7 @@ public class RummikubGame implements RoomGame {
         winnerSeat = -1;
         lastAction = null;
         turnDeadlineMs = 0;
+        turnMs = DEFAULT_TURN_MS;
     }
 
     private static BusinessException bad(String msg) {

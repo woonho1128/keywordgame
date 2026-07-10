@@ -61,6 +61,7 @@ export default function RummikubPage() {
   const roomRef = useRef<string | null>(null);
 
   const [nick, setNick] = useState('');
+  const [turnSec, setTurnSec] = useState(60);
   const [showCreate, setShowCreate] = useState(false);
   const [showRules, setShowRules] = useState(false);
 
@@ -180,7 +181,7 @@ export default function RummikubPage() {
     setBusy(true); setError(null);
     try {
       const res = await api<{ roomCode: string; state: RkState }>(
-        `/api/v1/rummikub/new?clientId=${cid()}`, { method: 'POST', body: JSON.stringify({ nick: n }) });
+        `/api/v1/rummikub/new?clientId=${cid()}`, { method: 'POST', body: JSON.stringify({ nick: n, turnSec }) });
       changeRoom(res.roomCode); setSt(res.state); setShowCreate(false);
     } catch (e) { setError(e instanceof Error ? e.message : '방 생성 실패'); } finally { setBusy(false); }
   };
@@ -408,6 +409,15 @@ export default function RummikubPage() {
           <div className="w-full space-y-4">
             <input value={nick} onChange={(e) => setNick(e.target.value)} maxLength={16} placeholder="내 닉네임"
               className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:border-hit" />
+            <div>
+              <p className="text-sm font-bold text-gray-600 mb-1">차례 제한시간 <span className="font-normal text-gray-400 text-xs">(시간 초과 시 자동 가져오기)</span></p>
+              <div className="grid grid-cols-4 gap-1">
+                {[30, 45, 60, 90, 120, 180].map((s) => (
+                  <button key={s} onClick={() => setTurnSec(s)}
+                    className={`py-2 rounded-lg border text-sm ${turnSec === s ? 'border-hit bg-hit/5 text-hit font-bold' : 'border-gray-200 text-gray-500'}`}>{s}초</button>
+                ))}
+              </div>
+            </div>
             <div className="flex gap-2">
               <button onClick={() => setShowCreate(false)} className="flex-1 border border-gray-300 py-3 rounded-lg">취소</button>
               <button onClick={handleCreate} disabled={busy} className="flex-[2] bg-hit text-white font-bold py-3 rounded-lg disabled:opacity-50">방 만들기</button>

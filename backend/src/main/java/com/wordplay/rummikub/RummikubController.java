@@ -35,7 +35,7 @@ public class RummikubController {
     public ApiResponse<CreateRoomResponse<RummikubStateResponse>> newGame(@RequestParam String clientId,
                                                                           @Valid @RequestBody NewRummikubRequest req) {
         validateClientId(clientId);
-        String code = rooms.create(clientId, req.nick());
+        String code = rooms.create(clientId, req.nick(), req.turnSec());
         return ApiResponse.success(new CreateRoomResponse<>(code, rooms.require(code).me(clientId)));
     }
 
