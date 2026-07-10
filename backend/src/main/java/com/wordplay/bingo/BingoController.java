@@ -59,6 +59,14 @@ public class BingoController {
         return ApiResponse.success(rooms.require(roomCode).start(clientId));
     }
 
+    /** TURN 모드: 자기 차례에 숫자 지목. */
+    @PostMapping("/call")
+    public ApiResponse<BingoStateResponse> call(@RequestParam String roomCode, @RequestParam String clientId,
+                                                @RequestParam int number) {
+        validateClientId(clientId);
+        return ApiResponse.success(rooms.require(roomCode).callNumber(clientId, number));
+    }
+
     @GetMapping("/me")
     public ApiResponse<BingoStateResponse> me(@RequestParam String roomCode, @RequestParam String clientId) {
         validateClientId(clientId);

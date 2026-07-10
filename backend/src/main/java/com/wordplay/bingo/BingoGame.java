@@ -23,8 +23,10 @@ import java.util.concurrent.ThreadLocalRandom;
 public class BingoGame implements RoomGame {
 
     enum Phase { LOBBY, PLAYING, ENDED }
+    enum Mode { AUTO, TURN }   // AUTO: 봇이 자동으로 뽑음, TURN: 참가자가 번갈아 지목
 
     private static final long DRAW_INTERVAL_MS = 3_000;
+    private static final long TURN_MS = 30_000;   // TURN 모드 한 차례 제한시간(초과 시 랜덤 지목)
 
     static final class Player {
         final String clientId; String nick;
@@ -42,21 +44,29 @@ public class BingoGame implements RoomGame {
     private int size = 5;
     private int range = 50;
     private int target = 3;
+    private Mode mode = Mode.AUTO;
 
     private final List<Integer> drawn = new ArrayList<>();
     private final Set<Integer> drawnSet = new HashSet<>();
     private long nextDrawAt = 0;
+    private int currentTurnSeat = -1;   // TURN 모드: 지금 지목할 좌석(0-based), 아니면 -1
+    private long turnEndsAt = 0;        // TURN 모드: 이번 차례 마감 시각
     private int winnerSeat = -1;
     private long version = 0;
 
     // =================== 명령 ===================
 
     public synchronized BingoStateResponse newGame(String clientId, String nick, Integer size, Integer target) {
+        return newGame(clientId, nick, size, target, null);
+    }
+
+    public synchronized BingoStateResponse newGame(String clientId, String nick, Integer size, Integer target, String mode) {
         reset();
         phase = Phase.LOBBY;
         hostClientId = clientId;
         setSize(size);
         this.target = clampInt(target, 1, 5, 3);
+        this.mode = "TURN".equalsIgnoreCase(mode) ? Mode.TURN : Mode.AUTO;
         addPlayer(clientId, nick);
         touch();
         return me(clientId);
@@ -112,9 +122,38 @@ public class BingoGame implements RoomGame {
         drawnSet.clear();
         winnerSeat = -1;
         phase = Phase.PLAYING;
-        nextDrawAt = System.currentTimeMillis() + DRAW_INTERVAL_MS;
+        long now = System.currentTimeMillis();
+        if (mode == Mode.TURN) {
+            currentTurnSeat = ThreadLocalRandom.current().nextInt(players.size());
+            turnEndsAt = now + TURN_MS;
+            nextDrawAt = 0;
+        } else {
+            nextDrawAt = now + DRAW_INTERVAL_MS;
+            currentTurnSeat = -1;
+            turnEndsAt = 0;
+        }
         touch();
         return me(clientId);
+    }
+
+    /** TURN 모드: 자기 차례에 숫자 하나를 지목. 모든 판에 반영되고 다음 사람 차례로. */
+    public synchronized BingoStateResponse callNumber(String clientId, int n) {
+        tick();
+        Integer seat = seats.get(clientId);
+        if (seat == null) throw bad("참가하지 않은 기기입니다");
+        if (phase != Phase.PLAYING) throw bad("진행 중이 아닙니다");
+        if (mode != Mode.TURN) throw bad("지목 모드가 아닙니다");
+        if (seat != currentTurnSeat) throw bad("당신의 차례가 아닙니다");
+        if (n < 1 || n > range) throw bad("숫자는 1~" + range + " 범위여야 합니다");
+        if (drawnSet.contains(n)) throw bad("이미 나온 숫자입니다");
+        applyDraw(n);
+        if (phase == Phase.PLAYING) advanceTurn();
+        return me(clientId);
+    }
+
+    private void advanceTurn() {
+        currentTurnSeat = (currentTurnSeat + 1) % players.size();
+        turnEndsAt = System.currentTimeMillis() + TURN_MS;
     }
 
     public synchronized BingoStateResponse me(String clientId) {
@@ -130,14 +169,22 @@ public class BingoGame implements RoomGame {
 
     // =================== 진행 ===================
 
-    /** 봇 진행자: 일정 간격으로 숫자 하나씩 뽑는다(폴링에 얹어). */
+    /** 진행 처리(폴링에 얹어). AUTO는 일정 간격 자동 뽑기, TURN은 차례 시간 초과 시 랜덤 지목. */
     private void tick() {
         if (phase != Phase.PLAYING) return;
         long now = System.currentTimeMillis();
         int guard = 0;
-        while (phase == Phase.PLAYING && nextDrawAt > 0 && now >= nextDrawAt && guard++ < 60) {
-            drawOne();
-            if (phase == Phase.PLAYING) nextDrawAt = now < nextDrawAt + DRAW_INTERVAL_MS ? nextDrawAt + DRAW_INTERVAL_MS : now + DRAW_INTERVAL_MS;
+        if (mode == Mode.AUTO) {
+            while (phase == Phase.PLAYING && nextDrawAt > 0 && now >= nextDrawAt && guard++ < 60) {
+                drawOne();
+                if (phase == Phase.PLAYING) nextDrawAt = now < nextDrawAt + DRAW_INTERVAL_MS ? nextDrawAt + DRAW_INTERVAL_MS : now + DRAW_INTERVAL_MS;
+            }
+        } else {
+            while (phase == Phase.PLAYING && turnEndsAt > 0 && now >= turnEndsAt && guard++ < 60) {
+                drawOne();                              // 시간 초과: 현재 차례 대신 랜덤 지목
+                if (phase == Phase.PLAYING) advanceTurn();
+                now = System.currentTimeMillis();
+            }
         }
     }
 
@@ -225,14 +272,17 @@ public class BingoGame implements RoomGame {
             myLines = phase == Phase.LOBBY ? 0 : linesOf(players.get(mySeat));
         }
 
+        boolean myTurn = joined && mode == Mode.TURN && phase == Phase.PLAYING && mySeat == currentTurnSeat;
         return new BingoStateResponse(
                 phase.name(), now,
                 clientId.equals(hostClientId), joined,
                 joined ? mySeat + 1 : 0, joined ? players.get(mySeat).nick : null,
-                size, range, target,
+                size, range, target, mode.name(),
                 pv, myBoard, new ArrayList<>(drawn),
                 drawn.isEmpty() ? -1 : drawn.get(drawn.size() - 1),
-                nextDrawAt, myLines,
+                nextDrawAt,
+                (mode == Mode.TURN && phase == Phase.PLAYING) ? currentTurnSeat + 1 : -1,
+                myTurn, turnEndsAt, myLines,
                 winnerSeat < 0 ? -1 : winnerSeat + 1,
                 winnerSeat < 0 ? null : players.get(winnerSeat).nick,
                 players.size(), version
@@ -267,8 +317,9 @@ public class BingoGame implements RoomGame {
     private void reset() {
         phase = null; hostClientId = null;
         players.clear(); seats.clear();
-        size = 5; range = 50; target = 3;
-        drawn.clear(); drawnSet.clear(); nextDrawAt = 0; winnerSeat = -1; version = 0;
+        size = 5; range = 50; target = 3; mode = Mode.AUTO;
+        drawn.clear(); drawnSet.clear(); nextDrawAt = 0;
+        currentTurnSeat = -1; turnEndsAt = 0; winnerSeat = -1; version = 0;
     }
 
     private static BusinessException bad(String msg) { return new BusinessException(ErrorCode.INVALID_INPUT, msg); }

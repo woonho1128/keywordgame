@@ -16,7 +16,7 @@ public class BingoRoomManager {
 
     public String create(String clientId, NewBingoRequest req) {
         BingoGame game = new BingoGame();
-        game.newGame(clientId, req.nick(), req.size(), req.target());
+        game.newGame(clientId, req.nick(), req.size(), req.target(), req.mode());
         try {
             return reg.add(game);
         } catch (IllegalStateException e) {

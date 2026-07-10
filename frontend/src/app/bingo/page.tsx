@@ -9,9 +9,10 @@ type RoomSummary = { code: string; status: string; playerCount: number; host: st
 type BState = {
   status: 'NOT_STARTED' | 'LOBBY' | 'PLAYING' | 'ENDED';
   serverNow: number; isHost: boolean; joined: boolean; seat: number; nick: string | null;
-  size: number; range: number; target: number;
+  size: number; range: number; target: number; mode: 'AUTO' | 'TURN';
   players: PlayerView[]; myBoard: number[]; drawn: number[]; lastDrawn: number;
-  nextDrawAt: number; myLines: number; winnerSeat: number; winnerNick: string | null;
+  nextDrawAt: number; currentTurnSeat: number; myTurn: boolean; turnEndsAt: number;
+  myLines: number; winnerSeat: number; winnerNick: string | null;
   playerCount: number; version: number;
 };
 
@@ -46,6 +47,7 @@ export default function BingoPage() {
   const [showCreate, setShowCreate] = useState(false);
   const [size, setSize] = useState(5);
   const [target, setTarget] = useState(3);
+  const [mode, setMode] = useState<'AUTO' | 'TURN'>('AUTO');
   const [showAdmin, setShowAdmin] = useState(false);
   const [adminInput, setAdminInput] = useState('');
 
@@ -106,7 +108,7 @@ export default function BingoPage() {
     saveNick(n); setBusy(true); setError(null);
     try {
       const res = await api<{ roomCode: string; state: BState }>(
-        `/api/v1/bingo/new?clientId=${cid()}`, { method: 'POST', body: JSON.stringify({ nick: n, size, target }) });
+        `/api/v1/bingo/new?clientId=${cid()}`, { method: 'POST', body: JSON.stringify({ nick: n, size, target, mode }) });
       changeRoom(res.roomCode); setSt(res.state); setShowCreate(false); setBoard(new Array(size * size).fill(0));
     } catch (e) { setError(e instanceof Error ? e.message : '방 생성 실패'); } finally { setBusy(false); }
   };
@@ -115,6 +117,7 @@ export default function BingoPage() {
     saveNick(n); const r = await post(`/api/v1/bingo/join?${rp()}`, { nick: n }); if (r) setSt(r);
   };
   const handleStart = async () => { const r = await post(`/api/v1/bingo/start?${rp()}`); if (r) setSt(r); };
+  const handleCall = async (n: number) => { const r = await post(`/api/v1/bingo/call?${rp()}&number=${n}`); if (r) setSt(r); };
   const submitBoard = async (nums: number[]) => { const r = await post(`/api/v1/bingo/set-board?${rp()}`, { numbers: nums }); if (r) { setSt(r); setEditing(false); } };
   const handleEditBoard = () => { if (st) { setBoard(st.myBoard.length ? [...st.myBoard] : new Array(st.size * st.size).fill(0)); setEditing(true); } };
 
@@ -194,6 +197,16 @@ export default function BingoPage() {
                 ))}
               </div>
             </div>
+            <div>
+              <p className="text-sm font-bold text-gray-600 mb-1">진행 방식</p>
+              <div className="grid grid-cols-2 gap-2">
+                {([['AUTO', '🤖 자동 진행', '봇이 숫자를 자동으로 뽑아요'], ['TURN', '🔄 번갈아 지목', '참가자가 돌아가며 숫자를 불러요']] as const).map(([m, label, desc]) => (
+                  <button key={m} onClick={() => setMode(m)} className={`py-2 px-2 rounded-lg border-2 text-sm text-center ${mode === m ? 'border-hit bg-hit/5 text-hit font-bold' : 'border-gray-200 text-gray-500'}`}>
+                    {label}<br /><span className="text-[10px] font-normal">{desc}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
             <div className="flex gap-2">
               <button onClick={() => setShowCreate(false)} className="flex-1 border border-gray-300 py-3 rounded-lg">취소</button>
               <button onClick={handleCreate} disabled={busy} className="flex-[2] bg-hit text-white font-bold py-3 rounded-lg disabled:opacity-40">방 만들기</button>
@@ -231,7 +244,9 @@ export default function BingoPage() {
   if (!st) return <main className="min-h-screen flex items-center justify-center"><p className="text-gray-400">불러오는 중...</p></main>;
 
   const drawnSet = new Set(st.drawn);
-  const remain = st.status === 'PLAYING' && st.nextDrawAt > 0 ? Math.max(0, Math.ceil((st.nextDrawAt - (Date.now() + clockOffset.current)) / 1000)) : null;
+  const remain = st.status === 'PLAYING' && st.mode === 'AUTO' && st.nextDrawAt > 0 ? Math.max(0, Math.ceil((st.nextDrawAt - (Date.now() + clockOffset.current)) / 1000)) : null;
+  const turnRemain = st.status === 'PLAYING' && st.mode === 'TURN' && st.turnEndsAt > 0 ? Math.max(0, Math.ceil((st.turnEndsAt - (Date.now() + clockOffset.current)) / 1000)) : null;
+  const turnNick = st.currentTurnSeat > 0 ? (st.players.find((p) => p.seat === st.currentTurnSeat)?.nick ?? '') : '';
   const cellClass = st.size === 3 ? 'text-2xl' : st.size === 4 ? 'text-xl' : 'text-base';
 
   return (
@@ -242,7 +257,7 @@ export default function BingoPage() {
           <span className="text-xs bg-gray-100 rounded px-2 py-1 tracking-wider font-bold shrink-0">{roomCode}</span>
           <button onClick={() => { changeRoom(null); setSt(null); }} className="text-xs text-gray-400 underline shrink-0">나가기</button>
         </div>
-        <span className="text-xs text-gray-400">{st.size}×{st.size} · {st.target}줄 승리</span>
+        <span className="text-xs text-gray-400">{st.size}×{st.size} · {st.target}줄 · {st.mode === 'TURN' ? '번갈아 지목' : '자동'}</span>
       </div>
 
       {/* 참가자 */}
@@ -312,8 +327,21 @@ export default function BingoPage() {
         <div className="w-full space-y-3">
           {st.status === 'PLAYING' && (
             <div className="text-center">
-              <p className="text-xs text-gray-400">방금 뽑힌 숫자{remain != null && ` · 다음 ${remain}s`}</p>
-              <p className="text-5xl font-extrabold text-hit">{st.lastDrawn > 0 ? st.lastDrawn : '—'}</p>
+              {st.mode === 'TURN' ? (
+                <>
+                  <p className={`text-sm font-bold ${st.myTurn ? 'text-hit' : 'text-gray-500'}`}>
+                    {st.myTurn ? '🎯 내 차례! 내 판에서 숫자를 눌러 지목' : `⏳ ${turnNick}님 차례`}
+                    {turnRemain != null && <span className="ml-1 text-gray-400 font-normal">({turnRemain}s)</span>}
+                  </p>
+                  <p className="text-xs text-gray-400 mt-1">방금 지목된 숫자</p>
+                  <p className="text-4xl font-extrabold text-hit">{st.lastDrawn > 0 ? st.lastDrawn : '—'}</p>
+                </>
+              ) : (
+                <>
+                  <p className="text-xs text-gray-400">방금 뽑힌 숫자{remain != null && ` · 다음 ${remain}s`}</p>
+                  <p className="text-5xl font-extrabold text-hit">{st.lastDrawn > 0 ? st.lastDrawn : '—'}</p>
+                </>
+              )}
               <p className="text-sm font-bold text-gray-600 mt-1">내 빙고: {st.myLines}줄 / 목표 {st.target}줄</p>
             </div>
           )}
@@ -321,7 +349,8 @@ export default function BingoPage() {
             <p className="text-center text-2xl font-extrabold text-hit">🎉 {st.winnerNick} 승리!</p>
           )}
 
-          <BoardGrid nums={st.myBoard} size={st.size} cellClass={cellClass} marked={drawnSet} />
+          <BoardGrid nums={st.myBoard} size={st.size} cellClass={cellClass} marked={drawnSet}
+            onCell={st.status === 'PLAYING' && st.mode === 'TURN' && st.myTurn && !busy ? handleCall : undefined} />
 
           <div className="rounded-xl border border-gray-200 p-2">
             <p className="text-xs text-gray-400 mb-1">뽑힌 숫자 ({st.drawn.length}/{st.range})</p>
@@ -344,11 +373,19 @@ export default function BingoPage() {
   );
 }
 
-function BoardGrid({ nums, size, cellClass, marked }: { nums: number[]; size: number; cellClass: string; marked?: Set<number> }) {
+function BoardGrid({ nums, size, cellClass, marked, onCell }: { nums: number[]; size: number; cellClass: string; marked?: Set<number>; onCell?: (n: number) => void }) {
   return (
     <div className="grid gap-1 mx-auto" style={{ gridTemplateColumns: `repeat(${size}, minmax(0,1fr))`, maxWidth: size * 64 }}>
       {nums.map((v, i) => {
         const hit = marked?.has(v);
+        if (onCell && !hit) {
+          return (
+            <button key={i} onClick={() => onCell(v)}
+              className={`aspect-square rounded-lg border-2 flex items-center justify-center font-bold transition active:scale-95 ${cellClass} border-hit text-hit hover:bg-hit/10`}>
+              {v}
+            </button>
+          );
+        }
         return (
           <div key={i} className={`aspect-square rounded-lg border-2 flex items-center justify-center font-bold ${cellClass} ${hit ? 'border-hit bg-hit text-white' : 'border-gray-200 text-gray-700'}`}>
             {v}
