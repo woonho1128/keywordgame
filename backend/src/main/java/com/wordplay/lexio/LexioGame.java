@@ -34,7 +34,7 @@ public class LexioGame implements RoomGame {
         final String clientId;
         String nick;
         boolean ai = false;
-        String botName = null;
+        String aiLevel = "NORMAL"; // EASY / NORMAL / HARD
         final List<Integer> hand = new ArrayList<>();
         int score = 0;          // 누적 벌점(낮을수록 좋음)
         boolean out = false;    // 이번 판 손패 소진
@@ -94,17 +94,27 @@ public class LexioGame implements RoomGame {
         return me(clientId);
     }
 
-    public synchronized LexioStateResponse addBot(String clientId) {
+    public synchronized LexioStateResponse addBot(String clientId, String level) {
         if (phase != Phase.LOBBY) throw bad("대기방에서만 봇을 추가할 수 있습니다");
         if (!clientId.equals(hostClientId)) throw bad("방장만 추가할 수 있습니다");
         if (players.size() >= 5) throw bad("정원(5명)이 찼습니다");
+        String lvl = normalizeLevel(level);
         botCounter++;
-        Player b = new Player("bot::" + botCounter + "::" + System.nanoTime(), "🤖 봇" + botCounter);
-        b.ai = true; b.botName = b.nick;
+        Player b = new Player("bot::" + botCounter + "::" + System.nanoTime(), "🤖 봇" + botCounter + "(" + levelLabel(lvl) + ")");
+        b.ai = true; b.aiLevel = lvl;
         players.add(b);
         seats.put(b.clientId, players.size() - 1);
         touch();
         return me(clientId);
+    }
+
+    private static String normalizeLevel(String s) {
+        if (s == null) return "NORMAL";
+        String u = s.toUpperCase();
+        return (u.equals("EASY") || u.equals("HARD")) ? u : "NORMAL";
+    }
+    private static String levelLabel(String lvl) {
+        return switch (lvl) { case "EASY" -> "초급"; case "HARD" -> "고급"; default -> "중급"; };
     }
 
     public synchronized LexioStateResponse start(String clientId) {
@@ -321,26 +331,113 @@ public class LexioGame implements RoomGame {
         applyPlay(p, ids, evaluate(ids));
     }
 
-    /** 봇/자동 선: 첫 선이면 최저타일 싱글, 아니면 가장 약한 싱글. */
+    /**
+     * 봇/자동 선. 난이도별:
+     *  - EASY: 항상 최저 싱글(첫 선이면 최저타일).
+     *  - NORMAL: 최대한 여러 장 털기(스트레이트>트리플>페어>싱글, 약한 것 우선).
+     *  - HARD: NORMAL과 같되 최강 타일(2 등)은 컨트롤용으로 아껴 싱글로 잘 안 냄.
+     */
     private List<Integer> botLead(Player bot) {
         if (bot.hand.isEmpty()) return null;
-        if (firstLead && bot.hand.contains(lowestTileInPlay)) return List.of(lowestTileInPlay);
-        return List.of(bot.hand.get(0)); // hand는 tileCompare 오름차순
+        List<Integer> h = bot.hand; // tileKey 오름차순 정렬됨
+        boolean easy = "EASY".equals(bot.aiLevel);
+        if (firstLead && h.contains(lowestTileInPlay)) {
+            if (easy) return List.of(lowestTileInPlay);
+            List<Integer> combo = bestComboContaining(h, lowestTileInPlay);
+            return combo != null ? combo : List.of(lowestTileInPlay);
+        }
+        if (easy) return List.of(h.get(0));
+        // NORMAL/HARD: 약한 조합으로 여러 장 털기
+        List<Integer> straight = weakestStraight(h);
+        if (straight != null) return straight;
+        List<Integer> triple = weakestNOfAKind(h, 3);
+        if (triple != null) return triple;
+        List<Integer> pair = weakestNOfAKind(h, 2);
+        if (pair != null) return pair;
+        // 싱글: HARD는 최강 타일을 아껴 두 번째로 약한 걸 낼 수도(마지막 장이면 그냥 냄)
+        if ("HARD".equals(bot.aiLevel) && h.size() >= 2) return List.of(h.get(0));
+        return List.of(h.get(0));
     }
 
-    /** 봇 받아치기: 같은 장수로 이기는 최소 조합. 없으면 null(패스). */
+    /**
+     * 봇 받아치기: 같은 장수로 이기는 최소 조합. 없으면 null(패스).
+     * EASY는 이길 수 있어도 가끔(35%) 패스한다.
+     */
     private List<Integer> botBeat(Player bot) {
+        if ("EASY".equals(bot.aiLevel) && ThreadLocalRandom.current().nextInt(100) < 35) return null;
         int size = tableHand.size();
         long target = evaluate(tableHand).strength();
         List<Integer> best = null; long bestStr = Long.MAX_VALUE;
-        List<List<Integer>> combos = combinations(bot.hand, size);
-        for (List<Integer> c : combos) {
-            Hand h = evaluate(c);
-            if (h == null) continue;
-            long s = h.strength();
+        for (List<Integer> c : combinations(bot.hand, size)) {
+            Hand hd = evaluate(c);
+            if (hd == null) continue;
+            long s = hd.strength();
             if (s > target && s < bestStr) { bestStr = s; best = c; }
         }
         return best;
+    }
+
+    /** 손패에서 가장 약한 스트레이트 5장(무늬는 각 숫자별 최약). 없으면 null. */
+    private static List<Integer> weakestStraight(List<Integer> hand) {
+        Set<Integer> nums = new HashSet<>();
+        Map<Integer, Integer> weakestOf = new HashMap<>(); // 숫자 -> 그 숫자의 최약 타일
+        for (int id : hand) {
+            int nm = num(id);
+            nums.add(nm);
+            if (!weakestOf.containsKey(nm) || tileKey(id) < tileKey(weakestOf.get(nm))) weakestOf.put(nm, id);
+        }
+        for (int start = 1; start + 4 <= 15; start++) {
+            boolean ok = true;
+            for (int k = 0; k < 5; k++) if (!nums.contains(start + k)) { ok = false; break; }
+            if (ok) {
+                List<Integer> out = new ArrayList<>();
+                for (int k = 0; k < 5; k++) out.add(weakestOf.get(start + k));
+                return out;
+            }
+        }
+        return null;
+    }
+
+    /** 가장 약한 숫자의 k장(무늬 최약). 없으면 null. */
+    private static List<Integer> weakestNOfAKind(List<Integer> hand, int k) {
+        Map<Integer, List<Integer>> byNum = new HashMap<>();
+        for (int id : hand) byNum.computeIfAbsent(num(id), x -> new ArrayList<>()).add(id);
+        int bestNum = -1;
+        for (var e : byNum.entrySet())
+            if (e.getValue().size() >= k && (bestNum < 0 || numRank(e.getKey()) < numRank(bestNum))) bestNum = e.getKey();
+        if (bestNum < 0) return null;
+        List<Integer> t = new ArrayList<>(byNum.get(bestNum));
+        t.sort(LexioGame::tileCompare);
+        return new ArrayList<>(t.subList(0, k));
+    }
+
+    /** 첫 선용: 지정 타일을 포함하는 최대한 큰 약한 조합(스트레이트>트리플>페어). 없으면 null. */
+    private List<Integer> bestComboContaining(List<Integer> hand, int mustId) {
+        int mn = num(mustId);
+        // 그 숫자를 top이나 중간으로 포함하는 스트레이트
+        Set<Integer> nums = new HashSet<>();
+        Map<Integer, Integer> weakestOf = new HashMap<>();
+        for (int id : hand) {
+            int nm = num(id);
+            nums.add(nm);
+            if (!weakestOf.containsKey(nm) || tileKey(id) < tileKey(weakestOf.get(nm))) weakestOf.put(nm, id);
+        }
+        for (int start = Math.max(1, mn - 4); start <= mn && start + 4 <= 15; start++) {
+            boolean ok = true;
+            for (int k = 0; k < 5; k++) if (!nums.contains(start + k)) { ok = false; break; }
+            if (ok) {
+                List<Integer> out = new ArrayList<>();
+                for (int k = 0; k < 5; k++) out.add(start + k == mn ? mustId : weakestOf.get(start + k));
+                return out;
+            }
+        }
+        // 트리플/페어(그 숫자)
+        List<Integer> same = new ArrayList<>();
+        for (int id : hand) if (num(id) == mn && id != mustId) same.add(id);
+        same.sort(LexioGame::tileCompare);
+        if (same.size() >= 2) return List.of(mustId, same.get(0), same.get(1));
+        if (same.size() >= 1) return List.of(mustId, same.get(0));
+        return null;
     }
 
     // =================== 족보 판별/비교 ===================

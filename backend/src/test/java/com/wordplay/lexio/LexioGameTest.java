@@ -71,7 +71,7 @@ class LexioGameTest {
     void 시작하면_인원별로_딜된다() {
         LexioGame g = new LexioGame();
         g.newGame("host", "p0", "WHITE", "SINGLE", 40);
-        g.addBot("host"); g.addBot("host"); g.addBot("host"); // 4인
+        g.addBot("host", "NORMAL"); g.addBot("host", "NORMAL"); g.addBot("host", "NORMAL"); // 4인
         LexioStateResponse s = g.start("host");
         assertThat(s.status()).isEqualTo("PLAYING");
         assertThat(s.theme()).isEqualTo("WHITE");

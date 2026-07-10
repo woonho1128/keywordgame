@@ -47,9 +47,10 @@ public class LexioController {
     }
 
     @PostMapping("/add-bot")
-    public ApiResponse<LexioStateResponse> addBot(@RequestParam String roomCode, @RequestParam String clientId) {
+    public ApiResponse<LexioStateResponse> addBot(@RequestParam String roomCode, @RequestParam String clientId,
+                                                  @RequestParam(defaultValue = "NORMAL") String level) {
         validateClientId(clientId);
-        return ApiResponse.success(rooms.require(roomCode).addBot(clientId));
+        return ApiResponse.success(rooms.require(roomCode).addBot(clientId, level));
     }
 
     @PostMapping("/start")

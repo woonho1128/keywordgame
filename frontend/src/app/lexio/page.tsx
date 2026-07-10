@@ -145,7 +145,7 @@ export default function LexioPage() {
     } catch (e) { setError(e instanceof Error ? e.message : '방 생성 실패'); } finally { setBusy(false); }
   };
   const handleJoin = async () => { const n = nick.trim(); if (!n) return setError('닉네임을 입력하세요'); saveNick(n); await post(`/api/v1/lexio/join?${rp()}`, { nick: n }); };
-  const handleAddBot = () => post(`/api/v1/lexio/add-bot?${rp()}`);
+  const handleAddBot = (level: string) => post(`/api/v1/lexio/add-bot?${rp()}&level=${level}`);
   const handleStart = () => post(`/api/v1/lexio/start?${rp()}`);
   const handlePlay = async () => { if (sel.length === 0) return; const r = await post(`/api/v1/lexio/play?${rp()}`, { tiles: sel }); if (r) setSel([]); };
   const handlePass = () => post(`/api/v1/lexio/pass?${rp()}`);
@@ -280,7 +280,15 @@ export default function LexioPage() {
             </div>
           ) : st.isHost ? (
             <div className="space-y-2">
-              <button onClick={handleAddBot} disabled={busy || st.players.length >= 5} className="w-full border-2 border-purple-300 text-purple-600 font-bold py-2 rounded-lg disabled:opacity-40">🤖 AI 봇 추가</button>
+              <div>
+                <p className="text-xs text-gray-400 mb-1 text-center">🤖 AI 봇 추가 (난이도)</p>
+                <div className="grid grid-cols-3 gap-2">
+                  {([['EASY', '초급', 'bg-emerald-400'], ['NORMAL', '중급', 'bg-amber-400'], ['HARD', '고급', 'bg-rose-400']] as const).map(([lv, label, cls]) => (
+                    <button key={lv} onClick={() => handleAddBot(lv)} disabled={busy || st.players.length >= 5} className={`${cls} text-white text-sm font-bold py-2 rounded-lg hover:opacity-90 disabled:opacity-40`}>{label}</button>
+                  ))}
+                </div>
+                <p className="text-[11px] text-gray-400 mt-1 text-center">초급=싱글 위주 · 중급=조합으로 털기 · 고급=강한 타일 아껴 컨트롤</p>
+              </div>
               <button onClick={handleStart} disabled={busy || st.players.length < 2} className="w-full bg-hit text-white font-bold py-3 rounded-lg disabled:opacity-40">{st.players.length < 2 ? '최소 2명 필요' : '게임 시작'}</button>
             </div>
           ) : <p className="text-center text-gray-500 text-sm">방장이 시작하기를 기다리는 중...</p>}
