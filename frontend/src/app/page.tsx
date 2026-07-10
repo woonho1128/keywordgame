@@ -72,6 +72,14 @@ export default function HomePage() {
         </Link>
 
         <Link
+          href="/lexio"
+          className="border-2 border-gray-200 rounded-xl p-8 hover:border-hit transition"
+        >
+          <h2 className="text-2xl font-bold mb-2">🀫 렉시오</h2>
+          <p className="text-gray-600">타일로 족보를 만들어 먼저 다 내려놓는 빅투 계열 게임. 봇 대전 (2~5인).</p>
+        </Link>
+
+        <Link
           href="/gartic"
           className="border-2 border-gray-200 rounded-xl p-8 hover:border-hit transition"
         >
