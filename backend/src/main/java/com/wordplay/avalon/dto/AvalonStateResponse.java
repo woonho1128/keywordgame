@@ -46,7 +46,8 @@ public record AvalonStateResponse(
         String winReason,
         int playerCount
 ) {
-    public record PlayerView(int seat, String nick, String role) {}
+    /** known: 이 응답을 받는 플레이어가 그 좌석에 대해 아는 정체 라벨(악/멀린 후보 등), 없으면 null. */
+    public record PlayerView(int seat, String nick, String role, String known) {}
     public record VoteView(int seat, boolean approve) {}
 
     public static AvalonStateResponse notStarted(long now) {

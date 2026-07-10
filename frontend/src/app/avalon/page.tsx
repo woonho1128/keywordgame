@@ -7,7 +7,7 @@ type Phase =
   | 'NOT_STARTED' | 'LOBBY' | 'REVEAL' | 'TEAM_BUILD'
   | 'TEAM_VOTE' | 'QUEST' | 'ASSASSIN' | 'ENDED';
 
-type PlayerView = { seat: number; nick: string; role: string | null };
+type PlayerView = { seat: number; nick: string; role: string | null; known: string | null };
 type VoteView = { seat: number; approve: boolean };
 
 type AvState = {
@@ -241,6 +241,7 @@ export default function AvalonPage() {
   };
 
   const nickOf = (seat: number) => st?.players.find((p) => p.seat === seat)?.nick ?? `${seat}번`;
+  const knownOf = (seat: number) => st?.players.find((p) => p.seat === seat)?.known ?? null;
   const toggleTeam = (seat: number) => {
     if (!st) return;
     setTeam((cur) => {
@@ -591,6 +592,7 @@ export default function AvalonPage() {
             <button key={p.seat} onClick={() => onPick(p.seat)} disabled={busy || disabled}
               className={`rounded-lg border py-3 px-2 text-sm font-medium transition active:scale-95 ${sel ? 'border-blue-600 bg-blue-50 text-blue-700 font-bold' : 'border-gray-300 hover:bg-gray-50'}`}>
               {leader && '👑 '}{p.nick}{me && ' (나)'}
+              {p.known && <span className={`ml-1 text-[11px] font-bold ${p.known === '악' ? 'text-red-500' : 'text-amber-600'}`}>({p.known})</span>}
             </button>
           );
         })}
@@ -632,6 +634,7 @@ export default function AvalonPage() {
           {st!.proposedTeam.map((s) => (
             <span key={s} className="bg-blue-50 text-blue-700 rounded-full px-3 py-1 text-sm font-medium">
               {s === st!.leaderSeat && '👑 '}{nickOf(s)}
+              {knownOf(s) && <span className={`ml-1 text-[11px] font-bold ${knownOf(s) === '악' ? 'text-red-500' : 'text-amber-600'}`}>({knownOf(s)})</span>}
             </span>
           ))}
         </div>

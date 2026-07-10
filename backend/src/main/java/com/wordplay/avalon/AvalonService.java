@@ -396,6 +396,19 @@ public class AvalonService implements RoomGame {
         return String.join(", ", ns);
     }
 
+    /** viewer가 target 좌석에 대해 아는 정체 라벨(없으면 null). computeKnowledge와 동일 규칙(정보 격리). */
+    private String knownTag(int viewer, int target) {
+        if (viewer == target) return null;
+        Role vr = players.get(viewer).role, tr = players.get(target).role;
+        if (vr == null || tr == null) return null;
+        switch (vr) {
+            case MERLIN -> { return (isEvil(tr) && tr != Role.MORDRED) ? "악" : null; }         // 멀린: 모드레드 제외한 악
+            case PERCIVAL -> { return (tr == Role.MERLIN || tr == Role.MORGANA) ? "멀린 후보" : null; }
+            case ASSASSIN, MORGANA, MORDRED, MINION -> { return (isEvil(tr) && tr != Role.OBERON) ? "악" : null; } // 악: 오베론 제외한 동료 악
+            default -> { return null; } // SERVANT, OBERON: 아는 정보 없음
+        }
+    }
+
     // =================== 응답 빌드 ===================
 
     private AvalonStateResponse buildResponse(String clientId) {
@@ -411,7 +424,8 @@ public class AvalonService implements RoomGame {
         List<PlayerView> board = new ArrayList<>();
         for (int i = 0; i < pc; i++) {
             String role = ended && players.get(i).role != null ? players.get(i).role.name() : null;
-            board.add(new PlayerView(i + 1, players.get(i).nick, role));
+            String known = (!ended && joined && me.role != null) ? knownTag(mySeat, i) : null;
+            board.add(new PlayerView(i + 1, players.get(i).nick, role, known));
         }
 
         List<Integer> teamSizes = new ArrayList<>(), fails = new ArrayList<>();
