@@ -584,7 +584,8 @@ public class RummikubGame implements RoomGame {
         return phase == Phase.ENDED ? "ENDED" : "PLAYING";
     }
     @Override public synchronized int playerCount() {
-        return (int) players.stream().filter(p -> !leftClients.contains(p.clientId)).count();
+        // 봇 제외: 사람만 센다(사람이 다 나가면 빈 방으로 간주돼 즉시 삭제)
+        return (int) players.stream().filter(p -> !p.ai && !leftClients.contains(p.clientId)).count();
     }
     @Override public synchronized void leave(String clientId) {
         Integer seat = clientSeats.get(clientId);
