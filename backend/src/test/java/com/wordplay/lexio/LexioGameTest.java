@@ -75,9 +75,29 @@ class LexioGameTest {
         LexioStateResponse s = g.start("host");
         assertThat(s.status()).isEqualTo("PLAYING");
         assertThat(s.theme()).isEqualTo("WHITE");
-        // 4인이면 15장씩
-        assertThat(s.myTiles()).hasSize(15);
-        assertThat(s.players()).allSatisfy(p -> assertThat(p.tileCount()).isEqualTo(15));
+        // 정규 규칙: 4인이면 1~13 범위로 13장씩
+        assertThat(s.myTiles()).hasSize(13);
+        assertThat(s.players()).allSatisfy(p -> assertThat(p.tileCount()).isEqualTo(13));
+        assertThat(s.myTiles()).allSatisfy(id -> assertThat((id % 15) + 1).isBetween(1, 13)); // 14·15 제외
         assertThat(s.currentTurnSeat()).isBetween(1, 4);
+    }
+
+    @Test
+    void 인원별_사용_숫자범위와_장수가_정규규칙과_같다() {
+        // 3인: 1~9, 12장씩(36장)
+        LexioGame g3 = new LexioGame();
+        g3.newGame("h", "p", "BLACK", "SINGLE", 40);
+        g3.addBot("h", "NORMAL"); g3.addBot("h", "NORMAL"); // 3인
+        LexioStateResponse s3 = g3.start("h");
+        assertThat(s3.myTiles()).hasSize(12);
+        assertThat(s3.myTiles()).allSatisfy(id -> assertThat((id % 15) + 1).isBetween(1, 9));
+
+        // 5인: 1~15, 12장씩(60장)
+        LexioGame g5 = new LexioGame();
+        g5.newGame("h", "p", "BLACK", "SINGLE", 40);
+        for (int i = 0; i < 4; i++) g5.addBot("h", "NORMAL"); // 5인
+        LexioStateResponse s5 = g5.start("h");
+        assertThat(s5.myTiles()).hasSize(12);
+        assertThat(s5.players()).allSatisfy(p -> assertThat(p.tileCount()).isEqualTo(12));
     }
 }

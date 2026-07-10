@@ -189,10 +189,15 @@ public class LexioGame implements RoomGame {
     // =================== 진행 ===================
 
     private void deal() {
+        int n = players.size();
+        // 정규 규칙: 인원수에 따라 사용하는 숫자 범위와 1인당 장수가 달라짐
+        //  3인 → 1~9(36장) 12장씩 · 4인 → 1~13(52장) 13장씩 · 5인 → 1~15(60장) 12장씩
+        //  2인은 공식 기본 규칙 밖 → 3인 세팅(1~9, 12장)을 따르는 변형
+        int maxNum = switch (n) { case 5 -> 15; case 4 -> 13; default -> 9; };
+        int per = switch (n) { case 4 -> 13; default -> 12; };
         List<Integer> bag = new ArrayList<>();
-        for (int i = 0; i < 60; i++) bag.add(i);
+        for (int id = 0; id < 60; id++) if ((id % 15) + 1 <= maxNum) bag.add(id);
         Collections.shuffle(bag);
-        int per = switch (players.size()) { case 2 -> 20; case 3 -> 20; case 4 -> 15; default -> 12; };
         int idx = 0;
         for (Player p : players) {
             p.hand.clear();

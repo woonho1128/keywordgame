@@ -281,6 +281,7 @@ export default function LexioPage() {
       {phase === 'LOBBY' && (
         <div className="w-full space-y-3">
           <p className="text-center text-xs text-gray-400">{st.theme === 'BLACK' ? '🀫 블랙' : '🀆 화이트'} · {st.scoreMode === 'SINGLE' ? '단판' : '누적'} · 2~5인</p>
+          <p className="text-center text-[11px] text-gray-400">딜: 3인 1~9/12장 · 4인 1~13/13장 · 5인 1~15/12장 (정규 규칙) · 2인은 3인 세팅 변형</p>
           {!st.joined ? (
             <div className="flex gap-2">
               <input value={nick} onChange={(e) => setNick(e.target.value)} maxLength={16} placeholder="닉네임" className="flex-1 border border-gray-300 rounded-lg px-3 py-2" />
