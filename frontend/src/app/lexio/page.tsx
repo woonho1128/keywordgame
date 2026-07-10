@@ -60,15 +60,16 @@ function Tile({ id, theme, selected, small, onClick }: { id: number; theme: 'BLA
   );
 }
 
-const JOKBO = [
-  ['싱글', '타일 1장'],
-  ['원페어', '같은 숫자 2장'],
-  ['트리플', '같은 숫자 3장'],
-  ['스트레이트', '연속 숫자 5장'],
-  ['플러시', '같은 무늬 5장'],
-  ['풀하우스', '트리플 + 페어'],
-  ['포카드', '같은 숫자 4장 + 1장'],
-  ['스트레이트 플러시', '연속 + 같은 무늬 5장'],
+const tid = (suit: number, num: number) => suit * 15 + (num - 1);
+const JOKBO_EX: { name: string; desc: string; tiles: number[] }[] = [
+  { name: '싱글', desc: '타일 1장', tiles: [tid(3, 8)] },
+  { name: '원페어', desc: '같은 숫자 2장', tiles: [tid(0, 7), tid(1, 7)] },
+  { name: '트리플', desc: '같은 숫자 3장', tiles: [tid(0, 9), tid(1, 9), tid(2, 9)] },
+  { name: '스트레이트', desc: '연속 숫자 5장', tiles: [tid(0, 3), tid(1, 4), tid(2, 5), tid(3, 6), tid(0, 7)] },
+  { name: '플러시', desc: '같은 무늬 5장', tiles: [tid(3, 3), tid(3, 5), tid(3, 7), tid(3, 9), tid(3, 12)] },
+  { name: '풀하우스', desc: '트리플 + 페어', tiles: [tid(0, 8), tid(1, 8), tid(2, 8), tid(0, 10), tid(1, 10)] },
+  { name: '포카드', desc: '같은 숫자 4장 + 1장', tiles: [tid(0, 10), tid(1, 10), tid(2, 10), tid(3, 10), tid(0, 12)] },
+  { name: '스트레이트 플러시', desc: '연속 + 같은 무늬 5장', tiles: [tid(3, 4), tid(3, 5), tid(3, 6), tid(3, 7), tid(3, 8)] },
 ];
 
 export default function LexioPage() {
@@ -156,13 +157,16 @@ export default function LexioPage() {
   const toggleTile = (id: number) => setSel((cur) => cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id]);
   const nickOf = (seat: number) => st?.players.find((p) => p.seat === seat)?.nick ?? `${seat}번`;
 
-  const jokboPanel = showJokbo && (
+  const renderJokbo = (thm: 'BLACK' | 'WHITE') => showJokbo && (
     <div className="w-full mt-3 rounded-xl border border-gray-200 p-4 text-sm">
       <div className="flex items-center justify-between mb-2"><p className="font-bold">📖 족보 (약 → 강)</p><button onClick={() => setShowJokbo(false)} className="text-xs text-gray-400">닫기 ✕</button></div>
-      <p className="text-[11px] text-gray-400 mb-2">무늬: 구름 &lt; 별 &lt; 달 &lt; 해 · 숫자: 3&lt;4&lt;…&lt;15&lt;1&lt;<b>2(최강)</b></p>
-      <ol className="space-y-1">
-        {JOKBO.map(([name, desc], i) => (
-          <li key={name} className="flex items-center gap-2"><span className="w-5 text-gray-400 text-xs">{i + 1}</span><span className="font-bold">{name}</span><span className="text-gray-500 text-xs">— {desc}</span></li>
+      <p className="text-[11px] text-gray-400 mb-3">무늬: 구름 &lt; 별 &lt; 달 &lt; 해 · 숫자: 3&lt;4&lt;…&lt;15&lt;1&lt;<b>2(최강)</b></p>
+      <ol className="space-y-2.5">
+        {JOKBO_EX.map((h, i) => (
+          <li key={h.name} className="border-t border-gray-50 pt-2 first:border-0 first:pt-0">
+            <div className="flex items-center gap-1.5 mb-1"><span className="text-gray-400 text-xs">{i + 1}.</span><span className="font-bold">{h.name}</span><span className="text-gray-500 text-xs">— {h.desc}</span></div>
+            <div className="flex gap-0.5">{h.tiles.map((id) => <Tile key={id} id={id} theme={thm} small />)}</div>
+          </li>
         ))}
       </ol>
     </div>
@@ -205,7 +209,7 @@ export default function LexioPage() {
           <div className="w-full space-y-4">
             <button onClick={() => { setShowCreate(true); setError(null); }} className="w-full bg-hit text-white font-bold py-3 rounded-lg hover:opacity-90">+ 새 방 만들기</button>
             <button onClick={() => setShowJokbo((v) => !v)} className="text-sm text-gray-400 underline">족보 보기</button>
-            {jokboPanel}
+            {renderJokbo(theme)}
             <p className="text-sm font-bold text-gray-600">방 목록</p>
             {rooms.length === 0 && <p className="text-gray-400 text-sm text-center py-6">아직 만들어진 방이 없어요.</p>}
             {rooms.map((r) => {
@@ -251,7 +255,7 @@ export default function LexioPage() {
         </div>
         <button onClick={() => setShowJokbo((v) => !v)} className="text-xs font-bold text-hit shrink-0">📖 족보</button>
       </div>
-      {jokboPanel}
+      {renderJokbo(th)}
 
       {/* 참가자 / 점수 */}
       <div className="w-full flex flex-wrap gap-2 my-3 text-xs">
