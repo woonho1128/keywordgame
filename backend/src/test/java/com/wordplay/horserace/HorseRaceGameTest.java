@@ -120,6 +120,19 @@ class HorseRaceGameTest {
     }
 
     @Test
+    void 특수경마는_이벤트_로그를_남긴다() {
+        HorseRaceGame g = new HorseRaceGame();
+        g.newGame("host", "나", null, 0, "SPECIAL", "FIXED", 5000, 25, 9, 0);
+        g.start("host");
+        g.forceBetEndForTest(); g.me("host"); // 레이스
+        HorseRaceStateResponse s = g.me("host");
+        assertThat(s.status()).isEqualTo("RACING");
+        assertThat(s.race()).isNotNull();
+        // 특수경마는 이벤트가 (거의 항상) 한 번 이상 발생
+        assertThat(s.race().eventLog()).isNotEmpty();
+    }
+
+    @Test
     void 인기마_승률이_합리적_범위() {
         // ★5 한 마리 vs ★3 여덟 마리 → 인기마지만 지배적이지 않아야 함
         double fav = HorseRaceGame.favWinRateForTest(9, 5, 3, 6000);

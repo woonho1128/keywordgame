@@ -97,6 +97,7 @@ public class HorseRaceGame implements RoomGame {
     private final List<Bet> bets = new ArrayList<>();
     private long betEndsAt = 0;
     private int[][] timeline = null;     // [T][N]
+    private List<int[]> raceEvents = null; // 특수경마 이벤트 {tick, horseIdx, type}
     private int[] finishOrder = new int[0];
     private long raceStartAt = 0;
     private long raceEndsAt = 0;
@@ -235,7 +236,7 @@ public class HorseRaceGame implements RoomGame {
         buildRoster(prevOrder);
         computeOdds();
         bets.clear();
-        timeline = null; finishOrder = new int[0]; raceStartAt = 0; raceEndsAt = 0;
+        timeline = null; raceEvents = null; finishOrder = new int[0]; raceStartAt = 0; raceEndsAt = 0;
         for (Player p : players) p.chipsBeforeRace = p.chips;
         placeBotBets();
         phase = Phase.BETTING;
@@ -254,9 +255,10 @@ public class HorseRaceGame implements RoomGame {
 
     private void runRace() {
         Horse[] hs = horses.toArray(new Horse[0]);
-        SimResult r = simulate(hs, true, new Random(ThreadLocalRandom.current().nextLong()));
+        SimResult r = simulate(hs, true, new Random(ThreadLocalRandom.current().nextLong()), isSpecial());
         timeline = r.timeline;
         finishOrder = r.order;
+        raceEvents = r.events;
         raceStartAt = System.currentTimeMillis();
         raceEndsAt = raceStartAt + (long) timeline.length * TICK_MS + 1200; // +포토피니시 여유
         phase = Phase.RACING;
@@ -328,7 +330,7 @@ public class HorseRaceGame implements RoomGame {
         Map<String, Integer> exacta = new HashMap<>(), trio = new HashMap<>();
         Random rng = new Random(ThreadLocalRandom.current().nextLong());
         for (int s = 0; s < ODDS_SIMS; s++) {
-            int[] order = simulate(hs, false, rng).order;
+            int[] order = simulate(hs, false, rng, isSpecial()).order;
             win[order[0]]++;
             for (int i = 0; i < Math.min(3, order.length); i++) place[order[i]]++;
             if (order.length >= 2) exacta.merge(exactaKey(order[0], order[1]), 1, Integer::sum);
@@ -383,6 +385,7 @@ public class HorseRaceGame implements RoomGame {
         }
     }
 
+    private boolean isSpecial() { return "SPECIAL".equals(raceType); }
     private static double sum(double[] a) { double s = 0; for (double v : a) s += v; return s; }
     private static double clampOdds(double o) {
         o = Math.max(1.1, Math.min(50.0, o));
@@ -404,16 +407,23 @@ public class HorseRaceGame implements RoomGame {
 
     // =================== 레이스 시뮬 ===================
 
-    private record SimResult(int[] order, int[][] timeline) {}
+    // 특수경마 이벤트
+    private static final double EVENT_PROB = 0.05;   // tick·말당 발동 확률
+    static final String[] EVENT_EMOJI = { "🔙", "🍌", "🚀", "😴", "🌀", "🐢" };
+    static final String[] EVENT_LABEL = { "뒷걸음질", "미끄덩", "부스터", "낮잠", "워프", "역전!" };
 
-    private static SimResult simulate(Horse[] hs, boolean record, Random rng) {
+    private record SimResult(int[] order, int[][] timeline, List<int[]> events) {}
+
+    private static SimResult simulate(Horse[] hs, boolean record, Random rng, boolean special) {
         int n = hs.length;
         double[] pos = new double[n];
         int[] finishTick = new int[n]; Arrays.fill(finishTick, -1);
         double[] over = new double[n];
         List<int[]> frames = record ? new ArrayList<>() : null;
+        List<int[]> events = (record && special) ? new ArrayList<>() : null;
         int finished = 0, t = 0;
         while (t < MAXT && finished < n) {
+            double avg = 0; for (double v : pos) avg += v; avg /= n;
             for (int i = 0; i < n; i++) {
                 if (finishTick[i] >= 0) continue;
                 double prog = Math.min(1.0, pos[i] / FINISH);
@@ -421,11 +431,24 @@ public class HorseRaceGame implements RoomGame {
                 double step = base * paceMult(hs[i].style, prog) + (rng.nextDouble() * 2 - 1) * NOISE;
                 if (step < 0) step = 0;
                 pos[i] += step;
+                if (special && rng.nextDouble() < EVENT_PROB) {
+                    int ev = rng.nextInt(6);
+                    double delta = switch (ev) {
+                        case 0 -> -80;                                 // 🔙 뒷걸음질
+                        case 1 -> -50;                                 // 🍌 미끄덩
+                        case 2 -> 140;                                 // 🚀 부스터
+                        case 3 -> -30;                                 // 😴 낮잠
+                        case 4 -> (rng.nextDouble() * 2 - 1) * 120;    // 🌀 워프
+                        default -> pos[i] < avg ? 110 : 20;            // 🐢 역전 버프(뒤처졌으면 큰 가속)
+                    };
+                    pos[i] = Math.max(0, pos[i] + delta);
+                    if (events != null) events.add(new int[]{ t, i, ev });
+                }
                 if (pos[i] >= FINISH) { finishTick[i] = t; over[i] = pos[i]; finished++; }
             }
             if (record) {
                 int[] fr = new int[n];
-                for (int i = 0; i < n; i++) fr[i] = (int) Math.min(pos[i], FINISH);
+                for (int i = 0; i < n; i++) fr[i] = (int) Math.max(0, Math.min(pos[i], FINISH));
                 frames.add(fr);
             }
             t++;
@@ -443,7 +466,7 @@ public class HorseRaceGame implements RoomGame {
         });
         int[] order = new int[n];
         for (int i = 0; i < n; i++) order[i] = idx[i];
-        return new SimResult(order, record ? frames.toArray(new int[0][]) : null);
+        return new SimResult(order, record ? frames.toArray(new int[0][]) : null, events);
     }
 
     private static double paceMult(Style s, double prog) {
@@ -515,7 +538,10 @@ public class HorseRaceGame implements RoomGame {
         if ((phase == Phase.RACING || phase == Phase.RESULT) && timeline != null) {
             List<List<Integer>> tl = new ArrayList<>();
             for (int[] fr : timeline) { List<Integer> row = new ArrayList<>(); for (int v : fr) row.add(v); tl.add(row); }
-            race = new RaceView(tl, toList(finishOrder), raceStartAt, TICK_MS, FINISH, List.of());
+            List<String> evLog = new ArrayList<>();
+            if (raceEvents != null) for (int[] e : raceEvents)
+                evLog.add(horses.get(e[1]).name + " " + EVENT_EMOJI[e[2]] + EVENT_LABEL[e[2]]);
+            race = new RaceView(tl, toList(finishOrder), raceStartAt, TICK_MS, FINISH, evLog);
         }
         long myNet = meP != null && phase == Phase.RESULT ? meP.chips - meP.chipsBeforeRace : 0;
         boolean canBonus = meP != null && meP.account && meP.chips < com.wordplay.horserace.account.RaceAccountService.BONUS_THRESHOLD;
@@ -582,7 +608,7 @@ public class HorseRaceGame implements RoomGame {
         }
         Random rng = new Random(42);
         int win = 0;
-        for (int s = 0; s < sims; s++) if (simulate(hs, false, rng).order[0] == 0) win++;
+        for (int s = 0; s < sims; s++) if (simulate(hs, false, rng, false).order[0] == 0) win++;
         return win / (double) sims;
     }
     List<Horse> horsesForTest() { return horses; }
@@ -618,7 +644,7 @@ public class HorseRaceGame implements RoomGame {
         oddsWin = new double[0]; oddsPlace = new double[0]; oddsExacta = new HashMap<>(); oddsTrio = new HashMap<>();
         poolWin = new double[0]; poolPlace = new double[0]; poolExacta = new HashMap<>(); poolTrio = new HashMap<>();
         raceType = "BASIC"; oddsMode = "FIXED"; buyIn = 5_000; betSec = 25; horseCount = 9; autoEndRounds = 0;
-        round = 0; betEndsAt = 0; timeline = null; finishOrder = new int[0];
+        round = 0; betEndsAt = 0; timeline = null; raceEvents = null; finishOrder = new int[0];
         raceStartAt = 0; raceEndsAt = 0; botCounter = 0; horseIdCounter = 0; version = 0;
     }
     private void touch() { version++; lastActiveMs = System.currentTimeMillis(); }

@@ -123,6 +123,11 @@ export default function HorseRacePage() {
   const [showBoard, setShowBoard] = useState(false);
   const [board, setBoard] = useState<Account[]>([]);
   const [showGuide, setShowGuide] = useState(false);
+  const [showAdmin, setShowAdmin] = useState(false);
+  const [adminCode, setAdminCode] = useState('');
+  const [adminList, setAdminList] = useState<{ nickname: string; balance: number; peak: number; races: number; wins: number }[]>([]);
+  const [adminAmt, setAdminAmt] = useState(10000);
+  const [adminErr, setAdminErr] = useState<string | null>(null);
 
   // 배팅 슬립
   const [betType, setBetType] = useState<'WIN' | 'PLACE' | 'EXACTA' | 'TRIO'>('WIN');
@@ -199,6 +204,24 @@ export default function HorseRacePage() {
   const logout = () => { try { localStorage.removeItem(TOK_KEY); } catch {} setAccount(null); };
 
   const loadBoard = async () => { try { setBoard(await api<Account[]>(`/api/v1/horserace/leaderboard`)); setShowBoard(true); } catch {} };
+
+  type AdminAcc = { nickname: string; balance: number; peak: number; races: number; wins: number };
+  const loadAdmin = async () => {
+    setAdminErr(null);
+    try { setAdminList(await api<AdminAcc[]>(`/api/v1/horserace/admin/accounts?code=${encodeURIComponent(adminCode)}`)); }
+    catch (e) { setAdminErr(e instanceof Error ? e.message : '조회 실패'); }
+  };
+  const adminGrant = async (nick: string, amt: number) => {
+    setAdminErr(null);
+    try { await api(`/api/v1/horserace/admin/grant?code=${encodeURIComponent(adminCode)}&nickname=${encodeURIComponent(nick)}&amount=${amt}`, { method: 'POST' }); loadAdmin(); }
+    catch (e) { setAdminErr(e instanceof Error ? e.message : '지급 실패'); }
+  };
+  const adminDelete = async (nick: string) => {
+    if (!confirm(`${nick} 계정을 삭제할까요? (되돌릴 수 없음)`)) return;
+    setAdminErr(null);
+    try { await api(`/api/v1/horserace/admin/delete?code=${encodeURIComponent(adminCode)}&nickname=${encodeURIComponent(nick)}`, { method: 'POST' }); loadAdmin(); }
+    catch (e) { setAdminErr(e instanceof Error ? e.message : '삭제 실패'); }
+  };
 
   const handleCreate = async () => {
     const n = (account?.nickname || nick).trim(); if (!n) return setError('닉네임을 입력하세요');
@@ -286,6 +309,15 @@ export default function HorseRacePage() {
             </div>
           </section>
 
+          {/* 경마 종류 */}
+          <section>
+            <h3 className="text-base font-bold mb-2">🏁 경마 종류</h3>
+            <div className="space-y-2 text-sm">
+              <div className="bg-gray-50 rounded-xl px-3.5 py-2.5"><b>🏇 기본경마</b><span className="block text-gray-500">정통 경마. 컨디션·각질이 정직하게 반영돼요.</span></div>
+              <div className="bg-purple-50 rounded-xl px-3.5 py-2.5"><b>🎪 특수경마</b><span className="block text-gray-500">레이스 중 랜덤 이벤트로 대혼돈! 🔙뒷걸음질 🍌미끄덩 🚀부스터 😴낮잠 🌀워프 🐢역전 — 언더독도 잘 이겨요.</span></div>
+            </div>
+          </section>
+
           {/* 말 이력 */}
           <section>
             <h3 className="text-base font-bold mb-2">📋 말 이력 보는 법</h3>
@@ -360,8 +392,8 @@ export default function HorseRacePage() {
             <div>
               <p className="text-sm font-bold text-gray-600 mb-1">경마 종류</p>
               <div className="grid grid-cols-2 gap-2">
-                <button onClick={() => setRaceType('BASIC')} className={`py-3 rounded-lg border-2 text-sm font-bold ${raceType === 'BASIC' ? 'border-hit bg-hit/5 text-hit' : 'border-gray-200 text-gray-500'}`}>🏇 기본경마</button>
-                <button disabled title="곧 추가될 예정이에요" className="py-3 rounded-lg border-2 border-dashed border-gray-200 text-sm font-bold text-gray-300 cursor-not-allowed">🎪 특수경마<span className="block text-[10px] font-normal">(준비중)</span></button>
+                <button onClick={() => setRaceType('BASIC')} className={`py-3 rounded-lg border-2 text-sm font-bold ${raceType === 'BASIC' ? 'border-hit bg-hit/5 text-hit' : 'border-gray-200 text-gray-500'}`}>🏇 기본경마<span className="block text-[10px] font-normal">정통 경마</span></button>
+                <button onClick={() => setRaceType('SPECIAL')} className={`py-3 rounded-lg border-2 text-sm font-bold ${raceType === 'SPECIAL' ? 'border-hit bg-hit/5 text-hit' : 'border-gray-200 text-gray-500'}`}>🎪 특수경마<span className="block text-[10px] font-normal">이벤트로 대혼돈</span></button>
               </div>
             </div>
             <div>
@@ -418,6 +450,36 @@ export default function HorseRacePage() {
           </div>
         )}
         {error && <p className="text-red-500 text-sm mt-4 text-center">{error}</p>}
+
+        {/* 관리자: 계정 관리 */}
+        <div className="w-full mt-8 pt-4 border-t border-gray-100">
+          {showAdmin ? (
+            <div className="space-y-2">
+              <div className="flex items-center justify-between"><p className="font-bold text-sm">🔒 계정 관리 (관리자)</p><button onClick={() => setShowAdmin(false)} className="text-xs text-gray-400">닫기 ✕</button></div>
+              <div className="flex gap-2">
+                <input type="password" value={adminCode} onChange={(e) => setAdminCode(e.target.value)} placeholder="관리자 코드" className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm" />
+                <button onClick={loadAdmin} className="bg-gray-700 text-white text-sm px-4 rounded-lg font-bold">조회</button>
+              </div>
+              <div className="flex items-center gap-2 text-xs text-gray-500">
+                <span>지급/차감액</span>
+                <input type="number" value={adminAmt} onChange={(e) => setAdminAmt(Math.round(+e.target.value || 0))} className="w-28 border border-gray-300 rounded px-2 py-1" />
+                <span className="text-gray-400">(음수면 차감)</span>
+              </div>
+              {adminErr && <p className="text-red-500 text-xs">{adminErr}</p>}
+              {adminList.map((a) => (
+                <div key={a.nickname} className="flex items-center justify-between border border-gray-200 rounded-lg px-3 py-2 text-sm gap-2">
+                  <span className="min-w-0 truncate"><b>{a.nickname}</b> <span className="text-amber-600">💰{won(a.balance)}</span> <span className="text-gray-400 text-[11px]">{a.races}전 {a.wins}승</span></span>
+                  <span className="flex gap-1 shrink-0">
+                    <button onClick={() => adminGrant(a.nickname, adminAmt)} className="bg-green-500 text-white text-xs px-2 py-1 rounded font-bold">지급</button>
+                    <button onClick={() => adminDelete(a.nickname)} className="bg-red-500 text-white text-xs px-2 py-1 rounded font-bold">삭제</button>
+                  </span>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="flex justify-center"><button onClick={() => setShowAdmin(true)} className="text-xs text-gray-300 hover:text-gray-500">🔒 관리자</button></div>
+          )}
+        </div>
       </main>
     );
   }
@@ -562,13 +624,23 @@ export default function HorseRacePage() {
       )}
 
       {/* 레이스 */}
-      {phase === 'RACING' && st.race && (
-        <div className="w-full space-y-2">
-          <p className="text-center text-sm font-bold text-hit">🏁 레이스 진행 중!</p>
-          <RaceCanvas race={st.race} offsetRef={offsetRef} />
-          <p className="text-center text-[11px] text-gray-400">결과는 이미 확정 — 모두 같은 화면을 봅니다</p>
-        </div>
-      )}
+      {phase === 'RACING' && st.race && (() => {
+        const T = st.race.timeline.length;
+        const prog = Math.min(1, Math.max(0, (Date.now() + offsetRef.current - st.race.raceStartAt) / (T * st.race.tickMs)));
+        const revealed = st.race.eventLog.slice(0, Math.floor(prog * st.race.eventLog.length));
+        return (
+          <div className="w-full space-y-2">
+            <p className="text-center text-sm font-bold text-hit">🏁 레이스 진행 중! {st.raceType === 'SPECIAL' && <span className="text-purple-500">🎪 특수경마</span>}</p>
+            <RaceCanvas race={st.race} offsetRef={offsetRef} />
+            {st.raceType === 'SPECIAL' && revealed.length > 0 && (
+              <div className="rounded-lg bg-purple-50 px-3 py-2 text-xs text-purple-700 space-y-0.5 max-h-24 overflow-y-auto">
+                {revealed.slice(-4).map((e, i) => <div key={i}>⚡ {e}</div>)}
+              </div>
+            )}
+            <p className="text-center text-[11px] text-gray-400">결과는 이미 확정 — 모두 같은 화면을 봅니다</p>
+          </div>
+        );
+      })()}
 
       {/* 결과 */}
       {phase === 'RESULT' && (
@@ -583,6 +655,14 @@ export default function HorseRacePage() {
           <p className={`text-center font-bold ${st.myLastNet > 0 ? 'text-green-600' : st.myLastNet < 0 ? 'text-red-500' : 'text-gray-500'}`}>
             이번 레이스 {st.myLastNet > 0 ? `+${won(st.myLastNet)} 🎉` : st.myLastNet < 0 ? `${won(st.myLastNet)}` : '±0'} · 잔고 {won(st.chips)}
           </p>
+          {st.race && st.race.eventLog.length > 0 && (
+            <div className="rounded-xl border border-purple-200 bg-purple-50/50 p-3">
+              <p className="font-bold text-sm mb-1 text-purple-700">🎪 이번 레이스 사건들</p>
+              <div className="text-xs text-purple-700 space-y-0.5 max-h-32 overflow-y-auto">
+                {st.race.eventLog.map((e, i) => <div key={i}>⚡ {e}</div>)}
+              </div>
+            </div>
+          )}
           {st.canBonus && account && (
             <button onClick={handleBonus} className="w-full bg-amber-500 text-white font-bold py-2.5 rounded-lg">💸 파산! 재기 보너스 받기 (하루 3회)</button>
           )}

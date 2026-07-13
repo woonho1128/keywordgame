@@ -101,6 +101,33 @@ public class RaceAccountService {
         return repo.findTop20ByOrderByBalanceDesc();
     }
 
+    // ---------- 관리자 ----------
+
+    public List<RaceAccount> adminAll() {
+        return repo.findAllByOrderByBalanceDesc();
+    }
+
+    /** 관리자: 잔고 증감(음수면 차감). 반환값은 변경 후 잔고. */
+    @Transactional
+    public long adminGrant(String nickname, long amount) {
+        RaceAccount a = repo.findByNickname(nickname == null ? "" : nickname.trim())
+                .orElseThrow(() -> bad("계정을 찾을 수 없습니다: " + nickname));
+        a.setBalance(Math.max(0, a.getBalance() + amount));
+        if (a.getBalance() > a.getPeakBalance()) a.setPeakBalance(a.getBalance());
+        repo.save(a);
+        return a.getBalance();
+    }
+
+    /** 관리자: 계정 삭제(활성 토큰·방 점유도 정리). */
+    @Transactional
+    public void adminDelete(String nickname) {
+        RaceAccount a = repo.findByNickname(nickname == null ? "" : nickname.trim())
+                .orElseThrow(() -> bad("계정을 찾을 수 없습니다: " + nickname));
+        tokenToAccount.values().removeIf(id -> id.equals(a.getId()));
+        accountToRoom.remove(a.getId());
+        repo.delete(a);
+    }
+
     // ---------- 동시 1개 방 제한 ----------
 
     public void enterRoom(long accountId, String roomCode) {

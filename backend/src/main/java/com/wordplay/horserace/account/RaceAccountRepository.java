@@ -8,4 +8,5 @@ import java.util.Optional;
 public interface RaceAccountRepository extends JpaRepository<RaceAccount, Long> {
     Optional<RaceAccount> findByNickname(String nickname);
     List<RaceAccount> findTop20ByOrderByBalanceDesc();
+    List<RaceAccount> findAllByOrderByBalanceDesc();
 }

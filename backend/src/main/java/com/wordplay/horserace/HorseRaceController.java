@@ -55,6 +55,32 @@ public class HorseRaceController {
         return ApiResponse.success(newBalance);
     }
 
+    @GetMapping("/admin/accounts")
+    public ApiResponse<List<Map<String, Object>>> adminAccounts(@RequestParam String code) {
+        requireAdmin(code);
+        List<Map<String, Object>> out = accounts.adminAll().stream().map(a -> Map.of(
+                "nickname", (Object) a.getNickname(), "balance", a.getBalance(),
+                "peak", a.getPeakBalance(), "races", a.getTotalRaces(), "wins", a.getWins())).toList();
+        return ApiResponse.success(out);
+    }
+
+    @PostMapping("/admin/grant")
+    public ApiResponse<Long> adminGrant(@RequestParam String code, @RequestParam String nickname, @RequestParam long amount) {
+        requireAdmin(code);
+        return ApiResponse.success(accounts.adminGrant(nickname, amount));
+    }
+
+    @PostMapping("/admin/delete")
+    public ApiResponse<Boolean> adminDelete(@RequestParam String code, @RequestParam String nickname) {
+        requireAdmin(code);
+        accounts.adminDelete(nickname);
+        return ApiResponse.success(true);
+    }
+
+    private void requireAdmin(String code) {
+        if (!adminCode.equals(code)) throw new BusinessException(ErrorCode.INVALID_INPUT, "관리자 코드가 올바르지 않습니다");
+    }
+
     @GetMapping("/leaderboard")
     public ApiResponse<List<Map<String, Object>>> leaderboard() {
         List<Map<String, Object>> out = accounts.leaderboard().stream().map(a -> Map.of(
