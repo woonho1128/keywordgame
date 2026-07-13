@@ -220,11 +220,11 @@ export default function OthelloPage() {
                 <div>
                   <p className="text-xs text-gray-400 mb-1 text-center">🤖 AI 봇과 대전 (난이도)</p>
                   <div className="grid grid-cols-2 gap-2">
-                    {([['EASY', '초급', 'bg-emerald-400'], ['NORMAL', '중급', 'bg-amber-400'], ['HARD', '고급', 'bg-rose-400'], ['MASTER', '🔥 초고수', 'bg-purple-600'], ['GRAND', '👑 그랜드마스터', 'bg-gradient-to-br from-slate-800 to-black']] as const).map(([lv, label, cls]) => (
+                    {([['EASY', '초급', 'bg-emerald-400'], ['NORMAL', '중급', 'bg-amber-400'], ['HARD', '고급', 'bg-rose-400'], ['MASTER', '🔥 초고수', 'bg-purple-600'], ['GRAND', '👑 그랜드마스터', 'bg-gradient-to-br from-slate-800 to-black'], ['MYTHIC', '🌌 신화', 'bg-gradient-to-br from-fuchsia-700 to-indigo-900']] as const).map(([lv, label, cls]) => (
                       <button key={lv} onClick={() => handleAddBot(lv)} disabled={busy} className={`${cls} text-white text-sm font-bold py-2 rounded-lg hover:opacity-90 disabled:opacity-40`}>{label}</button>
                     ))}
                   </div>
-                  <p className="text-[11px] text-gray-400 mt-1 text-center">초급=랜덤 · 중급=코너 · 고급=위치 · 초고수=수읽기 · 그랜드마스터=TT·안정석·깊은 종반탐색(최강)</p>
+                  <p className="text-[11px] text-gray-400 mt-1 text-center">초급~고급=기본 · 초고수=수읽기 · 그랜드마스터=TT·안정석 · 🌌신화=준-엔진급(수 3초 숙고, 종반 22칸 완전탐색)</p>
                 </div>
               )}
               <button onClick={handleStart} disabled={busy || st.players.length < 2} className="w-full bg-hit text-white font-bold py-3 rounded-lg disabled:opacity-40">{st.players.length < 2 ? '상대(봇 또는 유저)를 기다리는 중' : '게임 시작'}</button>

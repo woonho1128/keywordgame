@@ -199,6 +199,7 @@ public class OthelloGame implements RoomGame {
         List<Integer> moves = validMoves(color);
         if (moves.isEmpty()) return -1;
         if ("EASY".equals(level)) return moves.get(ThreadLocalRandom.current().nextInt(moves.size()));
+        if ("MYTHIC".equals(level)) return pickMythicMove(color);
         if ("GRAND".equals(level)) return pickGrandMove(color);
         if ("MASTER".equals(level)) return pickMasterMove(color);
         if ("HARD".equals(level)) {
@@ -300,8 +301,13 @@ public class OthelloGame implements RoomGame {
     private boolean searchAborted;
     private long grandMsOverride = 0; // 테스트용 시간예산 축소
 
-    /** 초고수보다 강함: 트랜스포지션 테이블 + 시간예산 반복심화 + 안정석 평가 + 더 깊은 종반 완전탐색. */
-    private int pickGrandMove(int color) {
+    /** 그랜드마스터: 시간 1.2s, 종반 18칸 완전탐색. */
+    private int pickGrandMove(int color) { return searchMove(color, grandMsOverride > 0 ? grandMsOverride : GRAND_MS, 18, 15); }
+    /** 신화: 시간 3s, 종반 22칸 완전탐색(준-엔진급). */
+    private int pickMythicMove(int color) { return searchMove(color, grandMsOverride > 0 ? grandMsOverride : 3000, 22, 20); }
+
+    /** TT + 시간예산 반복심화 + 안정석 평가 탐색. timeMs·종반탐색 임계·중반깊이 상한으로 세기 조절. */
+    private int searchMove(int color, long timeMs, int endgameThreshold, int midCap) {
         List<Integer> moves = validMoves(color);
         if (moves.isEmpty()) return -1;
         if (moves.size() == 1) return moves.get(0);
@@ -309,10 +315,10 @@ public class OthelloGame implements RoomGame {
         if (empties >= 60) return moves.get(ThreadLocalRandom.current().nextInt(moves.size())); // 대칭인 첫 수만 변주
 
         tt = new java.util.HashMap<>();
-        searchDeadline = System.currentTimeMillis() + (grandMsOverride > 0 ? grandMsOverride : GRAND_MS);
+        searchDeadline = System.currentTimeMillis() + timeMs;
         searchNodes = 0; searchAborted = false;
         int opp = 3 - color;
-        int maxDepth = empties <= 18 ? empties : 15;   // 종반(≤18칸) 완전탐색 시도, 아니면 시간이 허용하는 만큼
+        int maxDepth = empties <= endgameThreshold ? empties : midCap;
         moves.sort((a, b) -> Integer.compare(WEIGHT[b], WEIGHT[a]));
         int bestMove = moves.get(0);
 
@@ -581,10 +587,10 @@ public class OthelloGame implements RoomGame {
     private static String normalizeLevel(String s) {
         if (s == null) return "NORMAL";
         String u = s.toUpperCase();
-        return (u.equals("EASY") || u.equals("HARD") || u.equals("MASTER") || u.equals("GRAND")) ? u : "NORMAL";
+        return (u.equals("EASY") || u.equals("HARD") || u.equals("MASTER") || u.equals("GRAND") || u.equals("MYTHIC")) ? u : "NORMAL";
     }
     private static String levelLabel(String lvl) {
-        return switch (lvl) { case "EASY" -> "초급"; case "HARD" -> "고급"; case "MASTER" -> "초고수"; case "GRAND" -> "그랜드마스터"; default -> "중급"; };
+        return switch (lvl) { case "EASY" -> "초급"; case "HARD" -> "고급"; case "MASTER" -> "초고수"; case "GRAND" -> "그랜드마스터"; case "MYTHIC" -> "신화"; default -> "중급"; };
     }
     private static BusinessException bad(String msg) { return new BusinessException(ErrorCode.INVALID_INPUT, msg); }
     private static String trimNick(String nick) {
