@@ -62,16 +62,24 @@ export default function TetrisPage() {
   const loopRef = useRef<any>({});
   const phaseRef = useRef<Phase>(phase);
   const modeRef = useRef<Mode>(mode);
+  const nickRef = useRef('');
   phaseRef.current = phase;
   modeRef.current = mode;
+  nickRef.current = nick; // 클로저 캐시가 아니라 항상 최신 닉네임을 읽게 한다
 
   useEffect(() => { try { setNick(localStorage.getItem('arcade_nick') || ''); } catch {} }, []);
 
-  // ── 상태 동기화 ────────────────────────────────────────
+  // ── 상태 동기화 (값이 바뀔 때만 setState → 매 프레임 리렌더로 인한 버벅임 방지) ──
+  const syncCache = useRef({ score: -1, lines: -1, level: -1, hold: undefined as PieceType | null | undefined, nextKey: '' });
   const sync = useCallback(() => {
     const e = engineRef.current; if (!e) return;
-    setScore(e.score); setLines(e.lines); setLevel(e.level);
-    setHold(e.hold); setNextQ(e.nextQueue(5));
+    const c = syncCache.current;
+    if (e.score !== c.score) { c.score = e.score; setScore(e.score); }
+    if (e.lines !== c.lines) { c.lines = e.lines; setLines(e.lines); }
+    if (e.level !== c.level) { c.level = e.level; setLevel(e.level); }
+    if (e.hold !== c.hold) { c.hold = e.hold; setHold(e.hold); }
+    const nk = e.nextQueue(5).join(',');
+    if (nk !== c.nextKey) { c.nextKey = nk; setNextQ(e.nextQueue(5)); }
   }, []);
 
   const showFloat = (text: string, sub?: string) => {
@@ -99,7 +107,7 @@ export default function TetrisPage() {
   }, [sync]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const submit = useCallback(async (m: Mode, sc: number, timeMs: number, cleared40: boolean) => {
-    const n = (nick.trim() || '익명').slice(0, 16);
+    const n = (nickRef.current.trim() || '익명').slice(0, 16);
     try {
       if (m === 'marathon') {
         const r = await api<{ myRank: number }>(`/api/v1/scores/tetris`, { method: 'POST', body: JSON.stringify({ nick: n, score: sc }) });
@@ -111,7 +119,7 @@ export default function TetrisPage() {
       }
     } catch {}
     setRefreshKey((k) => k + 1);
-  }, [nick]);
+  }, []);
 
   const endGame = useCallback((goalReached: boolean) => {
     const e = engineRef.current; if (!e) return;
@@ -137,6 +145,7 @@ export default function TetrisPage() {
       grav: 0, rest: 0, resets: 0, resting: false,
       dir: 0, dasT: 0, dasCharged: false, arr: 0, softAcc: 0, raf: 0,
     };
+    syncCache.current = { score: -1, lines: -1, level: -1, hold: undefined, nextKey: '' };
     setResult(null); setMyRank(null); setElapsed(0); setFloat(null);
     sync();
     setPhase('playing');
@@ -411,9 +420,12 @@ export default function TetrisPage() {
             ))}
           </div>
 
-          <input value={nick} onChange={(e) => setNick(e.target.value)} maxLength={16} placeholder="닉네임"
-            className="w-full border border-slate-300 dark:border-slate-600 bg-transparent rounded-lg px-3 py-2 focus:outline-none focus:border-fuchsia-500" />
-          <button onClick={start} disabled={!nick.trim()} className="w-full bg-fuchsia-600 text-white font-bold py-3 rounded-lg disabled:opacity-40">
+          <div>
+            <input value={nick} onChange={(e) => setNick(e.target.value)} maxLength={16} placeholder="닉네임 (필수)"
+              className={`w-full border bg-transparent rounded-lg px-3 py-2 focus:outline-none focus:border-fuchsia-500 ${nick.trim() ? 'border-slate-300 dark:border-slate-600' : 'border-fuchsia-400'}`} />
+            {!nick.trim() && <p className="mt-1 text-xs text-fuchsia-500">랭킹 등록을 위해 닉네임을 입력하세요.</p>}
+          </div>
+          <button onClick={start} disabled={!nick.trim()} className="w-full bg-fuchsia-600 text-white font-bold py-3 rounded-lg disabled:opacity-40 disabled:cursor-not-allowed">
             {phase === 'over' ? '다시 하기' : '시작하기'}
           </button>
 
