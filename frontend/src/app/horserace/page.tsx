@@ -19,7 +19,7 @@ type HrState = {
   finishOrder: number[]; myLastNet: number; buyIn: number; horseCount: number; playerCount: number; totalPool: number; version: number;
 };
 type Account = { token: string; accountId: number; nickname: string; balance: number; peakBalance: number; totalRaces: number; wins: number };
-type RoomSummary = { roomCode: string; status: string; playerCount: number; host: string };
+type RoomSummary = { code: string; status: string; playerCount: number; host: string };
 
 const CID_KEY = 'horserace_client_id', TOK_KEY = 'horserace_token', NICK_KEY = 'horserace_nick', ROOM_KEY = 'horserace_room';
 const LANE_COLORS = ['#ef4444', '#3b82f6', '#22c55e', '#eab308', '#a855f7', '#ec4899', '#14b8a6', '#f97316', '#64748b', '#84cc16', '#06b6d4', '#f43f5e'];
@@ -440,11 +440,11 @@ export default function HorseRacePage() {
               const badge = r.status === 'WAITING' ? '모집중' : r.status === 'PLAYING' ? '진행중' : '종료';
               const cls = r.status === 'WAITING' ? 'bg-green-100 text-green-700' : r.status === 'PLAYING' ? 'bg-yellow-100 text-yellow-700' : 'bg-gray-100 text-gray-400';
               return (
-                <div key={r.roomCode} className="flex items-center justify-between border border-gray-200 rounded-lg px-4 py-3">
-                  <div><span className="font-bold tracking-wider">{r.roomCode}</span><span className="text-xs text-gray-400 ml-2">{r.host} · {r.playerCount}명</span></div>
+                <div key={r.code} className="flex items-center justify-between border border-gray-200 rounded-lg px-4 py-3">
+                  <div><span className="font-bold tracking-wider">{r.code}</span><span className="text-xs text-gray-400 ml-2">{r.host} · {r.playerCount}명</span></div>
                   <div className="flex items-center gap-2">
                     <span className={`text-xs px-2 py-1 rounded-full ${cls}`}>{badge}</span>
-                    {r.status === 'ENDED' ? <span className="text-sm text-gray-300">종료</span> : <button onClick={() => handleJoin(r.roomCode)} className="text-sm font-bold text-hit">{r.status === 'WAITING' ? '참가' : '입장'}</button>}
+                    {r.status === 'ENDED' ? <span className="text-sm text-gray-300">종료</span> : <button onClick={() => handleJoin(r.code)} className="text-sm font-bold text-hit">{r.status === 'WAITING' ? '참가' : '입장'}</button>}
                   </div>
                 </div>
               );
