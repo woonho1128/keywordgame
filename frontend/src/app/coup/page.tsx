@@ -279,6 +279,9 @@ export default function CoupPage() {
                     <button onClick={() => clickAction('EXCHANGE')} disabled={busy || mustCoup} className="col-span-3 py-2 rounded-lg bg-emerald-100 text-emerald-700 font-bold disabled:opacity-30">🎭교환</button>
                   </div>
                   {mustCoup && <p className="text-center text-[11px] text-red-500">코인 10개 이상 — 쿠만 가능</p>}
+                  {!mustCoup && (me?.coins ?? 0) < 7 && (
+                    <p className="text-center text-[11px] text-gray-400">💡 쿠(코인 7)·암살(코인 3)은 비용이 있어야 선언 가능 — 블러핑이어도 비용은 냅니다</p>
+                  )}
                 </>
               )}
             </div>
