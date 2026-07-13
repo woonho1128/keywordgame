@@ -219,20 +219,34 @@ public class RummikubGame implements RoomGame {
 
     public synchronized RummikubStateResponse me(String clientId) {
         lastActiveMs = System.currentTimeMillis();
-        tickTimeout();
-        advanceAis();
+        progressTurns();
         return buildResponse(clientId);
     }
 
-    /** 사람 차례가 제한시간(60초)을 넘기면 자동으로 '가져오기' 처리. AI 차례는 advanceAis가 담당. */
-    private void tickTimeout() {
-        if (phase != Phase.PLAYING) return;
+    /** 나간 사람 차례 건너뛰기 + AI 자동 진행 + 사람 시간초과 자동 가져오기를 한 번에 처리. */
+    private void progressTurns() {
         int guard = 0;
-        while (phase == Phase.PLAYING && !players.get(currentSeat).ai
-                && turnDeadlineMs > 0 && System.currentTimeMillis() >= turnDeadlineMs && guard++ < 20) {
-            Player p = players.get(currentSeat);
-            applyDraw(p); // nextTurn에서 새 데드라인이 설정됨
-            lastAction = p.nick + "님이 시간초과로 타일을 가져왔습니다.";
+        while (phase == Phase.PLAYING && guard++ < 300) {
+            Player cur = players.get(currentSeat);
+            if (leftClients.contains(cur.clientId)) {           // 나간 사람 → 즉시 건너뜀(대기 없음)
+                lastAction = cur.nick + "님이 나가서 차례를 건너뜁니다.";
+                nextTurn();
+                continue;
+            }
+            if (cur.ai) {                                        // AI → 자동 플레이/가져오기
+                List<List<Integer>> plan = botPlan(cur);
+                if (plan != null) {
+                    try { applyPlay(cur, plan); continue; }
+                    catch (RuntimeException ignore) { /* 무효면 가져오기 */ }
+                }
+                applyDraw(cur);
+                continue;
+            }
+            if (turnDeadlineMs > 0 && System.currentTimeMillis() >= turnDeadlineMs) { // 사람 시간초과
+                applyDraw(cur);
+                continue;
+            }
+            break; // 참여 중인 사람 차례 — 입력 대기
         }
     }
 
@@ -280,19 +294,6 @@ public class RummikubGame implements RoomGame {
     }
 
     // =================== AI 봇 ===================
-
-    private void advanceAis() {
-        int guard = 0;
-        while (phase == Phase.PLAYING && players.get(currentSeat).ai && guard++ < 100) {
-            Player ai = players.get(currentSeat);
-            List<List<Integer>> plan = botPlan(ai);
-            if (plan != null) {
-                try { applyPlay(ai, plan); continue; }
-                catch (RuntimeException ignore) { /* 계획이 무효면 뽑기로 */ }
-            }
-            applyDraw(ai);
-        }
-    }
 
     /**
      * 봇의 이번 턴 계획(놓을 수 없으면 null → 뽑기).
@@ -607,8 +608,18 @@ public class RummikubGame implements RoomGame {
     // =================== 유틸 ===================
 
     private void nextTurn() {
-        currentSeat = (currentSeat + 1) % players.size();
-        turnDeadlineMs = System.currentTimeMillis() + turnMs;
+        int n = players.size();
+        for (int step = 1; step <= n; step++) {
+            int s = (currentSeat + step) % n;
+            if (!leftClients.contains(players.get(s).clientId)) {   // 나간 사람은 건너뜀
+                currentSeat = s;
+                turnDeadlineMs = System.currentTimeMillis() + turnMs;
+                return;
+            }
+        }
+        // 남은 사람이 아무도 없음 → 게임 종료
+        phase = Phase.ENDED;
+        turnDeadlineMs = 0;
     }
 
     private void sortRack(Player p) {

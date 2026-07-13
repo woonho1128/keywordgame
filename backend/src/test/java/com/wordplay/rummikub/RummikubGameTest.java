@@ -134,6 +134,32 @@ class RummikubGameTest {
     }
 
     @Test
+    void 나간_사람은_차례를_건너뛴다() {
+        RummikubGame g = new RummikubGame();
+        g.newGame("host", "p0");
+        g.join("c1", "p1");
+        g.join("c2", "p2");
+        g.start("host");
+        assertThat(g.me("host").currentSeat()).isEqualTo(1); // seat0(host)
+        g.leave("c1");        // seat1 나감
+        g.draw("host");       // host 가져오기 → 다음 차례
+        // seat1(c1)은 건너뛰고 seat2(c2=3번) 차례여야 함(90초 대기 없이)
+        assertThat(g.me("host").currentSeat()).isEqualTo(3);
+    }
+
+    @Test
+    void 자기_차례에_나가면_즉시_넘어간다() {
+        RummikubGame g = new RummikubGame();
+        g.newGame("host", "p0");
+        g.join("c1", "p1");
+        g.join("c2", "p2");
+        g.start("host");
+        g.leave("host");      // seat0(host) 차례에 host가 나감
+        // 다른 사람이 폴링하면 seat0 건너뛰고 seat1(c1=2번) 차례
+        assertThat(g.me("c1").currentSeat()).isEqualTo(2);
+    }
+
+    @Test
     void AI_난이도_지정_추가() {
         RummikubGame g = new RummikubGame();
         g.newGame("host", "p0");
