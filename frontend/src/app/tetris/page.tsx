@@ -357,8 +357,8 @@ export default function TetrisPage() {
 
             {/* 중: 보드 */}
             <div className="relative" style={{ transform: shake && Date.now() - shake < 160 ? 'translateY(2px)' : 'none' }}>
-              <canvas ref={canvasRef} className="rounded-lg border-2 border-slate-700 bg-slate-900 touch-none block"
-                style={{ maxWidth: 'min(86vw, 300px)', maxHeight: '56vh', width: 'auto', height: 'auto' }} />
+              <canvas ref={canvasRef}
+                className="rounded-lg border-2 border-slate-700 bg-slate-900 touch-none block w-auto h-auto max-w-[86vw] max-h-[56vh] sm:max-w-[360px] sm:max-h-[82vh]" />
               {float && (
                 <div key={float.id} className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
                   <span className="text-2xl font-extrabold text-white drop-shadow-[0_2px_8px_rgba(0,0,0,0.9)] animate-pulse">{float.text}</span>
