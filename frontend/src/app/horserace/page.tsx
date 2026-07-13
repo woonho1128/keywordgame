@@ -230,29 +230,78 @@ export default function HorseRacePage() {
   };
 
   const guidePanel = showGuide && (
-    <div className="w-full mb-3 rounded-xl border border-gray-200 p-3 text-xs space-y-2">
-      <div className="flex justify-between items-center"><p className="font-bold text-sm">📖 배팅 가이드</p><button onClick={() => setShowGuide(false)} className="text-gray-400">닫기 ✕</button></div>
-      <p><b className="text-amber-500">⭐ 컨디션(★1~5)</b> — 말의 오늘 실력. 높을수록 강하고 배당이 낮아요. 단 운이 크게 작용해 <b>★5도 자주 집니다</b>(절반 이상 패배).</p>
-      <div>
-        <b>🏇 주행 스타일(각질)</b>
-        <ul className="mt-0.5 space-y-0.5 text-gray-600">
-          <li>🏃 <b>선행</b> — 초반에 빠르고 후반에 지칠 수 있어요</li>
-          <li>🐆 <b>추입</b> — 초반엔 느리지만 막판에 치고 나와요</li>
-          <li>⚖️ <b>평준</b> — 처음부터 끝까지 고르게 달려요</li>
-        </ul>
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/50" onClick={() => setShowGuide(false)}>
+      <div onClick={(e) => e.stopPropagation()}
+        className="w-full sm:max-w-md bg-white rounded-t-2xl sm:rounded-2xl max-h-[90vh] sm:max-h-[85vh] overflow-y-auto shadow-xl">
+        {/* 헤더(고정) */}
+        <div className="sticky top-0 bg-white/95 backdrop-blur border-b border-gray-100 px-5 py-3.5 flex items-center justify-between">
+          <h2 className="text-lg font-extrabold">🏇 경마 가이드</h2>
+          <button onClick={() => setShowGuide(false)} className="w-9 h-9 rounded-full bg-gray-100 text-gray-500 font-bold text-lg flex items-center justify-center active:scale-95">✕</button>
+        </div>
+
+        <div className="px-5 py-4 space-y-6 text-[15px] leading-relaxed text-gray-700">
+          {/* 한 줄 요약 */}
+          <p className="bg-amber-50 text-amber-800 rounded-xl px-4 py-3 text-sm">말에 <b>가상 칩</b>을 걸고, 예상한 착순을 맞히면 <b>배당만큼</b> 칩을 따는 게임이에요. (놀이용 · 실제 환전 없음)</p>
+
+          {/* 컨디션 */}
+          <section>
+            <h3 className="text-base font-bold mb-1.5 flex items-center gap-1.5">⭐ 컨디션 <span className="text-amber-500 text-lg tracking-tight">★★★★☆</span></h3>
+            <p>말의 <b>오늘 실력</b>(★1~5). 높을수록 강하고 <b>배당이 낮아요</b>. 단 운이 크게 작용해서 <b className="text-hit">★5도 절반 이상 집니다</b> — 언더독에 걸어 대박을 노릴 수도 있어요.</p>
+          </section>
+
+          {/* 주행 스타일 */}
+          <section>
+            <h3 className="text-base font-bold mb-2">🏇 주행 스타일 (각질)</h3>
+            <div className="space-y-2">
+              {[['🏃', '선행', '초반에 빠르지만 후반에 지칠 수 있어요'], ['🐆', '추입', '초반엔 느리지만 막판에 치고 나와요'], ['⚖️', '평준', '처음부터 끝까지 고르게 달려요']].map(([ic, name, desc]) => (
+                <div key={name} className="flex items-start gap-3 bg-gray-50 rounded-xl px-3.5 py-2.5">
+                  <span className="text-2xl leading-none">{ic}</span>
+                  <span><b className="text-[15px]">{name}</b><span className="block text-sm text-gray-500">{desc}</span></span>
+                </div>
+              ))}
+            </div>
+          </section>
+
+          {/* 배팅 권종 */}
+          <section>
+            <h3 className="text-base font-bold mb-2">💰 배팅 권종</h3>
+            <div className="space-y-2">
+              {[['단승', '고른 말이 1등', '기본', 'border-blue-400'], ['연승', '고른 말이 3등 안', '안전·낮은 배당', 'border-green-400'], ['쌍승', '말 2개 → 1·2등을 순서대로', '고배당', 'border-orange-400'], ['삼복승', '말 3개 → 1·2·3등 (순서 무관)', '초고배당', 'border-rose-400']].map(([name, cond, tag, bc]) => (
+                <div key={name} className={`border-l-4 ${bc} bg-gray-50 rounded-r-xl px-3.5 py-2.5`}>
+                  <div className="flex items-center justify-between"><b className="text-[15px]">{name}</b><span className="text-xs text-gray-400">{tag}</span></div>
+                  <span className="text-sm text-gray-500">{cond}</span>
+                </div>
+              ))}
+            </div>
+            <p className="text-sm text-gray-500 mt-2">적중 시 <b>배팅액 × 배당</b>. 예) 배당 5.0에 100칩 → <b className="text-hit">500칩</b></p>
+          </section>
+
+          {/* 말 이력 */}
+          <section>
+            <h3 className="text-base font-bold mb-2">📋 말 이력 보는 법</h3>
+            <div className="space-y-1.5 text-sm">
+              <p><span className="inline-block bg-gray-100 rounded px-2 py-0.5 font-bold">🆕신입</span> 이 방에서 처음 출전한 말</p>
+              <p><span className="inline-block bg-gray-100 rounded px-2 py-0.5 font-bold">1-2-1</span> 최근 착순 기록(왼쪽이 최근)</p>
+              <p><span className="inline-block bg-orange-100 text-orange-600 rounded px-2 py-0.5 font-bold">🔥3</span> 연속 입상(3등 내). 셀수록 강해서 <b>배당에 반영</b>돼요</p>
+            </div>
+          </section>
+
+          {/* 흐름 */}
+          <section>
+            <h3 className="text-base font-bold mb-2">🔄 게임 흐름</h3>
+            <p className="text-sm">매 레이스 <b>9마리</b> 출전 → 배팅(제한시간) → 레이스 → 정산. 말은 매 판 새로 나오고, <b>직전 1~3등은 다음 판에 다시 출전</b>해서 연승을 쌓아요. 말 이름·이모지는 그냥 이름이에요(성능과 무관).</p>
+          </section>
+
+          {/* 계정 */}
+          <section>
+            <h3 className="text-base font-bold mb-2">🔒 계정 / 게스트</h3>
+            <p className="text-sm"><b>로그인(닉+암호)</b> 하면 잔고가 저장돼 부자 랭킹에 도전할 수 있어요. <b>게스트</b>는 그 방에서만 쓰는 칩이에요. 파산하면 하루 3번까지 <b>재기 보너스</b>를 받을 수 있어요.</p>
+          </section>
+        </div>
+        <div className="px-5 pb-5 pt-1">
+          <button onClick={() => setShowGuide(false)} className="w-full bg-hit text-white font-bold py-3 rounded-xl active:scale-[0.99]">확인했어요</button>
+        </div>
       </div>
-      <div>
-        <b>💰 배팅 권종</b>
-        <ul className="mt-0.5 space-y-0.5 text-gray-600">
-          <li><b>단승</b> — 그 말이 <b>1등</b>하면 적중</li>
-          <li><b>연승</b> — 그 말이 <b>3등 안</b>에 들면 적중 (잘 맞지만 배당 낮음)</li>
-          <li><b>쌍승</b> — 말 2개를 골라 <b>1·2등을 순서대로</b> 맞히면 적중 (고배당)</li>
-          <li><b>삼복승</b> — 말 3개를 골라 <b>1·2·3등</b>(순서 무관)을 맞히면 적중 (초고배당)</li>
-          <li className="text-gray-400">적중 시 배팅액 × 배당. 예: 배당 5.0에 100 → 500 받음</li>
-        </ul>
-      </div>
-      <p><b>📋 이력</b> — 🆕신입(이 방 첫 출전) · <b>1-2-1</b>(최근 착순) · <b>🔥연승</b>(연속 3등 내, 셀수록 강해 배당에 반영)</p>
-      <p className="text-gray-400">말 이름·이모지는 그냥 이름이에요(성능과 무관). 말은 매 레이스 새로 나오고, 직전 1~3등은 다음 판에 다시 출전해요.</p>
     </div>
   );
 
