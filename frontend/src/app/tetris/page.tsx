@@ -214,7 +214,7 @@ export default function TetrisPage() {
       const ctx = canvas.getContext('2d')!;
       const dpr = window.devicePixelRatio || 1;
       const w = COLS * CELL, h = VIS_ROWS * CELL;
-      if (canvas.width !== w * dpr) { canvas.width = w * dpr; canvas.height = h * dpr; }
+      if (canvas.width !== w * dpr || canvas.height !== h * dpr) { canvas.width = w * dpr; canvas.height = h * dpr; }
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       // 배경 + 그리드
       ctx.fillStyle = '#0f172a'; ctx.fillRect(0, 0, w, h);
