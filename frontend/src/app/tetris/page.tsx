@@ -344,8 +344,8 @@ export default function TetrisPage() {
 
             {/* 중: 보드 */}
             <div className="relative" style={{ transform: shake && Date.now() - shake < 160 ? 'translateY(2px)' : 'none' }}>
-              <canvas ref={canvasRef} className="rounded-lg border-2 border-slate-700 bg-slate-900 touch-none"
-                style={{ width: 'min(78vw, 300px)', aspectRatio: `${COLS}/${VIS_ROWS}`, height: 'auto' }} />
+              <canvas ref={canvasRef} className="rounded-lg border-2 border-slate-700 bg-slate-900 touch-none block"
+                style={{ maxWidth: 'min(86vw, 300px)', maxHeight: '56vh', width: 'auto', height: 'auto' }} />
               {float && (
                 <div key={float.id} className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
                   <span className="text-2xl font-extrabold text-white drop-shadow-[0_2px_8px_rgba(0,0,0,0.9)] animate-pulse">{float.text}</span>
@@ -371,8 +371,8 @@ export default function TetrisPage() {
             </div>
           </div>
 
-          {/* 모바일 조작 바 */}
-          <div className="sm:hidden mt-4 w-full max-w-sm select-none">
+          {/* 모바일 조작 바 (하단 여백으로 좌하단 플로팅 홈 버튼과 겹침 방지) */}
+          <div className="sm:hidden mt-4 pb-20 w-full max-w-sm select-none">
             <div className="grid grid-cols-3 gap-2 mb-2">
               <button onPointerDown={() => act((e) => e.rotate(-1))} className="py-3 rounded-lg bg-slate-700 font-bold text-lg">⟲</button>
               <button onPointerDown={doHardDrop} className="py-3 rounded-lg bg-fuchsia-600 font-bold text-lg">⤓ 하드</button>
