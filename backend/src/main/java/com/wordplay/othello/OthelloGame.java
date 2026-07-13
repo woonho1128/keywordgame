@@ -238,11 +238,11 @@ public class OthelloGame implements RoomGame {
         List<Integer> moves = validMoves(color);
         if (moves.isEmpty()) return -1;
         int empties = 0; for (int v : board) if (v == 0) empties++;
-        boolean endgame = empties <= 11;
-        // 남은 칸 11개 이하면 끝까지 완전탐색, 아니면 중반 깊이(오프닝은 살짝 얕게)
-        int depth = endgame ? empties : (empties >= 45 ? 6 : 7);
-        // 종반(증명된 최적수)엔 동점만, 중반엔 근소차 수까지 후보로 → 매판 경로가 달라짐
-        long margin = endgame ? 0 : 12;
+        boolean endgame = empties <= 12;
+        // 종반(≤12칸)은 끝까지 완전탐색, 중반은 깊게(오프닝만 살짝 얕게)
+        int depth = endgame ? empties : (empties >= 46 ? 6 : 7);
+        // 변주는 오프닝에서만(경로 다양화). 게임이 본격화되면 정확한 최선수만 둔다 → 최강 플레이 회복
+        long margin = empties >= 48 ? 6 : 0;
         moves.sort((a, b) -> Integer.compare(WEIGHT[b], WEIGHT[a])); // 이동 정렬로 가지치기 강화
         int opp = 3 - color;
         long best = NEG;
