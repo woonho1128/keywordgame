@@ -56,16 +56,16 @@ export default function TetrisPage() {
   // 결과
   const [result, setResult] = useState<{ score: number; lines: number; timeMs: number; cleared40: boolean } | null>(null);
   const [myRank, setMyRank] = useState<number | null>(null);
+  const [submittedNick, setSubmittedNick] = useState('');
   const [refreshKey, setRefreshKey] = useState(0);
 
   const engineRef = useRef<TetrisEngine | null>(null);
   const loopRef = useRef<any>({});
   const phaseRef = useRef<Phase>(phase);
   const modeRef = useRef<Mode>(mode);
-  const nickRef = useRef('');
+  const gameNickRef = useRef(''); // 게임 시작 시점에 확정된 닉(클로저/타이밍 무관하게 이 값으로 등록)
   phaseRef.current = phase;
   modeRef.current = mode;
-  nickRef.current = nick; // 클로저 캐시가 아니라 항상 최신 닉네임을 읽게 한다
 
   useEffect(() => { try { setNick(localStorage.getItem('arcade_nick') || ''); } catch {} }, []);
 
@@ -107,7 +107,10 @@ export default function TetrisPage() {
   }, [sync]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const submit = useCallback(async (m: Mode, sc: number, timeMs: number, cleared40: boolean) => {
-    const n = (nickRef.current.trim() || '익명').slice(0, 16);
+    let raw = gameNickRef.current.trim();
+    if (!raw) { try { raw = (localStorage.getItem('arcade_nick') || '').trim(); } catch {} } // 폴백
+    const n = (raw || '익명').slice(0, 16);
+    setSubmittedNick(n); // 게임오버 화면에 실제 등록된 닉 표시(진단 겸 UX)
     try {
       if (m === 'marathon') {
         const r = await api<{ myRank: number }>(`/api/v1/scores/tetris`, { method: 'POST', body: JSON.stringify({ nick: n, score: sc }) });
@@ -137,6 +140,7 @@ export default function TetrisPage() {
   // ── 시작 ───────────────────────────────────────────────
   const start = () => {
     const n = nick.trim(); if (!n) return;
+    gameNickRef.current = n; // 이 판의 닉을 확정 저장
     try { localStorage.setItem('arcade_nick', n); } catch {}
     const e = new TetrisEngine(mode);
     engineRef.current = e;
@@ -406,7 +410,7 @@ export default function TetrisPage() {
                 : mode === 'sprint'
                   ? (<><p className="text-lg font-bold">게임 오버</p><p className="text-sm text-slate-400">40줄 미달({result.lines}줄) — 기록 미등록</p></>)
                   : (<><p className="text-lg font-bold">게임 오버</p><p className="text-3xl font-extrabold text-fuchsia-500">{result.score.toLocaleString()}점</p><p className="text-sm text-slate-400">{result.lines}줄 클리어</p></>)}
-              {myRank != null && <p className="text-sm text-slate-500">내 순위: {myRank}위</p>}
+              {submittedNick && <p className="text-sm text-slate-500">「{submittedNick}」 기록 등록{myRank != null ? ` · ${myRank}위` : ''}</p>}
             </div>
           )}
 
