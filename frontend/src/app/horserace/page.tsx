@@ -241,7 +241,9 @@ export default function HorseRacePage() {
   const handleStart = () => post(`/api/v1/horserace/start?${rp()}`);
   const handleBet = async () => {
     if (picks.length !== needPicks) return setError(`말 ${needPicks}마리를 선택하세요`);
-    const r = await post(`/api/v1/horserace/bet?${rp()}`, { type: betType, picks, amount: betAmt });
+    const amount = Math.floor(betAmt / 10) * 10; // 10칩 단위로 맞춤
+    if (amount < 10) return setError('최소 10칩부터 배팅할 수 있어요');
+    const r = await post(`/api/v1/horserace/bet?${rp()}`, { type: betType, picks, amount });
     if (r) { setError(null); setPicks([]); }
   };
   const handleNext = () => post(`/api/v1/horserace/next-race?${rp()}`);
@@ -494,7 +496,8 @@ export default function HorseRacePage() {
     if (betType === 'EXACTA') return st.exactaOdds[`${picks[0]}-${picks[1]}`] ?? 50;
     return st.trioOdds[[...picks].sort((a, b) => a - b).join('-')] ?? 50;
   })();
-  const potential = Math.round(betAmt * betOdds);
+  const betAmtEff = Math.floor(betAmt / 10) * 10;
+  const potential = Math.round(betAmtEff * betOdds);
   const BET_LABEL: Record<string, string> = { WIN: '단승', PLACE: '연승', EXACTA: '쌍승', TRIO: '삼복승' };
   const pickBadge = (i: number) => {
     const at = picks.indexOf(i);
@@ -593,9 +596,9 @@ export default function HorseRacePage() {
           <div className="rounded-xl border border-gray-200 p-3 space-y-2">
             <div className="flex items-center gap-1">
               <button onClick={() => setBetAmt((a) => Math.max(10, a - 100))} className="w-9 h-9 rounded-lg border border-gray-300 font-bold">−</button>
-              <input type="number" value={betAmt} onChange={(e) => setBetAmt(Math.max(10, Math.round((+e.target.value || 0) / 10) * 10))} className="flex-1 border border-gray-300 rounded-lg px-2 py-2 text-center font-bold" />
+              <input type="number" inputMode="numeric" value={betAmt === 0 ? '' : betAmt} onChange={(e) => setBetAmt(Math.max(0, Math.floor(Number(e.target.value) || 0)))} className="flex-1 border border-gray-300 rounded-lg px-2 py-2 text-center font-bold" />
               <button onClick={() => setBetAmt((a) => a + 100)} className="w-9 h-9 rounded-lg border border-gray-300 font-bold">+</button>
-              <button onClick={() => setBetAmt(st.chips)} className="px-2 h-9 rounded-lg border border-gray-300 text-xs font-bold">올인</button>
+              <button onClick={() => setBetAmt(Math.floor(st.chips / 10) * 10)} className="px-2 h-9 rounded-lg border border-gray-300 text-xs font-bold">올인</button>
             </div>
             <p className="text-xs text-gray-500 text-center">
               {picks.length > 0 ? `${BET_LABEL[betType]} · ${picks.map((i) => st.horses[i]?.name).join(betType === 'EXACTA' ? ' → ' : ', ')}` : `${BET_LABEL[betType]} · 아래에서 말 ${needPicks}개 선택`}
@@ -611,7 +614,8 @@ export default function HorseRacePage() {
                 <span className="text-sm text-gray-400">말 <b>{needPicks}개</b>를 고르면 배당이 표시돼요 ({picks.length}/{needPicks})</span>
               )}
             </div>
-            <button onClick={handleBet} disabled={busy || picks.length !== needPicks || betAmt > st.chips} className="w-full bg-hit text-white font-bold py-2.5 rounded-lg disabled:opacity-40">배팅하기 {picks.length !== needPicks ? `(${picks.length}/${needPicks})` : ''}</button>
+            {betAmtEff > st.chips && <p className="text-[11px] text-red-500 text-center">보유 칩({won(st.chips)})보다 많이 걸 수 없어요</p>}
+            <button onClick={handleBet} disabled={busy || picks.length !== needPicks || betAmtEff < 10 || betAmtEff > st.chips} className="w-full bg-hit text-white font-bold py-2.5 rounded-lg disabled:opacity-40">배팅하기 {picks.length !== needPicks ? `(${picks.length}/${needPicks})` : ''}</button>
           </div>
 
           {st.myBets.length > 0 && (
