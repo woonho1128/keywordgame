@@ -219,12 +219,41 @@ export default function HorseRacePage() {
     catch (e) { setError(e instanceof Error ? e.message : '보너스 실패'); }
   };
 
+  const guidePanel = showGuide && (
+    <div className="w-full mb-3 rounded-xl border border-gray-200 p-3 text-xs space-y-2">
+      <div className="flex justify-between items-center"><p className="font-bold text-sm">📖 배팅 가이드</p><button onClick={() => setShowGuide(false)} className="text-gray-400">닫기 ✕</button></div>
+      <p><b className="text-amber-500">⭐ 컨디션(★1~5)</b> — 말의 오늘 실력. 높을수록 강하고 배당이 낮아요. 단 운이 크게 작용해 <b>★5도 자주 집니다</b>(절반 이상 패배).</p>
+      <div>
+        <b>🏇 주행 스타일(각질)</b>
+        <ul className="mt-0.5 space-y-0.5 text-gray-600">
+          <li>🏃 <b>선행</b> — 초반에 빠르고 후반에 지칠 수 있어요</li>
+          <li>🐆 <b>추입</b> — 초반엔 느리지만 막판에 치고 나와요</li>
+          <li>⚖️ <b>평준</b> — 처음부터 끝까지 고르게 달려요</li>
+        </ul>
+      </div>
+      <div>
+        <b>💰 배당(단 / 연)</b>
+        <ul className="mt-0.5 space-y-0.5 text-gray-600">
+          <li><b>단</b>(단승) — 그 말이 <b>1등</b>하면 배팅액 × 배당</li>
+          <li><b>연</b>(연승) — 그 말이 <b>3등 안</b>에 들면 배팅액 × 배당 (잘 맞지만 배당 낮음)</li>
+          <li className="text-gray-400">예: 단 5.0에 100 걸어 1등 → 500 받음</li>
+        </ul>
+      </div>
+      <p><b>📋 이력</b> — 🆕신입(이 방 첫 출전) · <b>1-2-1</b>(최근 착순) · <b>🔥연승</b>(연속 3등 내, 셀수록 강해 배당에 반영)</p>
+      <p className="text-gray-400">말 이름·이모지는 그냥 이름이에요(성능과 무관). 말은 매 레이스 새로 나오고, 직전 1~3등은 다음 판에 다시 출전해요.</p>
+    </div>
+  );
+
   // ============ 방 목록 화면 ============
   if (!roomCode) {
     return (
       <main className="min-h-screen flex flex-col items-center p-6 max-w-lg mx-auto w-full">
-        <h1 className="text-2xl font-bold mb-1 self-start">🏇 경마</h1>
+        <div className="w-full flex items-center justify-between mb-1">
+          <h1 className="text-2xl font-bold">🏇 경마</h1>
+          <button onClick={() => setShowGuide((v) => !v)} className="text-sm font-bold text-hit">📖 규칙</button>
+        </div>
         <p className="text-[11px] text-gray-400 self-start mb-4">놀이용 가상 칩 · 실제 환전 아님</p>
+        {guidePanel}
 
         {/* 계정 바 */}
         <div className="w-full mb-4 rounded-xl border border-gray-200 p-3 flex items-center justify-between">
@@ -335,30 +364,7 @@ export default function HorseRacePage() {
         </div>
       </div>
 
-      {showGuide && (
-        <div className="w-full mb-3 rounded-xl border border-gray-200 p-3 text-xs space-y-2">
-          <div className="flex justify-between items-center"><p className="font-bold text-sm">📖 배팅 가이드</p><button onClick={() => setShowGuide(false)} className="text-gray-400">닫기 ✕</button></div>
-          <p><b className="text-amber-500">⭐ 컨디션(★1~5)</b> — 말의 오늘 실력. 높을수록 강하고 배당이 낮아요. 단 운이 크게 작용해 <b>★5도 자주 집니다</b>(절반 이상 패배).</p>
-          <div>
-            <b>🏇 주행 스타일(각질)</b>
-            <ul className="mt-0.5 space-y-0.5 text-gray-600">
-              <li>🏃 <b>선행</b> — 초반에 빠르고 후반에 지칠 수 있어요</li>
-              <li>🐆 <b>추입</b> — 초반엔 느리지만 막판에 치고 나와요</li>
-              <li>⚖️ <b>평준</b> — 처음부터 끝까지 고르게 달려요</li>
-            </ul>
-          </div>
-          <div>
-            <b>💰 배당(단 / 연)</b>
-            <ul className="mt-0.5 space-y-0.5 text-gray-600">
-              <li><b>단</b>(단승) — 그 말이 <b>1등</b>하면 배팅액 × 배당</li>
-              <li><b>연</b>(연승) — 그 말이 <b>3등 안</b>에 들면 배팅액 × 배당 (잘 맞지만 배당 낮음)</li>
-              <li className="text-gray-400">예: 단 5.0에 100 걸어 1등 → 500 받음</li>
-            </ul>
-          </div>
-          <p><b>📋 이력</b> — 🆕신입(이 방 첫 출전) · <b>1-2-1</b>(최근 착순) · <b>🔥연승</b>(연속 3등 내, 셀수록 강해 배당에 반영)</p>
-          <p className="text-gray-400">말 이름·이모지는 그냥 이름이에요(성능과 무관). 말은 매 레이스 새로 나오고, 직전 1~3등은 다음 판에 다시 출전해요.</p>
-        </div>
-      )}
+      {guidePanel}
 
       {/* 참가자 칩 */}
       <div className="w-full flex flex-wrap gap-1.5 mb-3 text-[11px]">
