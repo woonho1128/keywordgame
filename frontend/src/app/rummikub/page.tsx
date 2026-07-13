@@ -544,26 +544,29 @@ export default function RummikubPage() {
           {/* 테이블 (펠트) */}
           <div className="rounded-2xl p-3 min-h-[90px] bg-gradient-to-b from-emerald-600 to-emerald-800 shadow-inner ring-1 ring-emerald-900/40 border-[3px] border-emerald-900/30">
             <p className="text-xs text-emerald-100/80 mb-2 font-bold tracking-wide">🃏 테이블</p>
-            <div className="flex flex-wrap gap-2 items-start">
+            {/* 고정 그리드: 세트가 인덱스 순서대로 항상 같은 칸 → 내/상대 차례에도 위치 유지 */}
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2 items-start">
               {(st.isMyTurn ? wt : st.table.map((s) => s.map((t) => t.id))).map((set, i) => (
-                <div key={i} className="flex items-center gap-1 flex-wrap max-w-full shrink-0 bg-emerald-900/25 rounded-xl p-1.5">
-                  {sortSet(set).map((id) => {
-                    const t = tileMap.get(id);
-                    if (!t) return null;
-                    const removable = st.isMyTurn && (!origTable.has(id) || st.myMelded);
-                    return <Tile key={id} t={t} small onClick={removable ? () => removePlaced(i, id) : undefined} />;
-                  })}
+                <div key={i} className="bg-emerald-900/25 rounded-xl p-1.5 flex flex-col gap-1 min-h-[3.4rem]">
+                  <div className="flex items-center gap-1 flex-wrap">
+                    {sortSet(set).map((id) => {
+                      const t = tileMap.get(id);
+                      if (!t) return null;
+                      const removable = st.isMyTurn && (!origTable.has(id) || st.myMelded);
+                      return <Tile key={id} t={t} small onClick={removable ? () => removePlaced(i, id) : undefined} />;
+                    })}
+                  </div>
                   {st.isMyTurn && (
                     <button onClick={() => addToSet(i)} disabled={sel.size === 0}
-                      className="text-xs text-white/90 border border-white/50 rounded-lg px-2 py-1 disabled:opacity-30 active:translate-y-0.5">＋추가</button>
+                      className="self-start text-[11px] text-white/90 border border-white/40 rounded-lg px-2 py-0.5 disabled:opacity-30 active:translate-y-0.5">＋추가</button>
                   )}
                 </div>
               ))}
-              {(st.isMyTurn ? wt : st.table).length === 0 && <p className="w-full text-emerald-100/50 text-sm text-center py-3">아직 내려놓은 세트가 없어요</p>}
               {st.isMyTurn && (
                 <button onClick={newSet} disabled={sel.size === 0}
-                  className="self-center text-xs text-emerald-50 border border-dashed border-emerald-200/60 rounded-lg px-3 py-2 disabled:opacity-30 active:translate-y-0.5 shrink-0">＋ 새 세트</button>
+                  className="min-h-[3.4rem] text-xs text-emerald-50 border border-dashed border-emerald-200/60 rounded-xl px-3 py-2 disabled:opacity-30 active:translate-y-0.5 flex items-center justify-center">＋ 새 세트</button>
               )}
+              {(st.isMyTurn ? wt : st.table).length === 0 && <p className="col-span-full text-emerald-100/50 text-sm text-center py-3">아직 내려놓은 세트가 없어요</p>}
             </div>
           </div>
 
