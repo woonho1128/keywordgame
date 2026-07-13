@@ -289,9 +289,8 @@ export default function HorseRacePage() {
             <div>
               <p className="text-sm font-bold text-gray-600 mb-1">경마 종류</p>
               <div className="grid grid-cols-2 gap-2">
-                {(['BASIC', 'SPECIAL'] as const).map((t) => (
-                  <button key={t} onClick={() => setRaceType(t)} className={`py-3 rounded-lg border-2 text-sm font-bold ${raceType === t ? 'border-hit bg-hit/5 text-hit' : 'border-gray-200 text-gray-500'}`}>{t === 'BASIC' ? '🏇 기본경마' : '🎪 특수경마'}{t === 'SPECIAL' && <span className="block text-[10px] font-normal">(준비중)</span>}</button>
-                ))}
+                <button onClick={() => setRaceType('BASIC')} className={`py-3 rounded-lg border-2 text-sm font-bold ${raceType === 'BASIC' ? 'border-hit bg-hit/5 text-hit' : 'border-gray-200 text-gray-500'}`}>🏇 기본경마</button>
+                <button disabled title="곧 추가될 예정이에요" className="py-3 rounded-lg border-2 border-dashed border-gray-200 text-sm font-bold text-gray-300 cursor-not-allowed">🎪 특수경마<span className="block text-[10px] font-normal">(준비중)</span></button>
               </div>
             </div>
             <div>
