@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { api } from '@/lib/api';
+import RoomChat from '@/components/RoomChat';
 import DrawCanvas, { DrawCanvasHandle } from '@/components/DrawCanvas';
 
 type PlayerView = { seat: number; nick: string; submitted: boolean };
@@ -494,6 +495,7 @@ export default function GarticPage() {
       )}
 
       {adminFooter}
+      <RoomChat game="gartic" roomCode={roomCode} clientId={clientId} nick={nick} />
     </main>
   );
 }

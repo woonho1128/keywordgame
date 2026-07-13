@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { api } from '@/lib/api';
+import RoomChat from '@/components/RoomChat';
 
 type Phase =
   | 'NOT_STARTED' | 'LOBBY' | 'NIGHT' | 'MORNING'
@@ -421,6 +422,7 @@ export default function MafiaJobsPage() {
           </button>
         )}
       </div>
+      <RoomChat game="mafiajobs" roomCode={roomCode} clientId={clientId} nick={nick} />
     </main>
   );
 

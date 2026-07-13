@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { api } from '@/lib/api';
+import RoomChat from '@/components/RoomChat';
 
 type PlayerView = { seat: number; nick: string; down: number; up: number; topFruit: string | null; topCount: number; alive: boolean };
 type RoomSummary = { code: string; status: string; playerCount: number; host: string };
@@ -402,6 +403,7 @@ export default function HalliGalliPage() {
       )}
 
       {adminFooter}
+      <RoomChat game="halligalli" roomCode={roomCode} clientId={clientId} nick={nick} />
     </main>
   );
 }

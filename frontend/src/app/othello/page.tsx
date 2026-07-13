@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { api } from '@/lib/api';
+import RoomChat from '@/components/RoomChat';
 
 type Phase = 'NULL_ROOM' | 'LOBBY' | 'PLAYING' | 'ENDED';
 type PlayerView = { seat: number; nick: string; ai: boolean; color: number };
@@ -273,6 +274,7 @@ export default function OthelloPage() {
           {error && <p className="text-red-500 text-sm text-center">{error}</p>}
         </div>
       )}
+      <RoomChat game="othello" roomCode={roomCode} clientId={clientId} nick={nick} />
     </main>
   );
 }

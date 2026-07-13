@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { api } from '@/lib/api';
+import RoomChat from '@/components/RoomChat';
 
 type TileView = { id: number; color: string | null; number: number; joker: boolean };
 type PlayerView = { seat: number; nick: string; rackCount: number; melded: boolean };
@@ -621,6 +622,7 @@ export default function RummikubPage() {
       )}
 
       {adminFooter}
+      <RoomChat game="rummikub" roomCode={roomCode} clientId={clientId} nick={nick} />
     </main>
   );
 }

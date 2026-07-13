@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { api } from '@/lib/api';
+import RoomChat from '@/components/RoomChat';
 
 type PlayerView = { seat: number; nick: string; ready: boolean; lines: number };
 type RoomSummary = { code: string; status: string; playerCount: number; host: string };
@@ -369,6 +370,7 @@ export default function BingoPage() {
       )}
 
       {adminFooter}
+      <RoomChat game="bingo" roomCode={roomCode} clientId={clientId} nick={nick} />
     </main>
   );
 }

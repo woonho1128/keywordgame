@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { api } from '@/lib/api';
+import RoomChat from '@/components/RoomChat';
 
 type Phase = 'NOT_STARTED' | 'LOBBY' | 'CLUE' | 'GUESS' | 'ENDED';
 type Cell = { index: number; word: string; revealed: boolean; color: string | null };
@@ -296,6 +297,7 @@ export default function CodenamesPage() {
       </div>
 
       {adminFooter}
+      <RoomChat game="codenames" roomCode={roomCode} clientId={clientId} nick={nick} />
     </main>
   );
 

@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { api } from '@/lib/api';
+import RoomChat from '@/components/RoomChat';
 
 type Phase = 'NULL_ROOM' | 'LOBBY' | 'BETTING' | 'RACING' | 'RESULT' | 'ENDED';
 type HorseView = {
@@ -691,6 +692,7 @@ export default function HorseRacePage() {
       )}
 
       {error && <p className="text-red-500 text-sm mt-3 text-center">{error}</p>}
+      <RoomChat game="horserace" roomCode={roomCode} clientId={clientId} nick={nick} />
     </main>
   );
 }

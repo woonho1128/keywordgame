@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { api } from '@/lib/api';
+import RoomChat from '@/components/RoomChat';
 
 type Phase =
   | 'NOT_STARTED' | 'LOBBY' | 'REVEAL' | 'TEAM_BUILD'
@@ -363,6 +364,7 @@ export default function AvalonPage() {
           <button onClick={() => setShowAdmin(true)} className="text-xs text-gray-300 hover:text-gray-500">🔒 관리자</button>
         )}
       </div>
+      <RoomChat game="avalon" roomCode={roomCode} clientId={clientId} nick={nick} />
     </main>
   );
 

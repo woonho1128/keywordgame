@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { api } from '@/lib/api';
+import RoomChat from '@/components/RoomChat';
 
 type Phase = 'NOT_STARTED' | 'LOBBY' | 'PLAYING' | 'ROUND_END' | 'ENDED';
 type PlayerView = { seat: number; nick: string; bot: boolean; tileCount: number; score: number; out: boolean; passed: boolean };
@@ -372,6 +373,7 @@ export default function LexioPage() {
           {error && <p className="text-red-500 text-sm text-center">{error}</p>}
         </div>
       )}
+      <RoomChat game="lexio" roomCode={roomCode} clientId={clientId} nick={nick} />
     </main>
   );
 }
