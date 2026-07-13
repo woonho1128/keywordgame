@@ -104,3 +104,23 @@ COMMENT ON COLUMN TB_GAME.answer_word IS '정답 단어 (NFC 정규화, 평문 �
 COMMENT ON COLUMN TB_PLAY_RECORD.status IS 'IN_PROGRESS | SOLVED | GAVE_UP';
 COMMENT ON COLUMN TB_GUESS_LOG.letter_result IS 'WordGuess 자모 비교 결과 (Wordle 표준 H/M/S)';
 COMMENT ON TABLE TB_SIMILARITY IS 'WordSim 오프라인 사전 - fastText KR 기반 사전 계산';
+
+
+-- ---------------------------------------------------------------------
+-- TB_RACE_ACCOUNT : 경마 영속 계정(가상 칩 지갑, 놀이용·환전 없음)
+-- ---------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS TB_RACE_ACCOUNT (
+    id                 BIGSERIAL     PRIMARY KEY,
+    nickname           VARCHAR(16)   NOT NULL UNIQUE,
+    password_hash      VARCHAR(200)  NOT NULL,
+    balance            BIGINT        NOT NULL DEFAULT 0,
+    peak_balance       BIGINT        NOT NULL DEFAULT 0,
+    total_races        INTEGER       NOT NULL DEFAULT 0,
+    wins               INTEGER       NOT NULL DEFAULT 0,
+    last_login_at      TIMESTAMP,
+    last_bonus_date    DATE,
+    bonus_count_today  INTEGER       NOT NULL DEFAULT 0,
+    created_at         TIMESTAMP     NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS ix_race_account_balance ON TB_RACE_ACCOUNT (balance DESC);
+COMMENT ON TABLE TB_RACE_ACCOUNT IS '경마 계정 - 닉+암호(PBKDF2) 영속 가상 칩 지갑';
