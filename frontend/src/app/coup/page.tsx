@@ -24,6 +24,38 @@ const CHAR: Record<string, { label: string; emoji: string }> = {
 const ACT: Record<string, string> = { INCOME: '소득', FOREIGN_AID: '해외원조', COUP: '쿠', TAX: '세금', ASSASSINATE: '암살', STEAL: '강탈', EXCHANGE: '교환' };
 const cName = (c: string | null) => (c && CHAR[c] ? `${CHAR[c].emoji}${CHAR[c].label}` : '');
 
+const CARD_THEME: Record<string, { bg: string; emoji: string; label: string }> = {
+  DUKE: { bg: 'from-purple-400 to-purple-600', emoji: '🎩', label: '공작' },
+  ASSASSIN: { bg: 'from-slate-600 to-slate-800', emoji: '🗡️', label: '암살자' },
+  CAPTAIN: { bg: 'from-sky-400 to-blue-600', emoji: '⚓', label: '대장' },
+  AMBASSADOR: { bg: 'from-emerald-400 to-green-600', emoji: '🎭', label: '대사' },
+  CONTESSA: { bg: 'from-rose-400 to-pink-600', emoji: '👒', label: '백작부인' },
+};
+
+/** 진짜 카드처럼 보이는 쿠 카드. back=뒷면, lost=공개(상실)됨. */
+function CoupCard({ char, back, lost, size = 'sm' }: { char?: string | null; back?: boolean; lost?: boolean; size?: 'sm' | 'lg' }) {
+  const dim = size === 'lg' ? 'w-[70px] h-[98px]' : 'w-11 h-16';
+  if (back) {
+    return (
+      <div className={`${dim} rounded-xl bg-gradient-to-br from-indigo-500 to-indigo-800 border border-indigo-900/30 shadow-md flex items-center justify-center ring-1 ring-white/20`}>
+        <span className={`${size === 'lg' ? 'text-3xl' : 'text-lg'} opacity-40`}>🎴</span>
+      </div>
+    );
+  }
+  const t = char ? CARD_THEME[char] : null;
+  return (
+    <div className={`${dim} rounded-xl border border-black/10 shadow-md flex flex-col items-center justify-center gap-0.5 text-white relative bg-gradient-to-br ${t ? t.bg : 'from-gray-300 to-gray-400'} ${lost ? 'grayscale opacity-60' : ''}`}>
+      <span className={size === 'lg' ? 'text-3xl drop-shadow' : 'text-xl'}>{t?.emoji}</span>
+      {size === 'lg' && <span className="text-[11px] font-bold drop-shadow">{t?.label}</span>}
+      {lost && (
+        <span className="absolute inset-0 flex items-center justify-center">
+          <span className={`text-red-600 font-black ${size === 'lg' ? 'text-base' : 'text-[9px]'} -rotate-12 bg-white/80 px-1 rounded`}>상실</span>
+        </span>
+      )}
+    </div>
+  );
+}
+
 function getClientId(): string {
   if (typeof window === 'undefined') return '';
   try {
@@ -219,17 +251,18 @@ export default function CoupPage() {
           const isTargetable = targeting && pl.alive && pl.seat !== st.seat;
           return (
             <button key={pl.seat} onClick={isTargetable ? () => clickTarget(pl.seat) : undefined}
-              className={`rounded-xl border-2 p-2 text-left ${!pl.alive ? 'opacity-40 border-gray-200' : pl.current ? 'border-hit bg-hit/5' : 'border-gray-200'} ${isTargetable ? 'ring-2 ring-red-400 cursor-pointer' : ''}`}>
-              <div className="flex items-center justify-between">
-                <span className="text-sm font-bold truncate">{pl.current && '▶'}{pl.bot && '🤖'}{pl.nick}{pl.seat === st.seat && '(나)'}</span>
-                <span className="text-xs text-amber-600 font-bold shrink-0">💰{pl.coins}</span>
+              className={`relative rounded-2xl border-2 p-2.5 text-left transition ${!pl.alive ? 'opacity-50 border-gray-200 bg-gray-50' : pl.current ? 'border-hit bg-hit/5 shadow-sm' : 'border-gray-200 bg-white'} ${isTargetable ? 'ring-2 ring-red-400 cursor-pointer' : ''}`}>
+              <div className="flex items-center justify-between gap-1 mb-1.5">
+                <span className="text-sm font-bold truncate flex items-center gap-0.5 min-w-0">
+                  {pl.current && <span className="text-hit shrink-0">▶</span>}{pl.bot && '🤖'}<span className="truncate">{pl.nick}</span>{pl.seat === st.seat && <span className="text-hit shrink-0">(나)</span>}
+                </span>
+                <span className="shrink-0 inline-flex items-center gap-0.5 text-xs font-extrabold text-amber-700 bg-amber-100 rounded-full px-2 py-0.5">🪙{pl.coins}</span>
               </div>
-              <div className="flex gap-1 mt-1">
-                {pl.cards.map((c, i) => (
-                  <span key={i} className={`text-[10px] px-1.5 py-0.5 rounded ${c ? 'bg-red-100 text-red-500 line-through' : 'bg-indigo-500 text-white'}`}>{c ? cName(c) : '🂠'}</span>
-                ))}
-                {!pl.alive && <span className="text-[10px] text-gray-400">💀탈락</span>}
+              <div className="flex gap-1">
+                {pl.cards.map((c, i) => <CoupCard key={i} char={c} back={!c} lost={!!c} size="sm" />)}
               </div>
+              {!pl.alive && <span className="absolute inset-0 flex items-center justify-center text-sm font-extrabold text-gray-500">💀 탈락</span>}
+              {isTargetable && <span className="absolute top-1.5 right-1.5 text-[10px] bg-red-500 text-white rounded-full px-1.5 py-0.5 font-bold animate-pulse">대상</span>}
             </button>
           );
         })}
@@ -253,10 +286,10 @@ export default function CoupPage() {
         <div className="w-full space-y-3">
           {/* 내 손패 */}
           {me && (
-            <div className="rounded-xl bg-indigo-50 border border-indigo-100 p-2">
-              <p className="text-[11px] text-indigo-400 font-bold mb-1">내 정체</p>
-              <div className="flex gap-2 justify-center">
-                {st.myCards.map((c, i) => <span key={i} className={`px-3 py-2 rounded-lg font-bold text-sm ${c ? 'bg-white border-2 border-indigo-300' : 'bg-gray-200 text-gray-400 line-through'}`}>{c ? cName(c) : '상실'}</span>)}
+            <div className="rounded-2xl bg-gradient-to-b from-indigo-50 to-indigo-100/40 border border-indigo-100 p-3">
+              <p className="text-[11px] text-indigo-400 font-bold mb-2 text-center">🔒 내 정체 (나만 보임)</p>
+              <div className="flex gap-3 justify-center">
+                {st.myCards.map((c, i) => <CoupCard key={i} char={c || me.cards[i]} lost={!c} size="lg" />)}
               </div>
             </div>
           )}
