@@ -199,6 +199,7 @@ public class OthelloGame implements RoomGame {
         List<Integer> moves = validMoves(color);
         if (moves.isEmpty()) return -1;
         if ("EASY".equals(level)) return moves.get(ThreadLocalRandom.current().nextInt(moves.size()));
+        if ("GRAND".equals(level)) return pickGrandMove(color);
         if ("MASTER".equals(level)) return pickMasterMove(color);
         if ("HARD".equals(level)) {
             long[] sc = new long[moves.size()];
@@ -281,6 +282,129 @@ public class OthelloGame implements RoomGame {
             if (alpha >= beta) break;   // 알파-베타 가지치기
         }
         return best;
+    }
+
+    // =================== 그랜드마스터(GRAND): TT + 이터러티브 디프닝 + 안정석 평가 ===================
+
+    private static final long[] Z_BLACK = new long[64], Z_WHITE = new long[64];
+    private static final long Z_SIDE;
+    static {
+        java.util.Random r = new java.util.Random(0x9E3779B97F4A7C15L);
+        for (int i = 0; i < 64; i++) { Z_BLACK[i] = r.nextLong(); Z_WHITE[i] = r.nextLong(); }
+        Z_SIDE = r.nextLong();
+    }
+    private static final long GRAND_MS = 1200;
+    private java.util.HashMap<Long, long[]> tt;   // key → [depth, flag(0 EXACT/1 LOWER/2 UPPER), value, bestMove]
+    private long searchDeadline;
+    private long searchNodes;
+    private boolean searchAborted;
+    private long grandMsOverride = 0; // 테스트용 시간예산 축소
+
+    /** 초고수보다 강함: 트랜스포지션 테이블 + 시간예산 반복심화 + 안정석 평가 + 더 깊은 종반 완전탐색. */
+    private int pickGrandMove(int color) {
+        List<Integer> moves = validMoves(color);
+        if (moves.isEmpty()) return -1;
+        if (moves.size() == 1) return moves.get(0);
+        int empties = 0; for (int v : board) if (v == 0) empties++;
+        if (empties >= 60) return moves.get(ThreadLocalRandom.current().nextInt(moves.size())); // 대칭인 첫 수만 변주
+
+        tt = new java.util.HashMap<>();
+        searchDeadline = System.currentTimeMillis() + (grandMsOverride > 0 ? grandMsOverride : GRAND_MS);
+        searchNodes = 0; searchAborted = false;
+        int opp = 3 - color;
+        int maxDepth = empties <= 18 ? empties : 15;   // 종반(≤18칸) 완전탐색 시도, 아니면 시간이 허용하는 만큼
+        moves.sort((a, b) -> Integer.compare(WEIGHT[b], WEIGHT[a]));
+        int bestMove = moves.get(0);
+
+        for (int depth = 2; depth <= maxDepth; depth++) {
+            searchAborted = false;
+            moves.remove((Integer) bestMove); moves.add(0, bestMove); // 이전 최선수 먼저
+            long alpha = NEG; int curBest = -1; long curVal = NEG;
+            for (int m : moves) {
+                int[] nb = board.clone();
+                nb[m] = color; for (int f : flipsFor(color, m)) nb[f] = color;
+                long v = -negamaxGrand(nb, opp, depth - 1, NEG, -alpha);
+                if (searchAborted) break;
+                if (v > curVal) { curVal = v; curBest = m; }
+                if (curVal > alpha) alpha = curVal;
+            }
+            if (searchAborted) break;         // 이 깊이는 미완 → 직전 깊이 결과 유지
+            if (curBest >= 0) bestMove = curBest;
+            if (System.currentTimeMillis() >= searchDeadline) break;
+            if (curVal >= 5_000_000L || curVal <= -5_000_000L) break; // 승패 확정
+        }
+        return bestMove;
+    }
+
+    private long negamaxGrand(int[] bd, int color, int depth, long alpha, long beta) {
+        if (searchAborted) return 0;
+        if ((++searchNodes & 4095) == 0 && System.currentTimeMillis() >= searchDeadline) { searchAborted = true; return 0; }
+        int opp = 3 - color;
+        List<Integer> moves = movesOn(bd, color);
+        if (moves.isEmpty()) {
+            if (movesOn(bd, opp).isEmpty()) return terminalScore(bd, color);
+            return -negamaxGrand(bd, opp, depth, -beta, -alpha);
+        }
+        if (depth <= 0) return heuristic2(bd, color);
+        long a0 = alpha, key = zobrist(bd, color);
+        long[] e = tt.get(key);
+        int ttMove = -1;
+        if (e != null && e[0] >= depth) {
+            long val = e[2]; int flag = (int) e[1];
+            if (flag == 0) return val;
+            if (flag == 1 && val > alpha) alpha = val;
+            else if (flag == 2 && val < beta) beta = val;
+            if (alpha >= beta) return val;
+            ttMove = (int) e[3];
+        } else if (e != null) ttMove = (int) e[3];
+
+        moves.sort((x, y) -> Integer.compare(WEIGHT[y], WEIGHT[x]));
+        if (ttMove >= 0) { moves.remove((Integer) ttMove); moves.add(0, ttMove); }
+        long best = NEG; int bestMove = -1;
+        for (int m : moves) {
+            int[] nb = bd.clone();
+            nb[m] = color; for (int f : flipsOn(bd, color, m)) nb[f] = color;
+            long v = -negamaxGrand(nb, opp, depth - 1, -beta, -alpha);
+            if (searchAborted) return 0;
+            if (v > best) { best = v; bestMove = m; }
+            if (best > alpha) alpha = best;
+            if (alpha >= beta) break;
+        }
+        int flag = best <= a0 ? 2 : best >= beta ? 1 : 0;
+        tt.put(key, new long[]{ depth, flag, best, bestMove });
+        return best;
+    }
+
+    /** 강화 평가: 위치+기동력+프론티어+코너 + 안정석(뒤집히지 않는 돌). */
+    private static long heuristic2(int[] bd, int color) {
+        long base = heuristic(bd, color);
+        int opp = 3 - color;
+        long stab = stableCount(bd, color) - (long) stableCount(bd, opp);
+        return base + stab * 24;
+    }
+
+    /** 코너에 붙은 변(edge) 안정석 근사 카운트. */
+    private static int stableCount(int[] bd, int color) {
+        boolean[] s = new boolean[64];
+        markStable(bd, color, s, 0, 1);   markStable(bd, color, s, 7, -1);   // 윗변
+        markStable(bd, color, s, 56, 1);  markStable(bd, color, s, 63, -1);  // 아랫변
+        markStable(bd, color, s, 0, 8);   markStable(bd, color, s, 56, -8);  // 왼쪽변
+        markStable(bd, color, s, 7, 8);   markStable(bd, color, s, 63, -8);  // 오른쪽변
+        int n = 0; for (boolean b : s) if (b) n++; return n;
+    }
+    private static void markStable(int[] bd, int color, boolean[] s, int corner, int step) {
+        if (bd[corner] != color) return;
+        int i = corner, startRow = corner / 8;
+        for (int k = 0; k < 8; k++) {
+            if (i < 0 || i >= 64 || bd[i] != color) break;
+            if ((step == 1 || step == -1) && i / 8 != startRow) break; // 가로선은 같은 행 유지
+            s[i] = true; i += step;
+        }
+    }
+    private static long zobrist(int[] bd, int color) {
+        long h = 0;
+        for (int i = 0; i < 64; i++) { int v = bd[i]; if (v == 1) h ^= Z_BLACK[i]; else if (v == 2) h ^= Z_WHITE[i]; }
+        return color == 2 ? h ^ Z_SIDE : h;
     }
 
     /** 게임 종료 국면 평가: 돌 차이가 절대적(승패 우선). */
@@ -433,6 +557,7 @@ public class OthelloGame implements RoomGame {
     int countForTest(int color) { return count(color); }
     List<Integer> validForTest(int color) { return validMoves(color); }
     synchronized void forceBotNowForTest() { botActAt = 0; } // 봇 착수 지연 무시(테스트 진행용)
+    void setGrandMsForTest(long ms) { grandMsOverride = ms; }
     synchronized int pickMoveForTest(int color, String level) { return pickMove(color, level); }
 
     // =================== 유틸 ===================
@@ -456,10 +581,10 @@ public class OthelloGame implements RoomGame {
     private static String normalizeLevel(String s) {
         if (s == null) return "NORMAL";
         String u = s.toUpperCase();
-        return (u.equals("EASY") || u.equals("HARD") || u.equals("MASTER")) ? u : "NORMAL";
+        return (u.equals("EASY") || u.equals("HARD") || u.equals("MASTER") || u.equals("GRAND")) ? u : "NORMAL";
     }
     private static String levelLabel(String lvl) {
-        return switch (lvl) { case "EASY" -> "초급"; case "HARD" -> "고급"; case "MASTER" -> "초고수"; default -> "중급"; };
+        return switch (lvl) { case "EASY" -> "초급"; case "HARD" -> "고급"; case "MASTER" -> "초고수"; case "GRAND" -> "그랜드마스터"; default -> "중급"; };
     }
     private static BusinessException bad(String msg) { return new BusinessException(ErrorCode.INVALID_INPUT, msg); }
     private static String trimNick(String nick) {

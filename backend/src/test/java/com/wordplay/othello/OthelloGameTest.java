@@ -80,6 +80,25 @@ class OthelloGameTest {
     }
 
     @Test
+    void 그랜드마스터_봇은_합법수를_두고_한판을_끝낸다() {
+        OthelloGame g = new OthelloGame();
+        g.newGame("host", "나", "BLACK", 60);
+        g.addBot("host", "GRAND");
+        g.setGrandMsForTest(30); // 테스트는 빠르게
+        g.start("host");
+        long guard = 0;
+        while (!g.me("host").status().equals("ENDED") && guard++ < 200) {
+            var s = g.me("host");
+            if (s.status().equals("ENDED")) break;
+            if (s.myTurn() && !s.validMoves().isEmpty()) g.place("host", s.validMoves().get(0));
+            else { g.forceBotNowForTest(); g.me("host"); }
+        }
+        var end = g.me("host");
+        assertThat(end.status()).isEqualTo("ENDED");
+        assertThat(end.winner()).isBetween(1, 3);
+    }
+
+    @Test
     void 초고수_봇은_오프닝을_매번_똑같이_두지_않는다() {
         OthelloGame g = new OthelloGame();
         g.newGame("host", "나", "WHITE", 60); // 방장 백 → 봇(흑=1)이 선
