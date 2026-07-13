@@ -40,6 +40,7 @@ public class HorseRaceGame implements RoomGame {
     private static final int CARRY = 3;             // 이월 두수(top3)
     private static final int BET_UNIT = 10;
     private static final int MAX_BOTS = 5;
+    private static final double SEED = 10_000;      // 펀드풀 하우스 시드(유동성) — 소인원 배당 보정
 
     static final class Player {
         final String clientId; String nick;
@@ -88,6 +89,11 @@ public class HorseRaceGame implements RoomGame {
     private double[] oddsPlace = new double[0];
     private Map<String, Double> oddsExacta = new HashMap<>();
     private Map<String, Double> oddsTrio = new HashMap<>();
+    // 펀드풀(PARIMUTUEL) 판돈 풀(하우스 시드 + 실제 배팅)
+    private double[] poolWin = new double[0];
+    private double[] poolPlace = new double[0];
+    private Map<String, Double> poolExacta = new HashMap<>();
+    private Map<String, Double> poolTrio = new HashMap<>();
     private final List<Bet> bets = new ArrayList<>();
     private long betEndsAt = 0;
     private int[][] timeline = null;     // [T][N]
@@ -168,6 +174,7 @@ public class HorseRaceGame implements RoomGame {
         p.chips -= amount;
         Bet b = new Bet(); b.seat = seats.get(clientId); b.type = t; b.picks = picks.clone(); b.amount = amount;
         bets.add(b);
+        if ("PARIMUTUEL".equals(oddsMode)) addToPool(t, picks, amount);
         touch();
         return me(clientId);
     }
@@ -257,6 +264,7 @@ public class HorseRaceGame implements RoomGame {
     }
 
     private void settle() {
+        if ("PARIMUTUEL".equals(oddsMode)) recomputeParimutuelOdds(); // 마감 시점 최종 배당 확정
         Set<Integer> top3 = new HashSet<>();
         for (int i = 0; i < Math.min(3, finishOrder.length); i++) top3.add(finishOrder[i]);
         int winner = finishOrder.length > 0 ? finishOrder[0] : -1;
@@ -326,14 +334,59 @@ public class HorseRaceGame implements RoomGame {
             if (order.length >= 2) exacta.merge(exactaKey(order[0], order[1]), 1, Integer::sum);
             if (order.length >= 3) trio.merge(trioKey(order[0], order[1], order[2]), 1, Integer::sum);
         }
+        double sims = ODDS_SIMS;
+        if ("PARIMUTUEL".equals(oddsMode)) {
+            // 확률 비례로 하우스 시드를 깔면 초기 배당 = 고정배당과 동일, 이후 실제 배팅으로 변동
+            poolWin = new double[n]; poolPlace = new double[n];
+            for (int i = 0; i < n; i++) {
+                poolWin[i] = Math.max(1.0, SEED * win[i] / sims);
+                poolPlace[i] = Math.max(1.0, SEED * place[i] / sims);
+            }
+            poolExacta = new HashMap<>(); poolTrio = new HashMap<>();
+            exacta.forEach((k, c) -> poolExacta.put(k, SEED * c / sims));
+            trio.forEach((k, c) -> poolTrio.put(k, SEED * c / sims));
+            recomputeParimutuelOdds();
+        } else {
+            oddsWin = new double[n]; oddsPlace = new double[n];
+            for (int i = 0; i < n; i++) {
+                oddsWin[i] = oddsFrom(win[i] / sims);
+                oddsPlace[i] = oddsFrom(place[i] / sims);
+            }
+            oddsExacta = new HashMap<>(); oddsTrio = new HashMap<>();
+            exacta.forEach((k, c) -> oddsExacta.put(k, oddsFrom(c / sims)));
+            trio.forEach((k, c) -> oddsTrio.put(k, oddsFrom(c / sims)));
+        }
+    }
+
+    /** 펀드풀 현재 풀에서 배당 재계산: 배당 = 풀총액×(1−마진) / 해당풀. */
+    private void recomputeParimutuelOdds() {
+        int n = poolWin.length;
+        double totW = sum(poolWin), totP = sum(poolPlace);
         oddsWin = new double[n]; oddsPlace = new double[n];
         for (int i = 0; i < n; i++) {
-            oddsWin[i] = oddsFrom(win[i] / (double) ODDS_SIMS);
-            oddsPlace[i] = oddsFrom(place[i] / (double) ODDS_SIMS);
+            oddsWin[i] = clampOdds(totW * (1 - MARGIN) / poolWin[i]);
+            oddsPlace[i] = clampOdds(totP * (1 - MARGIN) / poolPlace[i]);
         }
+        double totE = poolExacta.values().stream().mapToDouble(Double::doubleValue).sum();
+        double totT = poolTrio.values().stream().mapToDouble(Double::doubleValue).sum();
         oddsExacta = new HashMap<>(); oddsTrio = new HashMap<>();
-        exacta.forEach((k, c) -> oddsExacta.put(k, oddsFrom(c / (double) ODDS_SIMS)));
-        trio.forEach((k, c) -> oddsTrio.put(k, oddsFrom(c / (double) ODDS_SIMS)));
+        poolExacta.forEach((k, v) -> oddsExacta.put(k, clampOdds(totE * (1 - MARGIN) / v)));
+        poolTrio.forEach((k, v) -> oddsTrio.put(k, clampOdds(totT * (1 - MARGIN) / v)));
+    }
+
+    private void addToPool(String type, int[] picks, long amount) {
+        switch (type) {
+            case "PLACE" -> poolPlace[picks[0]] += amount;
+            case "EXACTA" -> poolExacta.merge(exactaKey(picks[0], picks[1]), (double) amount, Double::sum);
+            case "TRIO" -> poolTrio.merge(trioKey(picks[0], picks[1], picks[2]), (double) amount, Double::sum);
+            default -> poolWin[picks[0]] += amount;
+        }
+    }
+
+    private static double sum(double[] a) { double s = 0; for (double v : a) s += v; return s; }
+    private static double clampOdds(double o) {
+        o = Math.max(1.1, Math.min(50.0, o));
+        return Math.round(o * 10) / 10.0;
     }
 
     private static String exactaKey(int a, int b) { return a + "-" + b; }
@@ -419,8 +472,10 @@ public class HorseRaceGame implements RoomGame {
             amt = Math.min(amt, p.chips);
             if (amt < BET_UNIT) continue;
             p.chips -= amt;
-            Bet b = new Bet(); b.seat = indexOf(p); b.type = type; b.picks = new int[]{ pick }; b.amount = amt;
+            int[] pk = new int[]{ pick };
+            Bet b = new Bet(); b.seat = indexOf(p); b.type = type; b.picks = pk; b.amount = amt;
             bets.add(b);
+            if ("PARIMUTUEL".equals(oddsMode)) addToPool(type, pk, amt);
         }
     }
 
@@ -434,9 +489,11 @@ public class HorseRaceGame implements RoomGame {
     private HorseRaceStateResponse build(String clientId) {
         long now = System.currentTimeMillis();
         if (phase == null) return HorseRaceStateResponse.notStarted(now);
+        if ("PARIMUTUEL".equals(oddsMode) && phase == Phase.BETTING && poolWin.length > 0) recomputeParimutuelOdds();
         Integer mySeat = seats.get(clientId);
         boolean joined = mySeat != null;
         Player meP = joined ? players.get(mySeat) : null;
+        long totalPool = 0; for (Bet b : bets) totalPool += b.amount;
 
         List<HorseView> hv = new ArrayList<>();
         for (int i = 0; i < horses.size(); i++) {
@@ -471,7 +528,7 @@ public class HorseRaceGame implements RoomGame {
                 betEndsAt, betSec, hv, pv, mine, race,
                 betting ? oddsExacta : Map.of(), betting ? oddsTrio : Map.of(),
                 phase == Phase.RESULT ? toList(finishOrder) : List.of(), myNet,
-                buyIn, horseCount, activePlayerCount(), version);
+                buyIn, horseCount, activePlayerCount(), totalPool, version);
     }
 
     private static List<Integer> toList(int[] a) {
@@ -559,6 +616,7 @@ public class HorseRaceGame implements RoomGame {
         players.clear(); seats.clear(); leftClients.clear(); horses.clear(); bets.clear();
         pendingSettles.clear();
         oddsWin = new double[0]; oddsPlace = new double[0]; oddsExacta = new HashMap<>(); oddsTrio = new HashMap<>();
+        poolWin = new double[0]; poolPlace = new double[0]; poolExacta = new HashMap<>(); poolTrio = new HashMap<>();
         raceType = "BASIC"; oddsMode = "FIXED"; buyIn = 5_000; betSec = 25; horseCount = 9; autoEndRounds = 0;
         round = 0; betEndsAt = 0; timeline = null; finishOrder = new int[0];
         raceStartAt = 0; raceEndsAt = 0; botCounter = 0; horseIdCounter = 0; version = 0;

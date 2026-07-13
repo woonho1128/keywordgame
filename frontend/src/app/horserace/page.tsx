@@ -16,7 +16,7 @@ type HrState = {
   isHost: boolean; joined: boolean; seat: number; nick: string | null; isAccount: boolean; chips: number; canBonus: boolean;
   betEndsAt: number; betSec: number; horses: HorseView[]; players: PlayerView[]; myBets: BetView[]; race: RaceView | null;
   exactaOdds: Record<string, number>; trioOdds: Record<string, number>;
-  finishOrder: number[]; myLastNet: number; buyIn: number; horseCount: number; playerCount: number; version: number;
+  finishOrder: number[]; myLastNet: number; buyIn: number; horseCount: number; playerCount: number; totalPool: number; version: number;
 };
 type Account = { token: string; accountId: number; nickname: string; balance: number; peakBalance: number; totalRaces: number; wins: number };
 type RoomSummary = { roomCode: string; status: string; playerCount: number; host: string };
@@ -116,6 +116,7 @@ export default function HorseRacePage() {
   const [pw, setPw] = useState('');
   const [showCreate, setShowCreate] = useState(false);
   const [raceType, setRaceType] = useState<'BASIC' | 'SPECIAL'>('BASIC');
+  const [oddsMode, setOddsMode] = useState<'FIXED' | 'PARIMUTUEL'>('FIXED');
   const [buyIn, setBuyIn] = useState(5000);
   const [betSec, setBetSec] = useState(25);
   const [remaining, setRemaining] = useState(0);
@@ -204,7 +205,7 @@ export default function HorseRacePage() {
     saveNick(n); setBusy(true); setError(null);
     try {
       const res = await api<{ roomCode: string; state: HrState }>(`/api/v1/horserace/new?clientId=${cid()}`,
-        { method: 'POST', body: JSON.stringify({ nick: n, token: account?.token ?? null, raceType, oddsMode: 'FIXED', buyIn, betSec, horseCount: 9, autoEndRounds: 0 }) });
+        { method: 'POST', body: JSON.stringify({ nick: n, token: account?.token ?? null, raceType, oddsMode, buyIn, betSec, horseCount: 9, autoEndRounds: 0 }) });
       changeRoom(res.roomCode); setSt(res.state); setShowCreate(false);
     } catch (e) { setError(e instanceof Error ? e.message : '방 생성 실패'); } finally { setBusy(false); }
   };
@@ -274,6 +275,15 @@ export default function HorseRacePage() {
               ))}
             </div>
             <p className="text-sm text-gray-500 mt-2">적중 시 <b>배팅액 × 배당</b>. 예) 배당 5.0에 100칩 → <b className="text-hit">500칩</b></p>
+          </section>
+
+          {/* 배당 방식 */}
+          <section>
+            <h3 className="text-base font-bold mb-2">📊 배당 방식 (방 생성 시 선택)</h3>
+            <div className="space-y-2 text-sm">
+              <div className="bg-gray-50 rounded-xl px-3.5 py-2.5"><b>🎯 고정 배당</b><span className="block text-gray-500">말 실력으로 배당이 정해져 배팅해도 안 변해요. 언더독 대박이 매력.</span></div>
+              <div className="bg-gray-50 rounded-xl px-3.5 py-2.5"><b>🌊 펀드풀</b><span className="block text-gray-500">모두의 판돈이 모여 <b>배당이 실시간 변동</b>해요. 인기 없는 말에 미리 걸면 배당이 높아 유리 — 눈치싸움!</span></div>
+            </div>
           </section>
 
           {/* 말 이력 */}
@@ -352,6 +362,14 @@ export default function HorseRacePage() {
               <div className="grid grid-cols-2 gap-2">
                 <button onClick={() => setRaceType('BASIC')} className={`py-3 rounded-lg border-2 text-sm font-bold ${raceType === 'BASIC' ? 'border-hit bg-hit/5 text-hit' : 'border-gray-200 text-gray-500'}`}>🏇 기본경마</button>
                 <button disabled title="곧 추가될 예정이에요" className="py-3 rounded-lg border-2 border-dashed border-gray-200 text-sm font-bold text-gray-300 cursor-not-allowed">🎪 특수경마<span className="block text-[10px] font-normal">(준비중)</span></button>
+              </div>
+            </div>
+            <div>
+              <p className="text-sm font-bold text-gray-600 mb-1">배당 방식</p>
+              <div className="grid grid-cols-2 gap-2">
+                {([['FIXED', '🎯 고정 배당', '말 실력으로 배당 고정'], ['PARIMUTUEL', '🌊 펀드풀', '판돈 몰릴수록 배당 변동']] as const).map(([m, label, desc]) => (
+                  <button key={m} onClick={() => setOddsMode(m)} className={`py-2.5 rounded-lg border-2 text-sm font-bold ${oddsMode === m ? 'border-hit bg-hit/5 text-hit' : 'border-gray-200 text-gray-500'}`}>{label}<span className="block text-[10px] font-normal">{desc}</span></button>
+                ))}
               </div>
             </div>
             <div>
@@ -467,6 +485,9 @@ export default function HorseRacePage() {
       {phase === 'BETTING' && (
         <div className="w-full space-y-3">
           <p className="text-center text-sm font-bold">🎯 배팅 <span className="text-hit">{remaining}s</span></p>
+          <p className="text-center text-[11px] text-gray-400">
+            {st.oddsMode === 'PARIMUTUEL' ? <>🌊 펀드풀 · 실시간 배당(남들이 걸수록 변해요) · 총 판돈 {won(st.totalPool)}</> : <>🎯 고정 배당 · 총 판돈 {won(st.totalPool)}</>}
+          </p>
 
           {/* 권종 탭 */}
           <div className="grid grid-cols-4 gap-1">

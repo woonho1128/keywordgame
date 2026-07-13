@@ -104,6 +104,22 @@ class HorseRaceGameTest {
     }
 
     @Test
+    void 펀드풀_배당은_배팅에_따라_변한다() {
+        HorseRaceGame g = new HorseRaceGame();
+        g.newGame("host", "나", null, 0, "BASIC", "PARIMUTUEL", 100000, 25, 9, 0);
+        g.start("host");
+        HorseRaceStateResponse s0 = g.me("host");
+        assertThat(s0.oddsMode()).isEqualTo("PARIMUTUEL");
+        double before = s0.horses().get(0).oddsWin();
+        // 0번 말에 큰 금액을 몰면 그 말 배당은 내려가야 함
+        g.bet("host", "WIN", new int[]{0}, 50000);
+        HorseRaceStateResponse s1 = g.me("host");
+        double after = s1.horses().get(0).oddsWin();
+        assertThat(after).isLessThan(before);
+        assertThat(s1.totalPool()).isGreaterThanOrEqualTo(50000);
+    }
+
+    @Test
     void 인기마_승률이_합리적_범위() {
         // ★5 한 마리 vs ★3 여덟 마리 → 인기마지만 지배적이지 않아야 함
         double fav = HorseRaceGame.favWinRateForTest(9, 5, 3, 6000);

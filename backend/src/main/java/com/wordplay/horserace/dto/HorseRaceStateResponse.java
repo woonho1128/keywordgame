@@ -33,6 +33,7 @@ public record HorseRaceStateResponse(
         int buyIn,
         int horseCount,
         int playerCount,
+        long totalPool,     // 이번 레이스 총 판돈(실제 배팅 합)
         long version
 ) {
     public record HorseView(int index, String name, String emoji, int condition, String style,
@@ -52,6 +53,6 @@ public record HorseRaceStateResponse(
                 false, false, 0, null, false, 0, false,
                 0, 0, List.of(), List.of(), List.of(), null,
                 java.util.Map.of(), java.util.Map.of(),
-                List.of(), 0, 0, 0, 0, 0);
+                List.of(), 0, 0, 0, 0, 0, 0);
     }
 }
