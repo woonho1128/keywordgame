@@ -483,6 +483,7 @@ export default function HorseRacePage() {
             <div className="flex justify-center"><button onClick={() => setShowAdmin(true)} className="text-xs text-gray-300 hover:text-gray-500">🔒 관리자</button></div>
           )}
         </div>
+      <RoomChat game="horserace" roomCode="lobby" clientId={clientId} nick={nick} />
       </main>
     );
   }

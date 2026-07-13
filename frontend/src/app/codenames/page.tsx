@@ -266,6 +266,7 @@ export default function CodenamesPage() {
         )}
         {error && <p className="text-red-500 text-sm mt-4 text-center">{error}</p>}
         {adminFooter}
+      <RoomChat game="codenames" roomCode="lobby" clientId={clientId} nick={nick} />
       </main>
     );
   }

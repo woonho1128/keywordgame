@@ -323,6 +323,7 @@ export default function MafiaJobsPage() {
         {showCreate ? renderCreateForm() : renderRoomList()}
         {error && <p className="text-red-500 text-sm mt-4 text-center">{error}</p>}
         {adminFooter()}
+      <RoomChat game="mafiajobs" roomCode="lobby" clientId={clientId} nick={nick} />
       </main>
     );
   }

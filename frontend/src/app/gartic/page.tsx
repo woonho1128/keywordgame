@@ -322,6 +322,7 @@ export default function GarticPage() {
         )}
         {error && <p className="text-red-500 text-sm mt-4 text-center">{error}</p>}
         {adminFooter}
+      <RoomChat game="gartic" roomCode="lobby" clientId={clientId} nick={nick} />
       </main>
     );
   }

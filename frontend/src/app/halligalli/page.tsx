@@ -281,6 +281,7 @@ export default function HalliGalliPage() {
         )}
         {error && <p className="text-red-500 text-sm mt-4 text-center">{error}</p>}
         {adminFooter}
+      <RoomChat game="halligalli" roomCode="lobby" clientId={clientId} nick={nick} />
       </main>
     );
   }

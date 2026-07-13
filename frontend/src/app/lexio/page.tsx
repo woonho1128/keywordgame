@@ -246,6 +246,7 @@ export default function LexioPage() {
             </div>
           ) : <button onClick={() => setShowAdmin(true)} className="text-xs text-gray-300 hover:text-gray-500">🔒 관리자</button>}
         </div>
+      <RoomChat game="lexio" roomCode="lobby" clientId={clientId} nick={nick} />
       </main>
     );
   }

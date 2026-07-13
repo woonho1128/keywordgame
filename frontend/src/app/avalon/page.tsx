@@ -306,6 +306,7 @@ export default function AvalonPage() {
         {showCreate ? renderNotStarted() : renderRoomList()}
         {error && <p className="text-red-500 text-sm mt-4 text-center">{error}</p>}
         {adminFooter}
+      <RoomChat game="avalon" roomCode="lobby" clientId={clientId} nick={nick} />
       </main>
     );
   }

@@ -238,6 +238,7 @@ export default function BingoPage() {
         )}
         {error && <p className="text-red-500 text-sm mt-4 text-center">{error}</p>}
         {adminFooter}
+      <RoomChat game="bingo" roomCode="lobby" clientId={clientId} nick={nick} />
       </main>
     );
   }

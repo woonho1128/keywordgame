@@ -172,6 +172,7 @@ export default function OthelloPage() {
             </div>
           ) : <button onClick={() => setShowAdmin(true)} className="text-xs text-gray-300 hover:text-gray-500">🔒 관리자</button>}
         </div>
+      <RoomChat game="othello" roomCode="lobby" clientId={clientId} nick={nick} />
       </main>
     );
   }
