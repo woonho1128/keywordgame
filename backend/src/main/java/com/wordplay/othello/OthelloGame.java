@@ -55,6 +55,7 @@ public class OthelloGame implements RoomGame {
     private final int[] board = new int[64];
     private int currentColor = 1;
     private int lastMove = -1;
+    private final List<Integer> history = new ArrayList<>(); // 착수 순서(오프닝 북 조회용)
     private String lastAction = null;
     private long turnDeadlineMs = 0;
     private long botActAt = 0;
@@ -111,6 +112,7 @@ public class OthelloGame implements RoomGame {
         board[idx(4, 3)] = 1; board[idx(4, 4)] = 2;
         currentColor = 1; // 흑 선
         lastMove = -1; winner = 0;
+        history.clear();
         lastAction = "게임 시작 · 흑 선";
         phase = Phase.PLAYING;
         turnDeadlineMs = System.currentTimeMillis() + turnMs;
@@ -148,6 +150,7 @@ public class OthelloGame implements RoomGame {
         board[cell] = color;
         for (int f : flips) board[f] = color;
         lastMove = cell;
+        history.add(cell);
         lastAction = (color == 1 ? "흑" : "백") + "이 " + (char) ('A' + cell % 8) + (cell / 8 + 1) + " 착수";
         advanceAfterMove(color);
         touch();
@@ -199,6 +202,12 @@ public class OthelloGame implements RoomGame {
         List<Integer> moves = validMoves(color);
         if (moves.isEmpty()) return -1;
         if ("EASY".equals(level)) return moves.get(ThreadLocalRandom.current().nextInt(moves.size()));
+        // 상위 난이도(초고수·그마·신화)는 초반에 오프닝 북으로 정석 계열을 매판 다르게 시작한다.
+        // 검증된 사운드 라인만 담아 강함 손실 0. 북을 벗어나거나 끝나면 아래 엔진이 이어받음.
+        if ("MYTHIC".equals(level) || "GRAND".equals(level) || "MASTER".equals(level)) {
+            Integer bookMove = OthelloOpeningBook.pick(history, moves);
+            if (bookMove != null) return bookMove;
+        }
         if ("MYTHIC".equals(level)) return pickMythicMove(color);
         if ("GRAND".equals(level)) return pickGrandMove(color);
         if ("MASTER".equals(level)) return pickMasterMove(color);
@@ -322,25 +331,44 @@ public class OthelloGame implements RoomGame {
         moves.sort((a, b) -> Integer.compare(WEIGHT[b], WEIGHT[a]));
         int bestMove = moves.get(0);
 
+        // 변주(다양성) 모드: 오프닝~초중반(빈칸 ≥ 44, 약 첫 16수)에서만 근사-동점 수 중 랜덤.
+        // 뿌리에서 가지치기를 끄고 모든 수를 정확히 평가 → 최선과 margin 이내인 수들이 정확히 걸러진다.
+        // 승부가 뾰족한 중종반·확정 국면에선 끄고 항상 최선 → 강함 손실 0.
+        boolean variety = empties >= 44;
+        List<Integer> completedMoves = null; long[] completedScores = null; long completedBest = NEG;
+
         for (int depth = 2; depth <= maxDepth; depth++) {
             searchAborted = false;
             moves.remove((Integer) bestMove); moves.add(0, bestMove); // 이전 최선수 먼저
             long alpha = NEG; int curBest = -1; long curVal = NEG;
-            for (int m : moves) {
+            long[] scores = variety ? new long[moves.size()] : null;
+            for (int k = 0; k < moves.size(); k++) {
+                int m = moves.get(k);
                 int[] nb = board.clone();
                 nb[m] = color; for (int f : flipsFor(color, m)) nb[f] = color;
-                long v = -negamaxGrand(nb, opp, depth - 1, NEG, -alpha);
+                // 변주 모드에선 alpha를 갱신하지 않아 뿌리 컷오프 없이 전 수를 정확히 평가
+                long v = -negamaxGrand(nb, opp, depth - 1, NEG, variety ? POS : -alpha);
                 if (searchAborted) break;
+                if (scores != null) scores[k] = v;
                 if (v > curVal) { curVal = v; curBest = m; }
-                if (curVal > alpha) alpha = curVal;
+                if (!variety && curVal > alpha) alpha = curVal;
             }
             if (searchAborted) break;         // 이 깊이는 미완 → 직전 깊이 결과 유지
             if (curBest >= 0) bestMove = curBest;
+            if (variety) { completedMoves = new ArrayList<>(moves); completedScores = scores; completedBest = curVal; }
             if (System.currentTimeMillis() >= searchDeadline) break;
             if (curVal >= 5_000_000L || curVal <= -5_000_000L) break; // 승패 확정
         }
+
+        // 변주 모드 & 비확정 국면이면 최선-margin 이내 수 중 랜덤(근사-동점만 → 강함 유지)
+        if (variety && completedMoves != null && completedBest < 5_000_000L && completedBest > -5_000_000L) {
+            return pickAmongBest(completedMoves, completedScores, VARIETY_MARGIN);
+        }
         return bestMove;
     }
+
+    /** 근사-동점 판정 폭(heuristic2 단위). 이 이내 차이는 사실상 동점으로 보고 변주. */
+    private static final long VARIETY_MARGIN = 30;
 
     private long negamaxGrand(int[] bd, int color, int depth, long alpha, long beta) {
         if (searchAborted) return 0;
@@ -582,6 +610,7 @@ public class OthelloGame implements RoomGame {
         hostColor = 1; turnMs = DEFAULT_TURN_MS;
         for (int i = 0; i < 64; i++) board[i] = 0;
         currentColor = 1; lastMove = -1; lastAction = null;
+        history.clear();
         turnDeadlineMs = 0; botActAt = 0; winner = 0; version = 0;
     }
     private static String normalizeLevel(String s) {

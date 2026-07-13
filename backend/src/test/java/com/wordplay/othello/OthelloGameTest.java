@@ -99,6 +99,40 @@ class OthelloGameTest {
     }
 
     @Test
+    void 오프닝북_봇_첫수가_매판_같지_않다() {
+        java.util.Set<Integer> firstMoves = new java.util.HashSet<>();
+        for (int t = 0; t < 40; t++) {
+            OthelloGame g = new OthelloGame();
+            g.newGame("host", "나", "WHITE", 60); // 방장 백 → 봇 흑(선)
+            g.addBot("host", "GRAND");
+            g.setGrandMsForTest(20);
+            g.start("host");
+            g.forceBotNowForTest();
+            firstMoves.add(g.me("host").lastMove()); // 봇(흑) 첫 수
+        }
+        assertThat(firstMoves).hasSizeGreaterThan(1); // 오프닝 북으로 매판 갈림
+    }
+
+    @Test
+    void 오프닝북_흑_f5에_봇은_정석계열로_갈려_응수한다() {
+        int f5 = cell(4, 5);
+        int d6 = cell(5, 3), f6 = cell(5, 5), f4 = cell(3, 5); // 대각/수직/평행 계열
+        java.util.Set<Integer> replies = new java.util.HashSet<>();
+        for (int t = 0; t < 40; t++) {
+            OthelloGame g = new OthelloGame();
+            g.newGame("host", "나", "BLACK", 60); // 방장 흑(선) → 봇 백(후)
+            g.addBot("host", "GRAND");
+            g.setGrandMsForTest(20);
+            g.start("host");
+            g.place("host", f5);        // 사람 흑 f5
+            g.forceBotNowForTest();     // 봇 백 응수
+            replies.add(g.me("host").lastMove());
+        }
+        assertThat(replies).hasSizeGreaterThan(1);                        // 계열이 매판 갈림
+        assertThat(java.util.Set.of(d6, f6, f4)).containsAll(replies);    // 전부 등록된 정석 수
+    }
+
+    @Test
     void 초고수_봇은_오프닝을_매번_똑같이_두지_않는다() {
         OthelloGame g = new OthelloGame();
         g.newGame("host", "나", "WHITE", 60); // 방장 백 → 봇(흑=1)이 선
