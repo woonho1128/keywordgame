@@ -25,6 +25,9 @@ public record HorseRaceStateResponse(
         List<BetView> myBets,
         RaceView race,          // RACING/RESULT에서만 채움
 
+        java.util.Map<String, Double> exactaOdds, // "i-j"(1·2등 순서) → 배당, BETTING에서만
+        java.util.Map<String, Double> trioOdds,   // "i-j-k"(정렬, 1·2·3등) → 배당
+
         List<Integer> finishOrder, // 결과(1등부터), 없으면 빈 리스트
         long myLastNet,            // 직전 레이스 내 손익
         int buyIn,
@@ -38,7 +41,7 @@ public record HorseRaceStateResponse(
 
     public record PlayerView(int seat, String nick, long chips, boolean bot, boolean account, boolean host) {}
 
-    public record BetView(String type, int horseIndex, long amount) {}
+    public record BetView(String type, List<Integer> picks, long amount) {}
 
     public record RaceView(List<List<Integer>> timeline, List<Integer> finishOrder,
                            long raceStartAt, int tickMs, int finishDist, List<String> eventLog) {}
@@ -48,6 +51,7 @@ public record HorseRaceStateResponse(
                 "NULL_ROOM", now, "BASIC", "FIXED", 0,
                 false, false, 0, null, false, 0, false,
                 0, 0, List.of(), List.of(), List.of(), null,
+                java.util.Map.of(), java.util.Map.of(),
                 List.of(), 0, 0, 0, 0, 0);
     }
 }

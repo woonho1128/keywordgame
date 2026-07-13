@@ -36,7 +36,7 @@ class HorseRaceGameTest {
     void 배팅_레이스_정산_한사이클() {
         HorseRaceGame g = started();
         // 0번 말 단승에 100 배팅
-        HorseRaceStateResponse s = g.bet("host", "WIN", 0, 100);
+        HorseRaceStateResponse s = g.bet("host", "WIN", new int[]{0}, 100);
         assertThat(s.myBets()).hasSize(1);
         long chipsAfterBet = s.chips();
         assertThat(chipsAfterBet).isEqualTo(5000 - 100);
@@ -73,6 +73,34 @@ class HorseRaceGameTest {
         assertThat(carried).isEqualTo(3); // top3 이월
         long carriedByName = s.horses().stream().filter(h -> carriedNames.contains(h.name())).count();
         assertThat(carriedByName).isGreaterThanOrEqualTo(3);
+    }
+
+    @Test
+    void 쌍승_삼복승_배팅_정산() {
+        HorseRaceGame g = started();
+        // 쌍승(0→1), 삼복승(0,1,2)
+        g.bet("host", "EXACTA", new int[]{0, 1}, 100);
+        HorseRaceStateResponse s = g.bet("host", "TRIO", new int[]{0, 1, 2}, 100);
+        assertThat(s.myBets()).hasSize(2);
+        assertThat(s.exactaOdds()).isNotEmpty(); // 배당 맵 제공
+        assertThat(s.trioOdds()).isNotEmpty();
+        assertThat(s.chips()).isEqualTo(5000 - 200);
+
+        g.forceBetEndForTest(); g.me("host");
+        g.forceRaceEndForTest();
+        s = g.me("host");
+        assertThat(s.status()).isEqualTo("RESULT");
+        // 정산 후 칩은 음수가 아니어야 함
+        assertThat(s.chips()).isGreaterThanOrEqualTo(0);
+    }
+
+    @Test
+    void 쌍승은_같은말_중복_거부() {
+        HorseRaceGame g = started();
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> g.bet("host", "EXACTA", new int[]{0, 0}, 100))
+                .hasMessageContaining("중복");
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> g.bet("host", "TRIO", new int[]{0, 1}, 100))
+                .hasMessageContaining("3마리");
     }
 
     @Test

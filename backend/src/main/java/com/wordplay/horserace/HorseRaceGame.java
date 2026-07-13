@@ -56,7 +56,7 @@ public class HorseRaceGame implements RoomGame {
         Horse(int id, String name, String emoji) { this.id = id; this.name = name; this.emoji = emoji; }
     }
 
-    static final class Bet { int seat; String type; int horse; long amount; }
+    static final class Bet { int seat; String type; int[] picks; long amount; }
 
     public record AccountSettle(long accountId, long balance, boolean raced, boolean won) {}
 
@@ -86,6 +86,8 @@ public class HorseRaceGame implements RoomGame {
     private final List<Horse> horses = new ArrayList<>();
     private double[] oddsWin = new double[0];
     private double[] oddsPlace = new double[0];
+    private Map<String, Double> oddsExacta = new HashMap<>();
+    private Map<String, Double> oddsTrio = new HashMap<>();
     private final List<Bet> bets = new ArrayList<>();
     private long betEndsAt = 0;
     private int[][] timeline = null;     // [T][N]
@@ -149,19 +151,38 @@ public class HorseRaceGame implements RoomGame {
         return me(clientId);
     }
 
-    public synchronized HorseRaceStateResponse bet(String clientId, String type, int horseIndex, long amount) {
+    public synchronized HorseRaceStateResponse bet(String clientId, String type, int[] picks, long amount) {
         tick();
         Player p = requirePlayer(clientId);
         if (phase != Phase.BETTING) throw bad("지금은 배팅할 수 없습니다");
-        String t = "PLACE".equalsIgnoreCase(type) ? "PLACE" : "WIN";
-        if (horseIndex < 0 || horseIndex >= horses.size()) throw bad("말 선택이 올바르지 않습니다");
+        String t = normalizeBetType(type);
+        int need = pickCount(t);
+        if (picks == null || picks.length != need) throw bad("말 " + need + "마리를 선택하세요");
+        Set<Integer> uniq = new HashSet<>();
+        for (int h : picks) {
+            if (h < 0 || h >= horses.size()) throw bad("말 선택이 올바르지 않습니다");
+            if (!uniq.add(h)) throw bad("같은 말을 중복 선택했습니다");
+        }
         if (amount < BET_UNIT || amount % BET_UNIT != 0) throw bad(BET_UNIT + "칩 단위로 배팅하세요");
         if (amount > p.chips) throw bad("보유 칩이 부족합니다");
         p.chips -= amount;
-        Bet b = new Bet(); b.seat = seats.get(clientId); b.type = t; b.horse = horseIndex; b.amount = amount;
+        Bet b = new Bet(); b.seat = seats.get(clientId); b.type = t; b.picks = picks.clone(); b.amount = amount;
         bets.add(b);
         touch();
         return me(clientId);
+    }
+
+    private static String normalizeBetType(String type) {
+        if (type == null) return "WIN";
+        return switch (type.toUpperCase()) {
+            case "PLACE" -> "PLACE";
+            case "EXACTA" -> "EXACTA";
+            case "TRIO" -> "TRIO";
+            default -> "WIN";
+        };
+    }
+    private static int pickCount(String t) {
+        return switch (t) { case "EXACTA" -> 2; case "TRIO" -> 3; default -> 1; };
     }
 
     public synchronized HorseRaceStateResponse nextRace(String clientId) {
@@ -239,13 +260,19 @@ public class HorseRaceGame implements RoomGame {
         Set<Integer> top3 = new HashSet<>();
         for (int i = 0; i < Math.min(3, finishOrder.length); i++) top3.add(finishOrder[i]);
         int winner = finishOrder.length > 0 ? finishOrder[0] : -1;
+        int second = finishOrder.length > 1 ? finishOrder[1] : -1;
 
         for (Bet b : bets) {
-            boolean hit = "WIN".equals(b.type) ? (b.horse == winner) : top3.contains(b.horse);
+            boolean hit;
+            double odds;
+            switch (b.type) {
+                case "PLACE" -> { hit = top3.contains(b.picks[0]); odds = oddsPlace[b.picks[0]]; }
+                case "EXACTA" -> { hit = b.picks[0] == winner && b.picks[1] == second; odds = oddsExacta.getOrDefault(exactaKey(b.picks[0], b.picks[1]), 50.0); }
+                case "TRIO" -> { hit = top3.contains(b.picks[0]) && top3.contains(b.picks[1]) && top3.contains(b.picks[2]); odds = oddsTrio.getOrDefault(trioKey(b.picks[0], b.picks[1], b.picks[2]), 50.0); }
+                default -> { hit = b.picks[0] == winner; odds = oddsWin[b.picks[0]]; }
+            }
             if (!hit) continue;
-            double odds = "WIN".equals(b.type) ? oddsWin[b.horse] : oddsPlace[b.horse];
-            long payout = Math.round(b.amount * odds);
-            players.get(b.seat).chips += payout;
+            players.get(b.seat).chips += Math.round(b.amount * odds);
         }
 
         // 말 폼/스트릭 갱신
@@ -290,17 +317,29 @@ public class HorseRaceGame implements RoomGame {
         int n = horses.size();
         Horse[] hs = horses.toArray(new Horse[0]);
         int[] win = new int[n], place = new int[n];
+        Map<String, Integer> exacta = new HashMap<>(), trio = new HashMap<>();
         Random rng = new Random(ThreadLocalRandom.current().nextLong());
         for (int s = 0; s < ODDS_SIMS; s++) {
             int[] order = simulate(hs, false, rng).order;
             win[order[0]]++;
             for (int i = 0; i < Math.min(3, order.length); i++) place[order[i]]++;
+            if (order.length >= 2) exacta.merge(exactaKey(order[0], order[1]), 1, Integer::sum);
+            if (order.length >= 3) trio.merge(trioKey(order[0], order[1], order[2]), 1, Integer::sum);
         }
         oddsWin = new double[n]; oddsPlace = new double[n];
         for (int i = 0; i < n; i++) {
             oddsWin[i] = oddsFrom(win[i] / (double) ODDS_SIMS);
             oddsPlace[i] = oddsFrom(place[i] / (double) ODDS_SIMS);
         }
+        oddsExacta = new HashMap<>(); oddsTrio = new HashMap<>();
+        exacta.forEach((k, c) -> oddsExacta.put(k, oddsFrom(c / (double) ODDS_SIMS)));
+        trio.forEach((k, c) -> oddsTrio.put(k, oddsFrom(c / (double) ODDS_SIMS)));
+    }
+
+    private static String exactaKey(int a, int b) { return a + "-" + b; }
+    private static String trioKey(int a, int b, int c) {
+        int[] s = { a, b, c }; Arrays.sort(s);
+        return s[0] + "-" + s[1] + "-" + s[2];
     }
 
     private static double oddsFrom(double p) {
@@ -380,7 +419,7 @@ public class HorseRaceGame implements RoomGame {
             amt = Math.min(amt, p.chips);
             if (amt < BET_UNIT) continue;
             p.chips -= amt;
-            Bet b = new Bet(); b.seat = indexOf(p); b.type = type; b.horse = pick; b.amount = amt;
+            Bet b = new Bet(); b.seat = indexOf(p); b.type = type; b.picks = new int[]{ pick }; b.amount = amt;
             bets.add(b);
         }
     }
@@ -413,7 +452,7 @@ public class HorseRaceGame implements RoomGame {
             pv.add(new PlayerView(i + 1, p.nick, p.chips, p.bot, p.account, p.clientId.equals(hostClientId)));
         }
         List<BetView> mine = new ArrayList<>();
-        if (joined) for (Bet b : bets) if (b.seat == mySeat) mine.add(new BetView(b.type, b.horse, b.amount));
+        if (joined) for (Bet b : bets) if (b.seat == mySeat) mine.add(new BetView(b.type, toList(b.picks), b.amount));
 
         RaceView race = null;
         if ((phase == Phase.RACING || phase == Phase.RESULT) && timeline != null) {
@@ -423,12 +462,14 @@ public class HorseRaceGame implements RoomGame {
         }
         long myNet = meP != null && phase == Phase.RESULT ? meP.chips - meP.chipsBeforeRace : 0;
         boolean canBonus = meP != null && meP.account && meP.chips < com.wordplay.horserace.account.RaceAccountService.BONUS_THRESHOLD;
+        boolean betting = phase == Phase.BETTING;
 
         return new HorseRaceStateResponse(
                 phase.name(), now, raceType, oddsMode, round,
                 clientId.equals(hostClientId), joined, joined ? mySeat + 1 : 0,
                 meP != null ? meP.nick : null, meP != null && meP.account, meP != null ? meP.chips : 0, canBonus,
                 betEndsAt, betSec, hv, pv, mine, race,
+                betting ? oddsExacta : Map.of(), betting ? oddsTrio : Map.of(),
                 phase == Phase.RESULT ? toList(finishOrder) : List.of(), myNet,
                 buyIn, horseCount, activePlayerCount(), version);
     }
@@ -517,7 +558,7 @@ public class HorseRaceGame implements RoomGame {
         phase = null; hostClientId = null;
         players.clear(); seats.clear(); leftClients.clear(); horses.clear(); bets.clear();
         pendingSettles.clear();
-        oddsWin = new double[0]; oddsPlace = new double[0];
+        oddsWin = new double[0]; oddsPlace = new double[0]; oddsExacta = new HashMap<>(); oddsTrio = new HashMap<>();
         raceType = "BASIC"; oddsMode = "FIXED"; buyIn = 5_000; betSec = 25; horseCount = 9; autoEndRounds = 0;
         round = 0; betEndsAt = 0; timeline = null; finishOrder = new int[0];
         raceStartAt = 0; raceEndsAt = 0; botCounter = 0; horseIdCounter = 0; version = 0;

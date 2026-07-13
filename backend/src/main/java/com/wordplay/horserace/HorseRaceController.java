@@ -115,8 +115,8 @@ public class HorseRaceController {
         validateClientId(clientId);
         HorseRaceGame g = rooms.require(roomCode);
         long amt = req.amount() == null ? 0 : req.amount();
-        int idx = req.horseIndex() == null ? -1 : req.horseIndex();
-        return ApiResponse.success(flush(g, g.bet(clientId, req.type(), idx, amt)));
+        int[] picks = req.picks() == null ? new int[0] : req.picks().stream().mapToInt(Integer::intValue).toArray();
+        return ApiResponse.success(flush(g, g.bet(clientId, req.type(), picks, amt)));
     }
 
     @PostMapping("/next-race")

@@ -9,12 +9,13 @@ type HorseView = {
   formLine: number[]; streak: number; isNew: boolean; oddsWin: number; oddsPlace: number; lane: number;
 };
 type PlayerView = { seat: number; nick: string; chips: number; bot: boolean; account: boolean; host: boolean };
-type BetView = { type: string; horseIndex: number; amount: number };
+type BetView = { type: string; picks: number[]; amount: number };
 type RaceView = { timeline: number[][]; finishOrder: number[]; raceStartAt: number; tickMs: number; finishDist: number; eventLog: string[] };
 type HrState = {
   status: Phase; serverNow: number; raceType: string; oddsMode: string; round: number;
   isHost: boolean; joined: boolean; seat: number; nick: string | null; isAccount: boolean; chips: number; canBonus: boolean;
   betEndsAt: number; betSec: number; horses: HorseView[]; players: PlayerView[]; myBets: BetView[]; race: RaceView | null;
+  exactaOdds: Record<string, number>; trioOdds: Record<string, number>;
   finishOrder: number[]; myLastNet: number; buyIn: number; horseCount: number; playerCount: number; version: number;
 };
 type Account = { token: string; accountId: number; nickname: string; balance: number; peakBalance: number; totalRaces: number; wins: number };
@@ -123,9 +124,18 @@ export default function HorseRacePage() {
   const [showGuide, setShowGuide] = useState(false);
 
   // 배팅 슬립
-  const [selHorse, setSelHorse] = useState<number | null>(null);
-  const [betType, setBetType] = useState<'WIN' | 'PLACE'>('WIN');
+  const [betType, setBetType] = useState<'WIN' | 'PLACE' | 'EXACTA' | 'TRIO'>('WIN');
+  const [picks, setPicks] = useState<number[]>([]);
   const [betAmt, setBetAmt] = useState(100);
+  const needPicks = betType === 'EXACTA' ? 2 : betType === 'TRIO' ? 3 : 1;
+  const changeBetType = (t: 'WIN' | 'PLACE' | 'EXACTA' | 'TRIO') => { setBetType(t); setPicks([]); };
+  const clickHorse = (i: number) => {
+    setPicks((cur) => {
+      if (betType === 'WIN' || betType === 'PLACE') return cur[0] === i ? [] : [i];
+      if (cur.includes(i)) return cur.filter((x) => x !== i);
+      return cur.length < needPicks ? [...cur, i] : cur;
+    });
+  };
 
   const cid = () => encodeURIComponent(clientId);
   const rp = () => `roomCode=${roomCode}&clientId=${cid()}`;
@@ -206,9 +216,9 @@ export default function HorseRacePage() {
   const handleAddBot = () => post(`/api/v1/horserace/add-bot?${rp()}`);
   const handleStart = () => post(`/api/v1/horserace/start?${rp()}`);
   const handleBet = async () => {
-    if (selHorse == null) return setError('말을 선택하세요');
-    const r = await post(`/api/v1/horserace/bet?${rp()}`, { type: betType, horseIndex: selHorse, amount: betAmt });
-    if (r) setError(null);
+    if (picks.length !== needPicks) return setError(`말 ${needPicks}마리를 선택하세요`);
+    const r = await post(`/api/v1/horserace/bet?${rp()}`, { type: betType, picks, amount: betAmt });
+    if (r) { setError(null); setPicks([]); }
   };
   const handleNext = () => post(`/api/v1/horserace/next-race?${rp()}`);
   const handleEnd = () => post(`/api/v1/horserace/end?${rp()}`);
@@ -232,11 +242,13 @@ export default function HorseRacePage() {
         </ul>
       </div>
       <div>
-        <b>💰 배당(단 / 연)</b>
+        <b>💰 배팅 권종</b>
         <ul className="mt-0.5 space-y-0.5 text-gray-600">
-          <li><b>단</b>(단승) — 그 말이 <b>1등</b>하면 배팅액 × 배당</li>
-          <li><b>연</b>(연승) — 그 말이 <b>3등 안</b>에 들면 배팅액 × 배당 (잘 맞지만 배당 낮음)</li>
-          <li className="text-gray-400">예: 단 5.0에 100 걸어 1등 → 500 받음</li>
+          <li><b>단승</b> — 그 말이 <b>1등</b>하면 적중</li>
+          <li><b>연승</b> — 그 말이 <b>3등 안</b>에 들면 적중 (잘 맞지만 배당 낮음)</li>
+          <li><b>쌍승</b> — 말 2개를 골라 <b>1·2등을 순서대로</b> 맞히면 적중 (고배당)</li>
+          <li><b>삼복승</b> — 말 3개를 골라 <b>1·2·3등</b>(순서 무관)을 맞히면 적중 (초고배당)</li>
+          <li className="text-gray-400">적중 시 배팅액 × 배당. 예: 배당 5.0에 100 → 500 받음</li>
         </ul>
       </div>
       <p><b>📋 이력</b> — 🆕신입(이 방 첫 출전) · <b>1-2-1</b>(최근 착순) · <b>🔥연승</b>(연속 3등 내, 셀수록 강해 배당에 반영)</p>
@@ -346,7 +358,22 @@ export default function HorseRacePage() {
   if (!st) return <main className="min-h-screen flex items-center justify-center"><p className="text-gray-400">불러오는 중...</p></main>;
   const phase = st.status;
   const sortedPlayers = [...st.players].sort((a, b) => b.chips - a.chips);
-  const potential = selHorse != null && st.horses[selHorse] ? Math.round(betAmt * (betType === 'WIN' ? st.horses[selHorse].oddsWin : st.horses[selHorse].oddsPlace)) : 0;
+  const betOdds = (() => {
+    if (picks.length !== needPicks) return 0;
+    if (betType === 'WIN') return st.horses[picks[0]]?.oddsWin ?? 0;
+    if (betType === 'PLACE') return st.horses[picks[0]]?.oddsPlace ?? 0;
+    if (betType === 'EXACTA') return st.exactaOdds[`${picks[0]}-${picks[1]}`] ?? 50;
+    return st.trioOdds[[...picks].sort((a, b) => a - b).join('-')] ?? 50;
+  })();
+  const potential = Math.round(betAmt * betOdds);
+  const BET_LABEL: Record<string, string> = { WIN: '단승', PLACE: '연승', EXACTA: '쌍승', TRIO: '삼복승' };
+  const pickBadge = (i: number) => {
+    const at = picks.indexOf(i);
+    if (at < 0) return null;
+    if (betType === 'EXACTA') return at === 0 ? '1착' : '2착';
+    if (betType === 'TRIO') return '✓';
+    return '✓';
+  };
 
   return (
     <main className="min-h-screen flex flex-col items-center p-4 max-w-lg mx-auto w-full">
@@ -391,13 +418,28 @@ export default function HorseRacePage() {
       {phase === 'BETTING' && (
         <div className="w-full space-y-3">
           <p className="text-center text-sm font-bold">🎯 배팅 <span className="text-hit">{remaining}s</span></p>
+
+          {/* 권종 탭 */}
+          <div className="grid grid-cols-4 gap-1">
+            {(['WIN', 'PLACE', 'EXACTA', 'TRIO'] as const).map((t) => (
+              <button key={t} onClick={() => changeBetType(t)} className={`py-1.5 rounded-lg border text-xs font-bold ${betType === t ? 'border-hit bg-hit/5 text-hit' : 'border-gray-200 text-gray-400'}`}>{BET_LABEL[t]}</button>
+            ))}
+          </div>
+          <p className="text-center text-[11px] text-gray-400">
+            {betType === 'WIN' ? '1등 맞히기' : betType === 'PLACE' ? '3등 안에 들면' : betType === 'EXACTA' ? '1·2등을 순서대로 (말 2개: 1착→2착)' : '1·2·3등 (순서 무관, 말 3개)'}
+          </p>
+
           <div className="space-y-1.5">
             {st.horses.map((h) => {
-              const sel = selHorse === h.index;
+              const badge = pickBadge(h.index);
+              const sel = badge != null;
               return (
-                <button key={h.index} onClick={() => setSelHorse(h.index)}
+                <button key={h.index} onClick={() => clickHorse(h.index)}
                   className={`w-full flex items-center gap-2 rounded-lg border-2 px-2 py-1.5 text-left ${sel ? 'border-hit bg-hit/5' : 'border-gray-200'}`}>
-                  <span className="w-6 h-6 rounded-full flex items-center justify-center text-white text-xs font-bold shrink-0" style={{ background: LANE_COLORS[h.index % LANE_COLORS.length] }}>{h.index + 1}</span>
+                  <span className="relative shrink-0">
+                    <span className="w-6 h-6 rounded-full flex items-center justify-center text-white text-xs font-bold" style={{ background: LANE_COLORS[h.index % LANE_COLORS.length] }}>{h.index + 1}</span>
+                    {badge && <span className="absolute -top-1.5 -right-1.5 bg-hit text-white text-[9px] font-bold rounded-full px-1 leading-tight">{badge}</span>}
+                  </span>
                   <span className="text-lg">{h.emoji}</span>
                   <span className="flex-1 min-w-0">
                     <span className="text-sm font-bold">{h.name}</span>
@@ -417,11 +459,6 @@ export default function HorseRacePage() {
 
           {/* 배팅 슬립 */}
           <div className="rounded-xl border border-gray-200 p-3 space-y-2">
-            <div className="flex gap-2">
-              {(['WIN', 'PLACE'] as const).map((t) => (
-                <button key={t} onClick={() => setBetType(t)} className={`flex-1 py-1.5 rounded-lg border text-sm font-bold ${betType === t ? 'border-hit bg-hit/5 text-hit' : 'border-gray-200 text-gray-400'}`}>{t === 'WIN' ? '단승(1등)' : '연승(3등내)'}</button>
-              ))}
-            </div>
             <div className="flex items-center gap-1">
               <button onClick={() => setBetAmt((a) => Math.max(10, a - 100))} className="w-9 h-9 rounded-lg border border-gray-300 font-bold">−</button>
               <input type="number" value={betAmt} onChange={(e) => setBetAmt(Math.max(10, Math.round((+e.target.value || 0) / 10) * 10))} className="flex-1 border border-gray-300 rounded-lg px-2 py-2 text-center font-bold" />
@@ -429,16 +466,16 @@ export default function HorseRacePage() {
               <button onClick={() => setBetAmt(st.chips)} className="px-2 h-9 rounded-lg border border-gray-300 text-xs font-bold">올인</button>
             </div>
             <div className="flex items-center justify-between text-xs text-gray-500">
-              <span>{selHorse != null ? `${st.horses[selHorse]?.name} · ${betType === 'WIN' ? '단승' : '연승'}` : '말 선택'}</span>
-              {selHorse != null && <span>적중 시 <b className="text-hit">{won(potential)}</b></span>}
+              <span>{picks.length > 0 ? `${BET_LABEL[betType]} · ${picks.map((i) => st.horses[i]?.name).join(betType === 'EXACTA' ? ' → ' : ', ')}` : `${BET_LABEL[betType]} · 말 ${needPicks}개 선택`}</span>
+              {picks.length === needPicks && <span>배당 <b className="text-hit">{betOdds.toFixed(1)}</b> · 적중 시 <b className="text-hit">{won(potential)}</b></span>}
             </div>
-            <button onClick={handleBet} disabled={busy || selHorse == null || betAmt > st.chips} className="w-full bg-hit text-white font-bold py-2.5 rounded-lg disabled:opacity-40">배팅하기</button>
+            <button onClick={handleBet} disabled={busy || picks.length !== needPicks || betAmt > st.chips} className="w-full bg-hit text-white font-bold py-2.5 rounded-lg disabled:opacity-40">배팅하기 {picks.length !== needPicks ? `(${picks.length}/${needPicks})` : ''}</button>
           </div>
 
           {st.myBets.length > 0 && (
             <div className="text-xs text-gray-500">
               <p className="font-bold mb-1">내 배팅</p>
-              {st.myBets.map((b, i) => <span key={i} className="inline-block bg-gray-100 rounded px-2 py-0.5 mr-1 mb-1">{st.horses[b.horseIndex]?.name} {b.type === 'WIN' ? '단' : '연'} {won(b.amount)}</span>)}
+              {st.myBets.map((b, i) => <span key={i} className="inline-block bg-gray-100 rounded px-2 py-0.5 mr-1 mb-1">{BET_LABEL[b.type]} {b.picks.map((h) => st.horses[h]?.name).join(b.type === 'EXACTA' ? '→' : ',')} {won(b.amount)}</span>)}
             </div>
           )}
         </div>
