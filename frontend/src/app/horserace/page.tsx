@@ -496,7 +496,7 @@ export default function HorseRacePage() {
             ))}
           </div>
           <p className="text-center text-[11px] text-gray-400">
-            {betType === 'WIN' ? '1등 맞히기' : betType === 'PLACE' ? '3등 안에 들면' : betType === 'EXACTA' ? '1·2등을 순서대로 (말 2개: 1착→2착)' : '1·2·3등 (순서 무관, 말 3개)'}
+            {betType === 'WIN' ? '1등 맞히기 · 각 줄에 단승 배당' : betType === 'PLACE' ? '3등 안에 들면 · 각 줄에 연승 배당' : betType === 'EXACTA' ? '말 2개를 1착→2착 순서로 고르면 배당이 아래에 떠요' : '말 3개를 고르면(순서 무관) 배당이 아래에 떠요'}
           </p>
 
           <div className="space-y-1.5">
@@ -535,9 +535,19 @@ export default function HorseRacePage() {
               <button onClick={() => setBetAmt((a) => a + 100)} className="w-9 h-9 rounded-lg border border-gray-300 font-bold">+</button>
               <button onClick={() => setBetAmt(st.chips)} className="px-2 h-9 rounded-lg border border-gray-300 text-xs font-bold">올인</button>
             </div>
-            <div className="flex items-center justify-between text-xs text-gray-500">
-              <span>{picks.length > 0 ? `${BET_LABEL[betType]} · ${picks.map((i) => st.horses[i]?.name).join(betType === 'EXACTA' ? ' → ' : ', ')}` : `${BET_LABEL[betType]} · 말 ${needPicks}개 선택`}</span>
-              {picks.length === needPicks && <span>배당 <b className="text-hit">{betOdds.toFixed(1)}</b> · 적중 시 <b className="text-hit">{won(potential)}</b></span>}
+            <p className="text-xs text-gray-500 text-center">
+              {picks.length > 0 ? `${BET_LABEL[betType]} · ${picks.map((i) => st.horses[i]?.name).join(betType === 'EXACTA' ? ' → ' : ', ')}` : `${BET_LABEL[betType]} · 아래에서 말 ${needPicks}개 선택`}
+            </p>
+            <div className="rounded-lg bg-hit/5 border border-hit/20 px-3 py-2 text-center">
+              {picks.length === needPicks ? (
+                <>
+                  <span className="text-xs text-gray-500">{BET_LABEL[betType]} 배당 </span>
+                  <span className="text-xl font-extrabold text-hit">{betOdds.toFixed(1)}배</span>
+                  <span className="block text-xs text-gray-600">적중 시 <b className="text-hit">{won(potential)}</b> 받아요</span>
+                </>
+              ) : (
+                <span className="text-sm text-gray-400">말 <b>{needPicks}개</b>를 고르면 배당이 표시돼요 ({picks.length}/{needPicks})</span>
+              )}
             </div>
             <button onClick={handleBet} disabled={busy || picks.length !== needPicks || betAmt > st.chips} className="w-full bg-hit text-white font-bold py-2.5 rounded-lg disabled:opacity-40">배팅하기 {picks.length !== needPicks ? `(${picks.length}/${needPicks})` : ''}</button>
           </div>
