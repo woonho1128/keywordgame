@@ -73,7 +73,7 @@ const ROLE_META: Record<string, { label: string; emoji: string; color: string; d
   CITIZEN: { label: '시민', emoji: '🧑', color: 'text-gray-700', desc: '능력 없음. 토론과 투표로 마피아를 찾으세요.' },
   POLICE: { label: '경찰', emoji: '👮', color: 'text-blue-500', desc: '밤마다 1명을 조사하면 직업 후보 2개가 나옵니다(하나가 진짜).' },
   DOCTOR: { label: '의사', emoji: '🩺', color: 'text-green-600', desc: '밤마다 1명을 치료해 마피아 공격을 막습니다(자신 포함).' },
-  PSYCHO: { label: '정신병자', emoji: '🤪', color: 'text-purple-500', desc: '시민팀. 본인은 다른 직업인 줄 알지만 능력이 통하지 않습니다.' },
+  PSYCHO: { label: '정신병자', emoji: '🤪', color: 'text-purple-500', desc: '시민팀. 본인에겐 경찰·의사·관찰자·봉쇄자 중 하나로 보이지만 능력이 실제로는 통하지 않습니다(가짜 결과).' },
   OBSERVER: { label: '관찰자', emoji: '👁️', color: 'text-cyan-600', desc: '시민팀. 밤마다 1명을 관찰해 그 사람이 밤에 누구를 지목했는지 알아냅니다(행동 종류는 모름).' },
   BLOCKER: { label: '봉쇄자', emoji: '🚫', color: 'text-indigo-600', desc: '시민팀. 밤마다 1명을 봉쇄해 그 사람의 밤 능력을 무효화합니다(마피아 킬도 막을 수 있음).' },
   MAFIA: { label: '마피아', emoji: '🔪', color: 'text-red-500', desc: '밤마다 동료와 함께 1명을 제거합니다.' },
@@ -384,14 +384,20 @@ export default function MafiaJobsPage() {
       </div>
 
       {st.joined && st.myRole && phase !== 'ENDED' && (
-        <div className="w-full mb-4 rounded-xl border border-gray-200 p-3 flex items-center justify-between">
-          <span className="text-sm text-gray-500">
-            내 직업 {st.myTeam && <span className="ml-1 text-gray-400">({teamLabel(st.myTeam)})</span>}
-          </span>
-          <span className={`font-bold ${ROLE_META[st.myRole]?.color}`}>
-            {ROLE_META[st.myRole]?.emoji} {ROLE_META[st.myRole]?.label}
-            {!st.alive && <span className="ml-2 text-gray-400">(사망)</span>}
-          </span>
+        <div className="w-full mb-4">
+          <div className="rounded-xl border border-gray-200 p-3 flex items-center justify-between">
+            <span className="text-sm text-gray-500">
+              내 직업 {st.myTeam && <span className="ml-1 text-gray-400">({teamLabel(st.myTeam)})</span>}
+            </span>
+            <span className="flex items-center gap-2">
+              <span className={`font-bold ${ROLE_META[st.myRole]?.color}`}>
+                {ROLE_META[st.myRole]?.emoji} {ROLE_META[st.myRole]?.label}
+                {!st.alive && <span className="ml-2 text-gray-400">(사망)</span>}
+              </span>
+              <button onClick={() => setShowRoles((v) => !v)} className="text-xs px-2 py-1 rounded bg-gray-100 text-gray-500 font-bold">📖 직업</button>
+            </span>
+          </div>
+          {showRoles && <div className="mt-2">{rolesHelp()}</div>}
         </div>
       )}
 
@@ -459,18 +465,45 @@ export default function MafiaJobsPage() {
   }
 
   function rolesHelp() {
+    const groups: { title: string; color: string; keys: string[] }[] = [
+      { title: '🔵 시민팀 (마피아 전멸 시 승리)', color: 'text-blue-600', keys: ['CITIZEN', 'POLICE', 'DOCTOR', 'OBSERVER', 'BLOCKER', 'PSYCHO'] },
+      { title: '🔴 마피아팀 (마피아 수 ≥ 나머지 시 승리)', color: 'text-red-500', keys: ['MAFIA', 'MAFIA_COP', 'MAFIA_SHADOW', 'MAFIA_OBSERVER', 'MAFIA_BLOCKER'] },
+      { title: '⚪ 중립', color: 'text-amber-500', keys: ['ATTENTION', 'THIEF'] },
+    ];
     return (
-      <div className="rounded-xl border border-gray-200 p-4 text-sm space-y-2">
+      <div className="rounded-xl border border-gray-200 p-4 text-sm space-y-3">
         <div className="flex items-center justify-between">
-          <p className="font-bold">직업 설명</p>
+          <p className="font-bold">📖 직업 · 규칙 설명</p>
           <button onClick={() => setShowRoles(false)} className="text-xs text-gray-400">닫기 ✕</button>
         </div>
-        {Object.entries(ROLE_META).map(([k, m]) => (
-          <div key={k}>
-            <span className={`font-bold ${m.color}`}>{m.emoji} {m.label}</span>
-            <span className="text-gray-500"> — {m.desc}</span>
+
+        {groups.map((g) => (
+          <div key={g.title} className="space-y-1">
+            <p className={`font-bold text-xs ${g.color}`}>{g.title}</p>
+            {g.keys.filter((k) => ROLE_META[k]).map((k) => {
+              const m = ROLE_META[k];
+              return (
+                <div key={k} className="pl-1">
+                  <span className={`font-bold ${m.color}`}>{m.emoji} {m.label}</span>
+                  <span className="text-gray-500"> — {m.desc}</span>
+                </div>
+              );
+            })}
           </div>
         ))}
+
+        <div className="pt-2 border-t border-gray-100 space-y-1">
+          <p className="font-bold text-xs text-gray-700">🌙 게임 진행</p>
+          <p className="text-gray-500">밤(각자 지목·능력) → 아침(결과 공개) → 토론 → 낮 투표(지목) → 🎤 최후변론 → ⚖️ 사형/생존 투표 → 처형 or 생존 → 다시 밤.</p>
+          <p className="text-gray-500">· 낮 투표는 <b>최다 득표자를 재판대에 올리는 지목</b>이에요. 동표·기권이면 재판 없이 처형 없음.</p>
+          <p className="text-gray-500">· 사형/생존 투표에서 <b>사형 표가 더 많아야 처형</b>(동수·생존 우세면 생존). 재판 당사자는 투표 불가.</p>
+        </div>
+
+        <div className="pt-2 border-t border-gray-100 space-y-1">
+          <p className="font-bold text-xs text-gray-700">⏱️ 밤 능력 순서</p>
+          <p className="text-gray-500">🚫 봉쇄자(가장 먼저) → 의사 보호·마피아 킬·경찰 조사·도적꾼 강탈(순서 무관) → 👁️ 관찰자(가장 마지막). 봉쇄당한 사람은 그 밤 능력이 무효(관찰자엔 "행동 없음"으로 보임).</p>
+          <p className="text-gray-500">· 능력마피아(경찰·관찰·봉쇄)는 밤마다 <b>능력 or 살해</b> 택1.</p>
+        </div>
       </div>
     );
   }
