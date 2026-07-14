@@ -337,7 +337,7 @@ export default function TetrisPage() {
             {mode === 'sprint'
               ? <span className="text-cyan-500 font-mono">{lines}/{SPRINT_GOAL}줄 · {fmtTime(elapsed)}</span>
               : <span className="text-slate-400">Lv{level} · {lines}줄</span>}
-            <button onClick={togglePause} className="px-2 py-0.5 rounded bg-slate-700 text-xs">{phase === 'paused' ? '▶' : '⏸'}</button>
+            <button onClick={togglePause} className="hidden sm:inline-block px-2 py-0.5 rounded bg-slate-700 text-xs">{phase === 'paused' ? '▶' : '⏸'}</button>
           </div>
         )}
       </div>
@@ -359,7 +359,7 @@ export default function TetrisPage() {
             {/* 중: 보드 */}
             <div className="relative" style={{ transform: shake && Date.now() - shake < 160 ? 'translateY(2px)' : 'none' }}>
               <canvas ref={canvasRef}
-                className="rounded-lg border-2 border-slate-700 bg-slate-900 touch-none block w-auto h-auto max-w-[86vw] max-h-[56vh] sm:max-w-[360px] sm:max-h-[82vh]" />
+                className="rounded-lg border-2 border-slate-700 bg-slate-900 touch-none block w-auto h-auto max-w-[80vw] max-h-[46vh] sm:max-w-[360px] sm:max-h-[82vh]" />
               {float && (
                 <div key={float.id} className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
                   <span className="text-2xl font-extrabold text-white drop-shadow-[0_2px_8px_rgba(0,0,0,0.9)] animate-pulse">{float.text}</span>
@@ -378,15 +378,19 @@ export default function TetrisPage() {
             <div className="flex flex-col gap-1.5 items-center pt-1">
               <span className="text-[11px] text-slate-400 font-bold">NEXT</span>
               <div className="p-1.5 rounded-lg bg-slate-800/70 border border-slate-700 flex flex-col gap-1">
-                {nextQ.map((t, i) => <MiniPiece key={i} type={t} />)}
+                {nextQ.slice(0, 5).map((t, i) => (
+                  <div key={i} className={i >= 4 ? 'hidden sm:block' : ''}><MiniPiece type={t} /></div>
+                ))}
               </div>
-              {/* 모바일용 HOLD */}
-              <button onClick={doHold} className="sm:hidden mt-1 px-3 py-1.5 rounded-lg bg-slate-700 text-xs font-bold">HOLD<div className="mt-1"><MiniPiece type={hold} /></div></button>
             </div>
           </div>
 
-          {/* 모바일 조작 바 (하단 여백으로 좌하단 플로팅 홈 버튼과 겹침 방지) */}
-          <div className="sm:hidden mt-4 pb-20 w-full max-w-sm select-none">
+          {/* 모바일 조작 바 */}
+          <div className="sm:hidden mt-3 pb-6 w-full max-w-sm select-none">
+            <div className="flex gap-2 mb-2">
+              <button onClick={doHold} className="flex-1 py-2 rounded-lg bg-slate-700 text-sm font-bold">HOLD{hold ? ` (${hold})` : ''}</button>
+              <button onClick={togglePause} className="flex-1 py-2 rounded-lg bg-slate-700 text-sm font-bold">{phase === 'paused' ? '▶ 계속' : '⏸ 일시정지'}</button>
+            </div>
             <div className="grid grid-cols-3 gap-2 mb-2">
               <button onPointerDown={() => act((e) => e.rotate(-1))} className="py-3 rounded-lg bg-slate-700 font-bold text-lg">⟲</button>
               <button onPointerDown={doHardDrop} className="py-3 rounded-lg bg-fuchsia-600 font-bold text-lg">⤓ 하드</button>
