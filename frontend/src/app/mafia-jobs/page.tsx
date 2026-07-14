@@ -124,6 +124,7 @@ export default function MafiaJobsPage() {
   const [mafiaCopMax, setMafiaCopMax] = useState(0);
   const [mafiaShadowMin, setMafiaShadowMin] = useState(0);
   const [mafiaShadowMax, setMafiaShadowMax] = useState(0);
+  const [abilityIndependentKill, setAbilityIndependentKill] = useState(false);
   const [showRoles, setShowRoles] = useState(false);
 
   const [showAdmin, setShowAdmin] = useState(false);
@@ -223,7 +224,7 @@ export default function MafiaJobsPage() {
     try {
       const res = await api<{ roomCode: string; state: JobState }>(
         `/api/v1/jobmafia/new?clientId=${encodeURIComponent(clientId)}`,
-        { method: 'POST', body: JSON.stringify({ nick: n, nightSec, discussSec, voteSec, mafiaMin, mafiaMax, psychoMin, psychoMax, attentionMin, attentionMax, thiefMin, thiefMax, neutralGrouped, neutralMin, neutralMax, mafiaCopMin, mafiaCopMax, mafiaShadowMin, mafiaShadowMax }) }
+        { method: 'POST', body: JSON.stringify({ nick: n, nightSec, discussSec, voteSec, mafiaMin, mafiaMax, psychoMin, psychoMax, attentionMin, attentionMax, thiefMin, thiefMax, neutralGrouped, neutralMin, neutralMax, mafiaCopMin, mafiaCopMax, mafiaShadowMin, mafiaShadowMax, abilityIndependentKill }) }
       );
       changeRoom(res.roomCode);
       setSt(res.state);
@@ -513,6 +514,10 @@ export default function MafiaJobsPage() {
           {rangeRow('🕵️‍♂️ ⌞경찰마피아', mafiaCopMin, setMafiaCopMin, mafiaCopMax, setMafiaCopMax, 0, 4)}
           {rangeRow('🥷 ⌞그림자마피아', mafiaShadowMin, setMafiaShadowMin, mafiaShadowMax, setMafiaShadowMax, 0, 4)}
           <p className="text-[11px] text-gray-400 -mt-1">경찰마피아·그림자마피아는 마피아 총원 안에서 배정돼요(나머지는 일반 마피아).</p>
+          <label className="flex items-start gap-2 text-xs text-gray-600 pt-1 border-t border-gray-200 mt-1">
+            <input type="checkbox" className="mt-0.5" checked={abilityIndependentKill} onChange={(e) => setAbilityIndependentKill(e.target.checked)} />
+            <span>⚔️ <b>능력마피아 독립 킬</b> — 켜면 경찰마피아(살해)·그림자마피아가 <b>자기 표적을 각자 처치</b>해서 밤에 여러 명이 죽을 수 있어요(마피아 강화). 끄면 모든 마피아가 다수결로 1명만 처치.</span>
+          </label>
           {rangeRow('🤪 정신병자', psychoMin, setPsychoMin, psychoMax, setPsychoMax, 0, 3)}
           <label className="flex items-center gap-2 text-xs text-gray-600 pt-1">
             <input type="checkbox" checked={neutralGrouped} onChange={(e) => setNeutralGrouped(e.target.checked)} />

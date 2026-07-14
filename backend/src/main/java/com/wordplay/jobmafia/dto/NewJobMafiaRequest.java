@@ -30,5 +30,8 @@ public record NewJobMafiaRequest(
         Integer mafiaCopMin,     // 경찰마피아(조사/살해 택1)
         Integer mafiaCopMax,
         Integer mafiaShadowMin,  // 그림자마피아(살해 시 정체 은폐)
-        Integer mafiaShadowMax
+        Integer mafiaShadowMax,
+        // 능력마피아 독립 킬 모드: true면 경찰마피아(살해)·그림자마피아가 자기 표적을 각자 처치
+        // (밤에 여러 명 사망 가능). false(기본)면 모든 마피아가 다수결로 1명만 처치.
+        Boolean abilityIndependentKill
 ) {}
