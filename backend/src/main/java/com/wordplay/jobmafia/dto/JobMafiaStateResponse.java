@@ -35,6 +35,10 @@ public record JobMafiaStateResponse(
         int nightDeadSeat,
         int executedSeat,
         List<VoteView> voteTally,
+        int accusedSeat,               // 재판대에 오른 좌석(1-based, 없으면 -1)
+        int killVotes,                 // 사형 표 수(FINAL_VOTE/EXECUTE)
+        int spareVotes,                // 생존 표 수
+        int myFinalVote,               // 내 사형투표: -1 미투표 / 0 생존 / 1 사형
         String winner,                 // ENDED: CITIZEN/MAFIA/NEUTRAL
         int aliveCount,
         int playerCount,
@@ -48,6 +52,6 @@ public record JobMafiaStateResponse(
         return new JobMafiaStateResponse(
                 "NOT_STARTED", 0, 0, now, false, false, 0, null, null, null, false,
                 List.of(), "NONE", false, List.of(), -1, List.of(), List.of(), List.of(),
-                null, -1, -1, List.of(), null, 0, 0, List.of(), List.of());
+                null, -1, -1, List.of(), -1, 0, 0, -1, null, 0, 0, List.of(), List.of());
     }
 }

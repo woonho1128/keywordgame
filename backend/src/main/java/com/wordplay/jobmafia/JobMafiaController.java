@@ -82,6 +82,13 @@ public class JobMafiaController {
         return ApiResponse.success(rooms.require(roomCode).vote(clientId, req.target()));
     }
 
+    @PostMapping("/final-vote")
+    public ApiResponse<JobMafiaStateResponse> finalVote(@RequestParam String roomCode, @RequestParam String clientId,
+                                                        @RequestParam boolean execute) {
+        validateClientId(clientId);
+        return ApiResponse.success(rooms.require(roomCode).finalVote(clientId, execute));
+    }
+
     @PostMapping("/reset")
     public ApiResponse<JobMafiaStateResponse> reset(@RequestParam String code) {
         if (!adminCode.equals(code)) throw new BusinessException(ErrorCode.INVALID_INPUT, "관리자 코드가 올바르지 않습니다");

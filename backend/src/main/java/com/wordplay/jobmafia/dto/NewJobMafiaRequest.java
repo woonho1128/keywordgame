@@ -43,5 +43,7 @@ public record NewJobMafiaRequest(
         Integer mafiaBlockerMax,
         // 능력마피아 독립 킬 모드: true면 능력마피아(살해 모드)·그림자마피아가 자기 표적을 각자 처치
         // (밤에 여러 명 사망 가능). false(기본)면 모든 마피아가 다수결로 1명만 처치.
-        Boolean abilityIndependentKill
+        Boolean abilityIndependentKill,
+        Integer defenseSec,     // 최후변론 시간(초)
+        Integer finalVoteSec    // 사형/생존 투표 시간(초)
 ) {}

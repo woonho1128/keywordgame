@@ -20,7 +20,7 @@ class JobMafiaServiceTest {
         JobMafiaService svc = new JobMafiaService();
         clients.clear();
         // 범위 고정: 마피아1·정신병자1·관종1 → 6인이면 각 1명 + 시민1 (결정적)
-        svc.newGame("host", new NewJobMafiaRequest("방장", null, null, null, 1, 1, 1, 1, 1, 1, 0, 0, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null));
+        svc.newGame("host", new NewJobMafiaRequest("방장", null, null, null, 1, 1, 1, 1, 1, 1, 0, 0, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null));
         clients.add("host");
         for (int i = 1; i <= 5; i++) { svc.join("c" + i, "p" + i); clients.add("c" + i); }
         svc.start("host");
@@ -33,7 +33,7 @@ class JobMafiaServiceTest {
             JobMafiaService svc = new JobMafiaService();
             clients.clear();
             // 마피아1·정신병자0, 중립(관종·도적꾼) 통합 정확히 1명
-            svc.newGame("host", new NewJobMafiaRequest("방장", null, null, null, 1, 1, 0, 0, 0, 0, 0, 0, true, 1, 1, null, null, null, null, null, null, null, null, null, null, null, null, null));
+            svc.newGame("host", new NewJobMafiaRequest("방장", null, null, null, 1, 1, 0, 0, 0, 0, 0, 0, true, 1, 1, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null));
             clients.add("host");
             for (int i = 1; i <= 5; i++) { svc.join("c" + i, "p" + i); clients.add("c" + i); }
             svc.start("host");
@@ -49,7 +49,7 @@ class JobMafiaServiceTest {
             JobMafiaService svc = new JobMafiaService();
             clients.clear();
             // 마피아 정확히 2명, 그중 경찰마피아1 + 그림자마피아1 → 일반 마피아 0
-            svc.newGame("host", new NewJobMafiaRequest("방장", null, null, null, 2, 2, 0, 0, 0, 0, 0, 0, null, null, null, 1, 1, 1, 1, null, null, null, null, null, null, null, null, null));
+            svc.newGame("host", new NewJobMafiaRequest("방장", null, null, null, 2, 2, 0, 0, 0, 0, 0, 0, null, null, null, 1, 1, 1, 1, null, null, null, null, null, null, null, null, null, null, null));
             clients.add("host");
             for (int i = 1; i <= 6; i++) { svc.join("c" + i, "p" + i); clients.add("c" + i); }
             svc.start("host");
@@ -165,10 +165,68 @@ class JobMafiaServiceTest {
         assertThat(st.players().get(killSeat - 1).alive()).isFalse();
     }
 
+    /** 밤: 생존자 전원 첫 선택지로 행동 → 아침으로 넘어감. */
+    private void driveNight(JobMafiaService svc) {
+        for (String c : clients) {
+            JobMafiaStateResponse st = svc.me(c);
+            if (st.status().equals("NIGHT") && st.alive() && !st.selectable().isEmpty())
+                svc.nightAction(c, st.selectable().get(0));
+        }
+    }
+
+    @Test
+    void 최후변론_사형투표로_처형된다() throws Exception {
+        JobMafiaService svc = start6();
+        driveNight(svc);
+        forcePhaseEnd(svc); svc.me("host"); // MORNING→DISCUSS
+        forcePhaseEnd(svc); svc.me("host"); // DISCUSS→VOTE
+        assertThat(svc.me("host").status()).isEqualTo("VOTE");
+
+        List<Integer> alive = svc.me("host").players().stream().filter(p -> p.alive()).map(p -> p.seat()).toList();
+        int accused = alive.get(0), other = alive.get(1);
+        for (String c : clients) {
+            JobMafiaStateResponse st = svc.me(c);
+            if (!st.alive()) continue;
+            svc.vote(c, st.seat() == accused ? other : accused); // 재판대=accused
+        }
+        JobMafiaStateResponse afterVote = svc.me("host");
+        assertThat(afterVote.status()).isEqualTo("DEFENSE");
+        assertThat(afterVote.accusedSeat()).isEqualTo(accused);
+
+        forcePhaseEnd(svc); svc.me("host"); // DEFENSE→FINAL_VOTE
+        assertThat(svc.me("host").status()).isEqualTo("FINAL_VOTE");
+
+        for (String c : clients) {
+            JobMafiaStateResponse st = svc.me(c);
+            if (st.alive() && st.seat() != accused) svc.finalVote(c, true); // 전원 사형
+        }
+        assertThat(svc.me("host").players().get(accused - 1).alive()).isFalse(); // 처형됨
+    }
+
+    @Test
+    void 사형_부결이면_생존한다() throws Exception {
+        JobMafiaService svc = start6();
+        driveNight(svc);
+        forcePhaseEnd(svc); svc.me("host");
+        forcePhaseEnd(svc); svc.me("host");
+        List<Integer> alive = svc.me("host").players().stream().filter(p -> p.alive()).map(p -> p.seat()).toList();
+        int accused = alive.get(0), other = alive.get(1);
+        for (String c : clients) {
+            JobMafiaStateResponse st = svc.me(c);
+            if (st.alive()) svc.vote(c, st.seat() == accused ? other : accused);
+        }
+        forcePhaseEnd(svc); svc.me("host"); // DEFENSE→FINAL_VOTE
+        for (String c : clients) {
+            JobMafiaStateResponse st = svc.me(c);
+            if (st.alive() && st.seat() != accused) svc.finalVote(c, false); // 전원 생존
+        }
+        assertThat(svc.me("host").players().get(accused - 1).alive()).isTrue(); // 생존
+    }
+
     @Test
     void 최소인원_미달_시작불가() {
         JobMafiaService svc = new JobMafiaService();
-        svc.newGame("host", new NewJobMafiaRequest("방장", null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null));
+        svc.newGame("host", new NewJobMafiaRequest("방장", null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null));
         for (int i = 1; i <= 3; i++) svc.join("c" + i, "p" + i);
         assertThatThrownBy(() -> svc.start("host")).hasMessageContaining("최소 5명");
     }

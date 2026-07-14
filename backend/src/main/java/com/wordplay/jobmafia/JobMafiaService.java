@@ -31,7 +31,7 @@ import java.util.concurrent.ThreadLocalRandom;
  */
 public class JobMafiaService implements RoomGame {
 
-    enum Phase { LOBBY, NIGHT, MORNING, DISCUSS, VOTE, EXECUTE, ENDED }
+    enum Phase { LOBBY, NIGHT, MORNING, DISCUSS, VOTE, DEFENSE, FINAL_VOTE, EXECUTE, ENDED }
     // 시민 능력직: 경찰·의사·관찰자(대상의 밤 지목 확인)·봉쇄자(대상 밤 능력 무효)
     // 마피아 능력종(능력/킬 택1): 경찰마피아·관찰자마피아·봉쇄자마피아 / 그림자마피아(살해+정체은폐)
     enum Role { CITIZEN, POLICE, DOCTOR, PSYCHO, OBSERVER, BLOCKER,
@@ -48,6 +48,7 @@ public class JobMafiaService implements RoomGame {
 
     private static final long MORNING_MS = 6_000;
     private static final long EXECUTE_MS = 6_000;
+    private long defenseMs = 20_000, finalVoteMs = 20_000; // 최후변론·사형투표 시간
 
     private static final class Player {
         final String clientId;
@@ -102,6 +103,8 @@ public class JobMafiaService implements RoomGame {
 
     // 투표
     private final Map<Integer, Integer> votes = new HashMap<>();
+    private int accusedSeat = -1;                                  // 최다 득표로 재판대에 오른 좌석
+    private final Map<Integer, Boolean> finalVotes = new HashMap<>(); // 좌석 -> 사형(true)/생존(false)
 
     // 결과
     private String nightMessage = null;
@@ -123,6 +126,8 @@ public class JobMafiaService implements RoomGame {
         nightMs = clampSec(req.nightSec(), 20, 180, 60) * 1000L;
         discussMs = clampSec(req.discussSec(), 15, 300, 90) * 1000L;
         voteMs = clampSec(req.voteSec(), 10, 120, 30) * 1000L;
+        defenseMs = clampSec(req.defenseSec(), 5, 120, 20) * 1000L;
+        finalVoteMs = clampSec(req.finalVoteSec(), 5, 120, 20) * 1000L;
         mafiaMin = clampInt(req.mafiaMin(), 0, 6, 1);
         mafiaMax = clampInt(req.mafiaMax(), mafiaMin, 6, Math.max(mafiaMin, 2));
         psychoMin = clampInt(req.psychoMin(), 0, 4, 0);
@@ -297,6 +302,20 @@ public class JobMafiaService implements RoomGame {
         return me(clientId);
     }
 
+    /** 사형/생존 투표(최후변론 후). 재판 당사자는 투표 불가. execute=true(사형)/false(생존). */
+    public synchronized JobMafiaStateResponse finalVote(String clientId, boolean execute) {
+        tick();
+        Player me = requirePlayer(clientId);
+        if (phase != Phase.FINAL_VOTE) throw new BusinessException(ErrorCode.INVALID_INPUT, "지금은 사형/생존 투표 시간이 아닙니다");
+        if (!me.alive) throw new BusinessException(ErrorCode.INVALID_INPUT, "사망한 플레이어입니다");
+        int seat = seatOf(me);
+        if (seat == accusedSeat) throw new BusinessException(ErrorCode.INVALID_INPUT, "재판 당사자는 투표할 수 없습니다");
+        finalVotes.put(seat, execute);
+        long eligible = aliveSeats().stream().filter(s -> s != accusedSeat).count();
+        if (finalVotes.size() >= eligible) advance();
+        return me(clientId);
+    }
+
     public synchronized JobMafiaStateResponse resetGame() {
         reset();
         return JobMafiaStateResponse.notStarted(System.currentTimeMillis());
@@ -354,7 +373,13 @@ public class JobMafiaService implements RoomGame {
             case MORNING -> startPhase(Phase.DISCUSS);
             case DISCUSS -> { votes.clear(); startPhase(Phase.VOTE); }
             case VOTE -> {
-                resolveVote();
+                resolveNomination();                      // 최다 득표자를 재판대에 올림(아직 죽이지 않음)
+                if (accusedSeat >= 0) { finalVotes.clear(); startPhase(Phase.DEFENSE); }
+                else { executedSeat = -1; startPhase(Phase.EXECUTE); } // 지목 없음 → 처형 없음
+            }
+            case DEFENSE -> { finalVotes.clear(); startPhase(Phase.FINAL_VOTE); }
+            case FINAL_VOTE -> {
+                resolveFinalVote();                       // 사형/생존 집계 → 실제 처형 여부 결정
                 if (executedSeat >= 0 && players.get(executedSeat).role == Role.ATTENTION) {
                     winner = "NEUTRAL"; phase = Phase.ENDED; phaseEndsAt = 0; // 관종 처형 → 관종 승
                     history.add("🏁 관종 단독 승리!");
@@ -375,6 +400,8 @@ public class JobMafiaService implements RoomGame {
             case MORNING -> now + MORNING_MS;
             case DISCUSS -> now + discussMs;
             case VOTE -> now + voteMs;
+            case DEFENSE -> now + defenseMs;
+            case FINAL_VOTE -> now + finalVoteMs;
             case EXECUTE -> now + EXECUTE_MS;
             default -> 0;
         };
@@ -723,14 +750,13 @@ public class JobMafiaService implements RoomGame {
         return best;
     }
 
-    private void resolveVote() {
-        executedSeat = -1;
+    /** 낮 투표 집계 → 최다 득표자를 재판대에 올린다(아직 죽이지 않음). 동표·기권이면 지목 없음. */
+    private void resolveNomination() {
+        accusedSeat = -1; executedSeat = -1;
         Map<Integer, Integer> tally = new HashMap<>();
         for (int t : votes.values()) if (t != -1) tally.merge(t, 1, Integer::sum);
-        // 개인 투표 기록
         for (var e : votes.entrySet())
             myLog(e.getKey()).add(round + "일차 🗳️ 투표: " + (e.getValue() < 0 ? "기권" : players.get(e.getValue()).nick));
-        // 공개 집계
         if (!tally.isEmpty()) {
             List<Map.Entry<Integer, Integer>> es = new ArrayList<>(tally.entrySet());
             es.sort((a, b) -> b.getValue() - a.getValue());
@@ -741,19 +767,33 @@ public class JobMafiaService implements RoomGame {
             }
             history.add(round + "일차 🗳️ 집계: " + sb);
         }
-        int max = 0, top = -1;
-        boolean tie = false;
+        int max = 0, top = -1; boolean tie = false;
         for (var e : tally.entrySet()) {
             if (e.getValue() > max) { max = e.getValue(); top = e.getKey(); tie = false; }
             else if (e.getValue() == max) tie = true;
         }
         if (top >= 0 && !tie && max > 0) {
-            players.get(top).alive = false;
-            executedSeat = top;
-            history.add(round + "일차 ☀️ " + players.get(top).nick + "님 처형 (정체: " + jobLabel(players.get(top).role) + ")");
+            accusedSeat = top;
+            history.add(round + "일차 ⚖️ " + players.get(top).nick + "님이 최다 득표 — 최후변론 후 사형/생존 투표");
         } else {
-            history.add(round + "일차 ☀️ 처형 없음 (동표 또는 기권)");
+            history.add(round + "일차 ☀️ 지목 없음 (동표 또는 기권) — 처형 없음");
         }
+    }
+
+    /** 사형/생존 투표 집계 → 사형 표가 더 많으면 처형. 재판대 본인은 투표 못 함. */
+    private void resolveFinalVote() {
+        executedSeat = -1;
+        int kill = 0, spare = 0;
+        for (boolean v : finalVotes.values()) { if (v) kill++; else spare++; }
+        history.add(round + "일차 ⚖️ 사형투표: 사형 " + kill + " · 생존 " + spare);
+        if (accusedSeat >= 0 && kill > spare && players.get(accusedSeat).alive) {
+            players.get(accusedSeat).alive = false;
+            executedSeat = accusedSeat;
+            history.add(round + "일차 ☀️ " + players.get(accusedSeat).nick + "님 처형 (정체: " + jobLabel(players.get(accusedSeat).role) + ")");
+        } else {
+            history.add(round + "일차 ☀️ " + (accusedSeat >= 0 ? players.get(accusedSeat).nick + "님 생존 (사형 부결)" : "처형 없음"));
+        }
+        accusedSeat = -1;
     }
 
     private boolean checkWin() {
@@ -874,6 +914,10 @@ public class JobMafiaService implements RoomGame {
                 (phase == Phase.MORNING) ? seat1(nightDeadSeat) : -1,
                 (phase == Phase.EXECUTE || ended) ? seat1(executedSeat) : -1,
                 tally,
+                (phase == Phase.DEFENSE || phase == Phase.FINAL_VOTE) ? seat1(accusedSeat) : -1,
+                (int) finalVotes.values().stream().filter(Boolean::booleanValue).count(),
+                (int) finalVotes.values().stream().filter(v -> !v).count(),
+                joined && finalVotes.containsKey(mySeatIdx) ? (finalVotes.get(mySeatIdx) ? 1 : 0) : -1,
                 ended ? winner : null,
                 (int) players.stream().filter(p -> p.alive).count(),
                 players.size(),
@@ -963,6 +1007,8 @@ public class JobMafiaService implements RoomGame {
         mafiaObserverMin = mafiaObserverMax = mafiaBlockerMin = mafiaBlockerMax = 0;
         abilityIndependentKill = false;
         blockedSeats.clear();
+        defenseMs = 20_000; finalVoteMs = 20_000;
+        accusedSeat = -1; finalVotes.clear();
         nightMessage = null;
         nightDeadSeat = executedSeat = -1;
         winner = null;
