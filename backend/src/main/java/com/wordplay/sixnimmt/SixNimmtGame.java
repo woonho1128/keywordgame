@@ -3,6 +3,9 @@ package com.wordplay.sixnimmt;
 import com.wordplay.common.exception.BusinessException;
 import com.wordplay.common.exception.ErrorCode;
 import com.wordplay.common.room.RoomGame;
+import com.wordplay.sixnimmt.dto.SixNimmtState;
+import com.wordplay.sixnimmt.dto.SixNimmtState.PlayerView;
+import com.wordplay.sixnimmt.dto.SixNimmtState.RowCard;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -276,7 +279,36 @@ public class SixNimmtGame implements RoomGame {
         }
     }
 
-    // ── 조회용 게터(컨트롤러에서 DTO 조립) ──────────────
+    // ── 상태 뷰(클라이언트별) ───────────────────────────
+    public synchronized SixNimmtState me(String clientId) {
+        touch(); tick();
+        P me = byClient(clientId);
+        int meSeat = me == null ? -1 : seatOf(me);
+
+        List<List<RowCard>> rowsView = new ArrayList<>();
+        for (List<Integer> r : rows) { List<RowCard> rc = new ArrayList<>(); for (int c : r) rc.add(new RowCard(c, bulls(c))); rowsView.add(rc); }
+
+        List<PlayerView> pv = new ArrayList<>();
+        for (P p : players) {
+            if (p.left && phase == Phase.LOBBY) continue;
+            pv.add(new PlayerView(p.nick, p.bot, p.botLevel, p.host, p == me, p.penalty, p.selected != -1, p.lastTook, p.left));
+        }
+
+        List<RowCard> myHand = new ArrayList<>();
+        if (me != null) for (int c : me.hand) myHand.add(new RowCard(c, bulls(c)));
+
+        boolean myTurn = phase == Phase.SELECT && me != null && me.selected == -1 && !me.hand.isEmpty();
+        boolean iAmChooser = phase == Phase.CHOOSE_ROW && meSeat == chooserSeat;
+        String chooserName = phase == Phase.CHOOSE_ROW && chooserSeat >= 0 ? players.get(chooserSeat).nick : null;
+
+        return new SixNimmtState(
+                phase.name(), endMode.name(), targetHands, handIndex,
+                clientId != null && clientId.equals(hostClientId), me != null,
+                rowsView, pv, myHand, myTurn, iAmChooser, chooserName,
+                new ArrayList<>(trickEvents), winner, deadline, now());
+    }
+
+    // ── 조회용 게터 ─────────────────────────────────────
     public synchronized Phase phase() { return phase; }
     public EndMode endMode() { return endMode; }
     public int targetHands() { return targetHands; }
