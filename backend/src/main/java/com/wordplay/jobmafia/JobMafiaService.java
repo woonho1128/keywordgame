@@ -643,8 +643,10 @@ public class JobMafiaService implements RoomGame {
         return pluralityWinner(counts);
     }
 
-    /** 관찰 결과: 대상이 밤에 누구를 지목했는지만(행동 종류는 모름). */
+    /** 관찰 결과: 대상이 밤에 누구를 지목했는지만(행동 종류는 모름).
+     *  봉쇄자가 먼저 행위하므로, 봉쇄된 대상은 행동 자체를 못 해 "행동 없음"으로 보인다. */
     private String observeInfo(int targetSeat) {
+        if (blockedSeats.contains(targetSeat)) return "밤에 아무 행동도 하지 못함";
         Integer p = nightTargetBySeat.get(targetSeat);
         return (p != null && p >= 0 && p < players.size())
                 ? players.get(p).nick + "을(를) 지목함 (무언가 행동)"

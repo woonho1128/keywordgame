@@ -43,6 +43,20 @@ class JobMafiaObserverBlockerTest {
     }
 
     @Test
+    void 봉쇄된_대상은_관찰자에게_행동없음으로_보인다() {
+        // 순서: 봉쇄자 먼저 → 관찰자 마지막. 마피아가 봉쇄당하면 관찰자엔 '행동 못함'
+        JobMafiaService g = new JobMafiaService();
+        g.tSetup(List.of(Role.OBSERVER, Role.BLOCKER, Role.MAFIA, Role.CITIZEN)); // 0관찰 1봉쇄 2마피아 3시민
+        g.tTarget(1, 2); // 봉쇄자 → 마피아 봉쇄
+        g.tTarget(2, 3); // 마피아 → 시민3 지목(하지만 봉쇄됨)
+        g.tTarget(0, 2); // 관찰자 → 마피아 관찰
+        g.tResolve();
+        assertThat(g.tAlive(3)).isTrue();  // 마피아 봉쇄당해 킬 실패
+        assertThat(g.tMyLog(0)).anyMatch(s -> s.contains("관찰") && s.contains("하지 못함")); // 대상이 행동 못함
+        assertThat(g.tMyLog(0)).noneMatch(s -> s.contains("관찰") && s.contains("P3")); // P3 지목 안 보임
+    }
+
+    @Test
     void 관찰자마피아_능력모드는_킬하지_않는다() {
         JobMafiaService g = new JobMafiaService();
         g.tSetup(List.of(Role.MAFIA_OBSERVER, Role.CITIZEN, Role.CITIZEN)); // 0관찰자마피아 1,2시민
