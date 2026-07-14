@@ -23,7 +23,7 @@ class MafiaServiceTest {
     /** 5인 방 생성 → 시작 → 각 클라이언트의 역할/좌석 수집. */
     private Setup start5() {
         MafiaService svc = new MafiaService();
-        svc.newGame("host", new NewMafiaRequest("방장", null, null, null, null, null));
+        svc.newGame("host", new NewMafiaRequest("방장", null, null, null, null, null, null, null));
         for (int i = 1; i <= 4; i++) svc.join("c" + i, "p" + i);
         svc.start("host");
 
@@ -72,7 +72,7 @@ class MafiaServiceTest {
     @Test
     void 최소인원_미달_시작불가() {
         MafiaService svc = new MafiaService();
-        svc.newGame("host", new NewMafiaRequest("방장", null, null, null, null, null));
+        svc.newGame("host", new NewMafiaRequest("방장", null, null, null, null, null, null, null));
         svc.join("c1", "p1");
         assertThatThrownBy(() -> svc.start("host"))
                 .hasMessageContaining("최소 4명");

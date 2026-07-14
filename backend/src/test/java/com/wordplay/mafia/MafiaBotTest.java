@@ -26,7 +26,7 @@ class MafiaBotTest {
     @Test
     void 봇추가_대기방에서_최대3명() {
         MafiaService svc = new MafiaService(fakeRuntime());
-        svc.newGame("host", new NewMafiaRequest("방장", null, null, null, null, null));
+        svc.newGame("host", new NewMafiaRequest("방장", null, null, null, null, null, null, null));
 
         svc.addBots(3);
         MafiaStateResponse st = svc.me("host");
@@ -40,14 +40,14 @@ class MafiaBotTest {
     @Test
     void 봇_미설정이면_추가불가() {
         MafiaService svc = new MafiaService(); // 런타임 없음
-        svc.newGame("host", new NewMafiaRequest("방장", null, null, null, null, null));
+        svc.newGame("host", new NewMafiaRequest("방장", null, null, null, null, null, null, null));
         assertThatThrownBy(() -> svc.addBots(1)).hasMessageContaining("설정");
     }
 
     @Test
     void 봇은_밤에_스스로_행동해_밤이_진행된다() throws Exception {
         MafiaService svc = new MafiaService(fakeRuntime());
-        svc.newGame("host", new NewMafiaRequest("방장", 20, null, null, null, null));
+        svc.newGame("host", new NewMafiaRequest("방장", 20, null, null, null, null, null, null));
         svc.addBots(3);
         svc.start("host");
         assertThat(svc.me("host").status()).isEqualTo("NIGHT");
@@ -68,7 +68,7 @@ class MafiaBotTest {
     @Test
     void 채팅은_낮에만_가능() {
         MafiaService svc = new MafiaService(fakeRuntime());
-        svc.newGame("host", new NewMafiaRequest("방장", null, null, null, null, null));
+        svc.newGame("host", new NewMafiaRequest("방장", null, null, null, null, null, null, null));
         // 대기방(LOBBY)에선 채팅 불가
         assertThatThrownBy(() -> svc.sendChat("host", "안녕"))
                 .hasMessageContaining("대화할 수 없습니다");

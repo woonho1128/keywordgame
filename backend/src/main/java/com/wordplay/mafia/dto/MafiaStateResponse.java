@@ -40,6 +40,10 @@ public record MafiaStateResponse(
         int nightDeadSeat,        // 밤 사망 좌석, 없으면 -1
         int executedSeat,         // 처형 좌석, 없으면 -1
         List<VoteView> voteTally, // 투표 집계
+        int accusedSeat,          // 재판대에 오른 좌석(1-based, 없으면 -1)
+        int killVotes,            // 사형 표 수
+        int spareVotes,           // 생존 표 수
+        int myFinalVote,          // 내 사형투표: -1 미투표 / 0 생존 / 1 사형
         String winner,            // ENDED에서만 MAFIA/CITIZEN
         int aliveCount,
         int totalMafia,
@@ -61,6 +65,6 @@ public record MafiaStateResponse(
         return new MafiaStateResponse(
                 "NOT_STARTED", 0, 0, now, false, false, 0, null, null, null, false,
                 List.of(), "NONE", List.of(), -1, List.of(), List.of(),
-                null, -1, -1, List.of(), null, 0, 0, 0, List.of(), 0, false, List.of(), List.of(), List.of());
+                null, -1, -1, List.of(), -1, 0, 0, -1, null, 0, 0, 0, List.of(), 0, false, List.of(), List.of(), List.of());
     }
 }

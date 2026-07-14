@@ -5,7 +5,7 @@ import { api } from '@/lib/api';
 
 type Phase =
   | 'NOT_STARTED' | 'LOBBY' | 'NIGHT' | 'MORNING'
-  | 'DISCUSS' | 'VOTE' | 'EXECUTE' | 'ENDED';
+  | 'DISCUSS' | 'VOTE' | 'DEFENSE' | 'FINAL_VOTE' | 'EXECUTE' | 'ENDED';
 
 type PlayerView = { seat: number; nick: string; alive: boolean; role: string | null; copResult: string | null; bot: boolean };
 type VoteView = { targetSeat: number; count: number };
@@ -33,6 +33,10 @@ type MafiaState = {
   nightDeadSeat: number;
   executedSeat: number;
   voteTally: VoteView[];
+  accusedSeat: number;
+  killVotes: number;
+  spareVotes: number;
+  myFinalVote: number;
   winner: string | null;
   aliveCount: number;
   totalMafia: number;
@@ -77,7 +81,7 @@ const ROLE_META: Record<string, { label: string; emoji: string; color: string }>
 
 const PHASE_LABEL: Record<Phase, string> = {
   NOT_STARTED: '', LOBBY: '대기방', NIGHT: '🌙 밤', MORNING: '☀️ 아침',
-  DISCUSS: '💬 토론', VOTE: '🗳️ 투표', EXECUTE: '⚖️ 처형', ENDED: '🏁 종료',
+  DISCUSS: '💬 토론', VOTE: '🗳️ 투표', DEFENSE: '🎤 최후변론', FINAL_VOTE: '⚖️ 사형투표', EXECUTE: '⚖️ 처형', ENDED: '🏁 종료',
 };
 
 const ACTION_LABEL: Record<string, string> = {
@@ -106,6 +110,8 @@ export default function MafiaPage() {
   const [nightSec, setNightSec] = useState(30);
   const [discussSec, setDiscussSec] = useState(90);
   const [voteSec, setVoteSec] = useState(30);
+  const [defenseSec, setDefenseSec] = useState(20);
+  const [finalVoteSec, setFinalVoteSec] = useState(20);
   const [showCreate, setShowCreate] = useState(false);
 
   // 관리자
@@ -259,7 +265,7 @@ export default function MafiaPage() {
     try {
       const res = await api<{ roomCode: string; state: MafiaState }>(
         `/api/v1/mafia/new?clientId=${encodeURIComponent(clientId)}`,
-        { method: 'POST', body: JSON.stringify({ nick: n, nightSec, discussSec, voteSec }) }
+        { method: 'POST', body: JSON.stringify({ nick: n, nightSec, discussSec, voteSec, defenseSec, finalVoteSec }) }
       );
       changeRoom(res.roomCode);
       setSt(res.state);
@@ -285,6 +291,8 @@ export default function MafiaPage() {
 
   const handleVote = (target: number) =>
     post(`/api/v1/mafia/vote?roomCode=${roomCode}&clientId=${encodeURIComponent(clientId)}`, { target });
+  const handleFinalVote = (execute: boolean) =>
+    post(`/api/v1/mafia/final-vote?roomCode=${roomCode}&clientId=${encodeURIComponent(clientId)}&execute=${execute}`);
 
   const handleSkipDiscuss = () =>
     post(`/api/v1/mafia/skip-discuss?roomCode=${roomCode}&clientId=${encodeURIComponent(clientId)}`);
@@ -417,6 +425,8 @@ export default function MafiaPage() {
         {phase === 'MORNING' && renderMorning()}
         {phase === 'DISCUSS' && renderDiscuss()}
         {phase === 'VOTE' && renderVote()}
+        {phase === 'DEFENSE' && renderDefense()}
+        {phase === 'FINAL_VOTE' && renderFinalVote()}
         {phase === 'EXECUTE' && renderExecute()}
         {phase === 'ENDED' && renderEnded()}
 
@@ -520,6 +530,8 @@ export default function MafiaPage() {
               { label: '밤', v: nightSec, set: setNightSec, min: 15, max: 120 },
               { label: '토론', v: discussSec, set: setDiscussSec, min: 15, max: 300 },
               { label: '투표', v: voteSec, set: setVoteSec, min: 10, max: 120 },
+              { label: '최후변론', v: defenseSec, set: setDefenseSec, min: 5, max: 120 },
+              { label: '사형투표', v: finalVoteSec, set: setFinalVoteSec, min: 5, max: 120 },
             ].map((row) => (
               <div key={row.label} className="flex items-center justify-between text-sm">
                 <span>{row.label} 시간</span>
@@ -890,6 +902,48 @@ export default function MafiaPage() {
               ))}
           </div>
         )}
+      </div>
+    );
+  }
+
+  function renderDefense() {
+    const accused = st!.accusedSeat;
+    const isAccused = st!.seat === accused;
+    return (
+      <div className="text-center mt-6 space-y-3">
+        <p className="text-4xl">🎤</p>
+        <p className="text-lg font-bold text-gray-800">{nickOf(accused)}님의 최후변론</p>
+        {isAccused
+          ? <p className="text-sm text-hit font-bold">당신이 지목되었습니다. 채팅으로 변론하세요!</p>
+          : <p className="text-sm text-gray-500">변론을 듣고, 곧 사형/생존 투표가 진행됩니다.</p>}
+        {aliveBoard()}
+      </div>
+    );
+  }
+
+  function renderFinalVote() {
+    const accused = st!.accusedSeat;
+    const isAccused = st!.seat === accused;
+    const mine = st!.myFinalVote;
+    return (
+      <div className="mt-2 space-y-4 text-center">
+        <p className="font-bold">⚖️ {nickOf(accused)}님을 처형할까요?</p>
+        {st!.joined && st!.alive && !isAccused ? (
+          <div className="grid grid-cols-2 gap-2">
+            <button onClick={() => handleFinalVote(true)} disabled={busy}
+              className={`py-3 rounded-lg border-2 font-bold ${mine === 1 ? 'border-red-500 bg-red-50 text-red-600' : 'border-gray-200 text-gray-500'}`}>💀 사형</button>
+            <button onClick={() => handleFinalVote(false)} disabled={busy}
+              className={`py-3 rounded-lg border-2 font-bold ${mine === 0 ? 'border-green-500 bg-green-50 text-green-600' : 'border-gray-200 text-gray-500'}`}>🕊️ 생존</button>
+          </div>
+        ) : (
+          <p className="text-sm text-gray-500">{isAccused ? '당신은 재판 당사자라 투표할 수 없습니다.' : '관전 중 — 투표할 수 없습니다.'}</p>
+        )}
+        <div className="flex justify-center gap-6 text-sm">
+          <span className="text-red-500 font-bold">💀 사형 {st!.killVotes}</span>
+          <span className="text-green-600 font-bold">🕊️ 생존 {st!.spareVotes}</span>
+        </div>
+        <p className="text-xs text-gray-400">사형 표가 더 많으면 처형됩니다(동수·생존 우세 시 생존).</p>
+        {aliveBoard()}
       </div>
     );
   }

@@ -85,6 +85,13 @@ public class MafiaController {
         return ApiResponse.success(rooms.require(roomCode).vote(clientId, req.target()));
     }
 
+    @PostMapping("/final-vote")
+    public ApiResponse<MafiaStateResponse> finalVote(@RequestParam String roomCode, @RequestParam String clientId,
+                                                     @RequestParam boolean execute) {
+        validateClientId(clientId);
+        return ApiResponse.success(rooms.require(roomCode).finalVote(clientId, execute));
+    }
+
     @PostMapping("/skip-discuss")
     public ApiResponse<MafiaStateResponse> skipDiscuss(@RequestParam String roomCode, @RequestParam String clientId) {
         validateClientId(clientId);

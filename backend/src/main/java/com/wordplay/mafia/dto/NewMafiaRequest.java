@@ -12,5 +12,7 @@ public record NewMafiaRequest(
         Integer discussSec,
         Integer voteSec,
         Integer mafiaCount,
-        Boolean revealOnDeath
+        Boolean revealOnDeath,
+        Integer defenseSec,     // 최후변론 시간(초)
+        Integer finalVoteSec    // 사형/생존 투표 시간(초)
 ) {}
