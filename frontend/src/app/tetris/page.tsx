@@ -15,8 +15,9 @@ const DAS = 133;                 // 좌우 자동이동 시작 지연(ms)
 const ARR = 25;                  // 자동이동 반복 간격(ms)
 const SOFT_MS = 28;              // 소프트드롭 1칸 간격(ms)
 
-const COLORS: Record<PieceType, string> = {
+const COLORS: Record<PieceType | 'G', string> = {
   I: '#22d3ee', O: '#facc15', T: '#c084fc', S: '#4ade80', Z: '#f87171', J: '#60a5fa', L: '#fb923c',
+  G: '#64748b', // 가비지(방해) 블록
 };
 const SPRINT_KEY_BASE = 10_000_000; // 스프린트 랭킹: 저장점수 = BASE - 소요ms (클수록 빠름)
 

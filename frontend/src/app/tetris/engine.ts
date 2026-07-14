@@ -8,7 +8,8 @@ export const ROWS = VIS_ROWS + HIDDEN; // 22
 export const SPRINT_GOAL = 40;
 
 export type Mode = 'marathon' | 'sprint';
-export type Cell = PieceType | null;
+// 'G' = 가비지(방해) 블록. 배틀 모드에서 상대 공격으로 바닥에 쌓인다.
+export type Cell = PieceType | 'G' | null;
 export type Piece = { type: PieceType; rot: number; row: number; col: number };
 export type TSpin = 'none' | 'mini' | 'full';
 export type ClearKind =
@@ -249,6 +250,46 @@ export class TetrisEngine {
 
   // ── 렌더용 조회 ────────────────────────────────────────
   nextQueue(n = 5): PieceType[] { return this.queue.slice(0, n); }
+
+  // ── 배틀: 가비지 · 열 높이 ─────────────────────────────
+  /** 바닥에 구멍 뚫린 가비지 줄을 rows만큼 밀어 올린다. 스택이 넘치면 top-out. */
+  addGarbage(rows: number, holeCol: number) {
+    if (rows <= 0) return;
+    const hole = ((holeCol % COLS) + COLS) % COLS;
+    for (let i = 0; i < rows; i++) {
+      const top = this.board.shift()!;              // 맨 윗줄 제거(밀어 올림)
+      if (top.some((x) => x)) this.over = true;     // 윗줄에 블록이 있었으면 넘침 → top-out
+      const g = Array<Cell>(COLS).fill('G');
+      g[hole] = null;
+      this.board.push(g);                           // 바닥에 가비지 추가
+    }
+    if (this.cur && this.collides(this.cur)) this.over = true; // 현재 조각이 끼면 top-out
+  }
+
+  /** 각 열의 높이(바닥부터 쌓인 칸 수). 상대 미니보드/봇 위험도 표시에 사용. */
+  columnHeights(): number[] {
+    const h = new Array<number>(COLS).fill(0);
+    for (let c = 0; c < COLS; c++) {
+      for (let r = 0; r < ROWS; r++) {
+        if (this.board[r][c]) { h[c] = ROWS - r; break; }
+      }
+    }
+    return h;
+  }
+}
+
+// 라인 클리어 결과 → 상대에게 보낼 가비지 줄 수(정통 가이드라인 근사).
+export function attackLines(res: LockResult): number {
+  if (res.linesCleared === 0) return 0;
+  let atk: number;
+  if (res.tspin === 'full') atk = [0, 2, 4, 6][res.linesCleared] ?? 0;
+  else if (res.tspin === 'mini') atk = [0, 0, 1][res.linesCleared] ?? 0;
+  else atk = [0, 0, 1, 2, 4][res.linesCleared] ?? 0; // 싱글0 더블1 트리플2 테트리스4
+  if (res.b2b) atk += 1;                              // 백투백 보너스
+  const c = res.combo;                               // 콤보 누적
+  if (c >= 1) atk += c <= 2 ? 1 : c <= 4 ? 2 : c <= 6 ? 3 : 4;
+  if (res.perfectClear) atk += 10;
+  return atk;
 }
 
 // 레벨별 중력(칸당 ms). 가이드라인 곡선.
