@@ -27,6 +27,7 @@ const GAMES: Game[] = [
   { href: '/omok', title: '⚫ 오목', desc: '5목을 먼저 만들면 승리하는 고전 보드게임. 봇(초·중·고급) 또는 유저와 대전. 자유룰/금수룰.', hover: 'hit', solo: true, soloLabel: '🤖 봇과 1인 가능' },
   { href: '/horserace', title: '🏇 경마', desc: '말에 가상 칩을 걸고 배당을 노리는 경마. 봇과 혼자 또는 여러 명이 배팅 대결(놀이용 칩).', hover: 'move', solo: true, soloLabel: '🤖 봇과 1인 가능' },
   { href: '/tetris', title: '🧱 테트리스', desc: '블록을 쌓아 줄을 지우는 고전 낙하 퍼즐. 마라톤·스프린트 모드 + 랭킹. T-스핀·홀드 지원 (혼자 플레이).', hover: 'hit', solo: true, soloLabel: '🧩 1인 플레이' },
+  { href: '/tetris-battle', title: '🧱⚔️ 테트리스 배틀', desc: '줄을 지워 상대에게 방해 줄을 보내는 대전 테트리스. 1v1·배틀로얄(최대 6인), 봇과 혼자도 가능. 우승 랭킹.', hover: 'move', solo: true, soloLabel: '🤖 봇과 1인 가능' },
   { href: '/gartic', title: '🎨 그림 텔레폰', desc: '문장을 그림으로, 그림을 문장으로 넘기며 엉뚱하게 변해가는 갈틱폰 (3~10인).', hover: 'hit', solo: false },
   { href: '/bingo', title: '🔢 빙고', desc: '3×3~5×5 판을 채우고, 뽑히는 숫자로 먼저 빙고 줄을 완성하면 승리 (2~8인).', hover: 'hit', solo: false },
   { href: '/snake', title: '🐍 지렁이', desc: '먹이를 먹고 커지며 봇과 경쟁하는 지렁이 게임. 랭킹 등록 (혼자 플레이).', hover: 'hit', solo: true, soloLabel: '🤖 봇과 1인 가능' },
