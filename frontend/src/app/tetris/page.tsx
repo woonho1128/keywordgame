@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { api } from '@/lib/api';
 import { PieceType, STATES } from './srs';
@@ -330,7 +331,10 @@ export default function TetrisPage() {
   return (
     <main className="min-h-screen flex flex-col items-center p-3 max-w-3xl mx-auto w-full text-slate-100">
       <div className="w-full flex items-center justify-between mb-3">
-        <h1 className="text-xl font-bold text-slate-800 dark:text-slate-100">🧱 테트리스</h1>
+        <div className="flex items-center gap-2">
+          <Link href="/" aria-label="홈으로" className="text-lg leading-none text-slate-500 hover:text-slate-800 dark:hover:text-slate-100">🏠</Link>
+          <h1 className="text-xl font-bold text-slate-800 dark:text-slate-100">🧱 테트리스</h1>
+        </div>
         {playing && (
           <div className="flex items-center gap-3 text-sm">
             <span className="font-bold text-fuchsia-500">{score.toLocaleString()}</span>
@@ -359,7 +363,7 @@ export default function TetrisPage() {
             {/* 중: 보드 */}
             <div className="relative" style={{ transform: shake && Date.now() - shake < 160 ? 'translateY(2px)' : 'none' }}>
               <canvas ref={canvasRef}
-                className="rounded-lg border-2 border-slate-700 bg-slate-900 touch-none block w-auto h-auto max-w-[80vw] max-h-[46vh] sm:max-w-[360px] sm:max-h-[82vh]" />
+                className="rounded-lg border-2 border-slate-700 bg-slate-900 touch-none block w-auto h-auto max-w-[86vw] max-h-[58vh] sm:max-w-[360px] sm:max-h-[82vh]" />
               {float && (
                 <div key={float.id} className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
                   <span className="text-2xl font-extrabold text-white drop-shadow-[0_2px_8px_rgba(0,0,0,0.9)] animate-pulse">{float.text}</span>

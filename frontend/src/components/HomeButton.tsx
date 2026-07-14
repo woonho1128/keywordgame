@@ -6,7 +6,8 @@ import { usePathname } from 'next/navigation';
 /** 홈(메인)을 제외한 모든 페이지 좌하단에 뜨는 홈 이동 버튼. */
 export default function HomeButton() {
   const pathname = usePathname();
-  if (pathname === '/') return null;
+  // 홈 및 테트리스 계열(하단 조작바가 있어 헤더에 홈 링크를 따로 둔다)에서는 숨긴다
+  if (pathname === '/' || pathname.startsWith('/tetris')) return null;
   return (
     <Link
       href="/"

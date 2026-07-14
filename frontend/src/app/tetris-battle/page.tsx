@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { api } from '@/lib/api';
 import RoomChat from '@/components/RoomChat';
@@ -286,7 +287,10 @@ export default function TetrisBattlePage() {
   return (
     <main className="min-h-screen flex flex-col items-center p-3 max-w-4xl mx-auto w-full text-slate-100">
       <div className="w-full flex items-center justify-between mb-3">
-        <h1 className="text-xl font-bold text-slate-800 dark:text-slate-100">🧱⚔️ 테트리스 배틀</h1>
+        <div className="flex items-center gap-2">
+          <Link href="/" aria-label="홈으로" className="text-lg leading-none text-slate-500 hover:text-slate-800 dark:hover:text-slate-100">🏠</Link>
+          <h1 className="text-xl font-bold text-slate-800 dark:text-slate-100">🧱⚔️ 테트리스 배틀</h1>
+        </div>
         {roomCode && <button onClick={leaveRoom} className="text-xs px-2 py-1 rounded bg-slate-700 text-slate-100">나가기</button>}
       </div>
 
