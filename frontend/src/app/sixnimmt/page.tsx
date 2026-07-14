@@ -28,13 +28,13 @@ function cid(): string {
 function bullColor(b: number): string {
   return b >= 7 ? '#c026d3' : b >= 5 ? '#f43f5e' : b >= 3 ? '#f97316' : b >= 2 ? '#f59e0b' : '#64748b';
 }
+const CARD_SIZE = 'w-11 h-16 sm:w-[60px] sm:h-[86px]';
 function Card({ c, sel, onClick, dim }: { c: RowCard; sel?: boolean; onClick?: () => void; dim?: boolean }) {
   return (
     <button onClick={onClick} disabled={!onClick}
-      className={`relative shrink-0 rounded-md border-2 flex flex-col items-center justify-center font-bold transition ${sel ? 'border-fuchsia-500 -translate-y-2' : 'border-slate-600'} ${dim ? 'opacity-40' : ''} ${onClick ? 'active:scale-95' : ''}`}
-      style={{ width: 40, height: 56, background: '#1e293b' }}>
-      <span className="text-base leading-none text-slate-100">{c.card}</span>
-      <span className="mt-0.5 text-[10px] leading-none font-bold" style={{ color: bullColor(c.bulls) }}>🐮{c.bulls}</span>
+      className={`relative shrink-0 rounded-md border-2 bg-slate-800 flex flex-col items-center justify-center font-bold transition ${CARD_SIZE} ${sel ? 'border-fuchsia-500 -translate-y-2' : 'border-slate-600'} ${dim ? 'opacity-40' : ''} ${onClick ? 'active:scale-95 hover:border-fuchsia-400' : ''}`}>
+      <span className="text-base sm:text-2xl leading-none text-slate-100">{c.card}</span>
+      <span className="mt-0.5 text-[10px] sm:text-sm leading-none font-bold" style={{ color: bullColor(c.bulls) }}>🐮{c.bulls}</span>
     </button>
   );
 }
@@ -103,7 +103,7 @@ export default function SixNimmtPage() {
   const sortedPlayers = ss ? [...ss.players].filter((p) => !p.left).sort((a, b) => a.penalty - b.penalty) : [];
 
   return (
-    <main className="min-h-screen flex flex-col items-center p-3 max-w-2xl mx-auto w-full text-slate-800 dark:text-slate-100">
+    <main className="min-h-screen flex flex-col items-center p-3 max-w-3xl mx-auto w-full text-slate-800 dark:text-slate-100">
       <div className="w-full flex items-center justify-between mb-3">
         <div className="flex items-center gap-2">{home}<h1 className="text-xl font-bold">🐮 젝스님트</h1></div>
         {roomCode && <button onClick={leave} className="text-xs px-2 py-1 rounded bg-slate-700 text-slate-100">나가기</button>}
@@ -211,7 +211,7 @@ export default function SixNimmtPage() {
                   <span className="text-[10px] text-slate-400 w-4 shrink-0">{ri + 1}</span>
                   <div className="flex gap-1 overflow-x-auto">
                     {row.map((c, ci) => <Card key={ci} c={c} />)}
-                    {Array.from({ length: 5 - row.length }).map((_, k) => <div key={`e${k}`} className="shrink-0 rounded-md border-2 border-dashed border-slate-700/50" style={{ width: 40, height: 56 }} />)}
+                    {Array.from({ length: 5 - row.length }).map((_, k) => <div key={`e${k}`} className={`shrink-0 rounded-md border-2 border-dashed border-slate-700/50 ${CARD_SIZE}`} />)}
                   </div>
                   <span className="ml-auto text-xs font-bold shrink-0" style={{ color: bullColor(3) }}>🐮{row.reduce((a, c) => a + c.bulls, 0)}</span>
                 </button>
