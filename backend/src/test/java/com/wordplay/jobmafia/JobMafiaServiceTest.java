@@ -132,7 +132,7 @@ class JobMafiaServiceTest {
         String psychoClient = clientAtSeat(svc, psychoSeat);
 
         JobMafiaStateResponse st = svc.me(psychoClient);
-        assertThat(st.myRole()).isIn("POLICE", "DOCTOR"); // 가짜 직업
+        assertThat(st.myRole()).isIn("POLICE", "DOCTOR", "OBSERVER", "BLOCKER"); // 가짜 직업
         assertThat(st.myRole()).isNotEqualTo("PSYCHO");
         assertThat(st.myTeam()).isEqualTo("CITIZEN");     // 시민팀과 함께 승리
     }

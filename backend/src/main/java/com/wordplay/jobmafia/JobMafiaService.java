@@ -227,8 +227,9 @@ public class JobMafiaService implements RoomGame {
             players.get(i).role = roles.get(i);
             players.get(i).alive = true;
             if (roles.get(i) == Role.PSYCHO) {
-                // 정신병자에게 보일 가짜 직업(경찰/의사 중 랜덤)
-                psychoFakeRoles.put(i, ThreadLocalRandom.current().nextBoolean() ? Role.POLICE : Role.DOCTOR);
+                // 정신병자에게 보일 가짜 직업(경찰/의사/관찰자/봉쇄자 중 랜덤) — 능력은 효과 없음
+                Role[] fakes = { Role.POLICE, Role.DOCTOR, Role.OBSERVER, Role.BLOCKER };
+                psychoFakeRoles.put(i, fakes[ThreadLocalRandom.current().nextInt(fakes.length)]);
             }
         }
 
@@ -516,6 +517,20 @@ public class JobMafiaService implements RoomGame {
                 myLog(ps).add(round + "일차 🔎 조사: " + players.get(t).nick + " → " + psychoCopLogBySeat(ps).get(psychoCopLogBySeat(ps).size() - 1).split(" → ")[1]);
             }
         }
+        // 정신병자(가짜 관찰자) 가짜 관찰 — 무작위 결과(효과 없음)
+        for (var e : psychoFakeRoles.entrySet()) {
+            int ps = e.getKey();
+            if (e.getValue() != Role.OBSERVER || !players.get(ps).alive || blockedSeats.contains(ps)) continue;
+            Integer t = nightTargetBySeat.get(ps);
+            if (t != null && t >= 0) myLog(ps).add(round + "일차 👁 관찰: " + players.get(t).nick + " → " + fakeObserveInfo());
+        }
+        // 정신병자(가짜 봉쇄자) — 본인은 막은 줄 알지만 실제론 아무것도 안 막힘
+        for (var e : psychoFakeRoles.entrySet()) {
+            int ps = e.getKey();
+            if (e.getValue() != Role.BLOCKER || !players.get(ps).alive || blockedSeats.contains(ps)) continue;
+            Integer t = nightTargetBySeat.get(ps);
+            if (t != null && t >= 0) myLog(ps).add(round + "일차 🚫 봉쇄: " + players.get(t).nick + "의 능력을 막았다");
+        }
 
         // 도적꾼: 대상의 직업을 훔쳐온다. 이 밤의 다른 능력은 위에서 이미 처리됐으므로 결과는 유지된다.
         // (예: 피해자가 의사로 A를 살렸다면 그 치료는 반영되고, 다음 아침부터 피해자는 무직 시민이 된다.)
@@ -643,6 +658,16 @@ public class JobMafiaService implements RoomGame {
         return pluralityWinner(counts);
     }
 
+    /** 정신병자(가짜 관찰자)용 가짜 관찰 결과 — 진짜와 형식은 같지만 무작위. */
+    private String fakeObserveInfo() {
+        List<Integer> alive = aliveSeats();
+        if (!alive.isEmpty() && ThreadLocalRandom.current().nextInt(4) != 0) {
+            int r = alive.get(ThreadLocalRandom.current().nextInt(alive.size()));
+            return players.get(r).nick + "을(를) 지목함 (무언가 행동)";
+        }
+        return "밤에 아무 행동도 하지 않음";
+    }
+
     /** 관찰 결과: 대상이 밤에 누구를 지목했는지만(행동 종류는 모름).
      *  봉쇄자가 먼저 행위하므로, 봉쇄된 대상은 행동 자체를 못 해 "행동 없음"으로 보인다. */
     private String observeInfo(int targetSeat) {
@@ -678,6 +703,7 @@ public class JobMafiaService implements RoomGame {
     boolean tConcealed(int seat) { return concealedSeats.contains(seat); }
     List<String> tMyLog(int seat) { return myLog(seat); }
     String tRole(int seat) { return jobLabel(players.get(seat).role); }
+    void tFakeRole(int seat, Role r) { psychoFakeRoles.put(seat, r); }
 
     private int mafiaPlurality() {
         Map<Integer, Integer> counts = new HashMap<>();

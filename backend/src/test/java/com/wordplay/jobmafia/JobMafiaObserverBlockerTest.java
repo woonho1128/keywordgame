@@ -57,6 +57,29 @@ class JobMafiaObserverBlockerTest {
     }
 
     @Test
+    void 정신병자_가짜봉쇄자는_실제로_막지_못한다() {
+        JobMafiaService g = new JobMafiaService();
+        g.tSetup(List.of(Role.PSYCHO, Role.MAFIA, Role.CITIZEN)); // 0정신병자 1마피아 2시민
+        g.tFakeRole(0, Role.BLOCKER);
+        g.tTarget(0, 1); // 정신병자(가짜봉쇄) → 마피아 봉쇄 시도(효과 없음)
+        g.tTarget(1, 2); // 마피아 → 시민2 킬
+        g.tResolve();
+        assertThat(g.tAlive(2)).isFalse();                       // 가짜라 킬 성공
+        assertThat(g.tMyLog(0)).anyMatch(s -> s.contains("봉쇄")); // 본인은 막은 줄 앎
+    }
+
+    @Test
+    void 정신병자_가짜관찰자는_가짜결과를_받는다() {
+        JobMafiaService g = new JobMafiaService();
+        g.tSetup(List.of(Role.PSYCHO, Role.MAFIA, Role.CITIZEN));
+        g.tFakeRole(0, Role.OBSERVER);
+        g.tTarget(0, 2); // 정신병자(가짜관찰) → 시민2 관찰
+        g.tTarget(1, 2);
+        g.tResolve();
+        assertThat(g.tMyLog(0)).anyMatch(s -> s.contains("관찰")); // 관찰한 줄 앎(결과는 무작위)
+    }
+
+    @Test
     void 관찰자마피아_능력모드는_킬하지_않는다() {
         JobMafiaService g = new JobMafiaService();
         g.tSetup(List.of(Role.MAFIA_OBSERVER, Role.CITIZEN, Role.CITIZEN)); // 0관찰자마피아 1,2시민
