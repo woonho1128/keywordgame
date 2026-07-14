@@ -70,9 +70,13 @@ const ROLE_META: Record<string, { label: string; emoji: string; color: string; d
   POLICE: { label: '경찰', emoji: '👮', color: 'text-blue-500', desc: '밤마다 1명을 조사하면 직업 후보 2개가 나옵니다(하나가 진짜).' },
   DOCTOR: { label: '의사', emoji: '🩺', color: 'text-green-600', desc: '밤마다 1명을 치료해 마피아 공격을 막습니다(자신 포함).' },
   PSYCHO: { label: '정신병자', emoji: '🤪', color: 'text-purple-500', desc: '시민팀. 본인은 다른 직업인 줄 알지만 능력이 통하지 않습니다.' },
+  OBSERVER: { label: '관찰자', emoji: '👁️', color: 'text-cyan-600', desc: '시민팀. 밤마다 1명을 관찰해 그 사람이 밤에 누구를 지목했는지 알아냅니다(행동 종류는 모름).' },
+  BLOCKER: { label: '봉쇄자', emoji: '🚫', color: 'text-indigo-600', desc: '시민팀. 밤마다 1명을 봉쇄해 그 사람의 밤 능력을 무효화합니다(마피아 킬도 막을 수 있음).' },
   MAFIA: { label: '마피아', emoji: '🔪', color: 'text-red-500', desc: '밤마다 동료와 함께 1명을 제거합니다.' },
   MAFIA_COP: { label: '경찰마피아', emoji: '🕵️‍♂️', color: 'text-red-500', desc: '마피아팀. 밤마다 살해에 가담하거나(동료와 함께) 대신 한 명을 조사할 수 있습니다(둘 중 하나만).' },
   MAFIA_SHADOW: { label: '그림자마피아', emoji: '🥷', color: 'text-red-500', desc: '마피아팀. 이 마피아가 살아서 살해에 가담하면, 죽은 사람의 정체가 공개되지 않습니다.' },
+  MAFIA_OBSERVER: { label: '관찰자마피아', emoji: '👁️‍🗨️', color: 'text-red-500', desc: '마피아팀. 밤마다 살해에 가담하거나 대신 한 명을 관찰(밤 지목 확인)할 수 있습니다(둘 중 하나만).' },
+  MAFIA_BLOCKER: { label: '봉쇄자마피아', emoji: '⛔', color: 'text-red-500', desc: '마피아팀. 밤마다 살해에 가담하거나 대신 한 명을 봉쇄(능력 무효)할 수 있습니다(둘 중 하나만).' },
   ATTENTION: { label: '관종', emoji: '📢', color: 'text-amber-500', desc: '중립. 낮 투표로 자신이 처형되면 혼자 승리합니다!' },
   THIEF: { label: '도적꾼', emoji: '🕵️', color: 'text-teal-600', desc: '중립. 밤에 딱 한 번, 한 명의 직업을 훔칩니다. 그 사람은 무직(시민)이 되고 당신은 그 직업이 됩니다(그 밤의 능력은 유지).' },
 };
@@ -85,8 +89,12 @@ const PHASE_LABEL: Record<Phase, string> = {
 const ACTION_LABEL: Record<string, string> = {
   MAFIA_KILL: '🔪 제거할 대상을 고르세요',
   MAFIA_COP: '🕵️‍♂️ 살해 또는 조사를 선택하세요',
+  MAFIA_OBSERVER: '👁️‍🗨️ 살해 또는 관찰을 선택하세요',
+  MAFIA_BLOCKER: '⛔ 살해 또는 봉쇄를 선택하세요',
   POLICE_CHECK: '🔎 조사할 대상을 고르세요',
   DOCTOR_SAVE: '🩺 보호할 대상을 고르세요',
+  OBSERVER_WATCH: '👁️ 관찰할 대상을 고르세요 (밤 지목을 알아냄)',
+  BLOCKER_BLOCK: '🚫 봉쇄할 대상을 고르세요 (그 밤 능력 무효)',
   THIEF_STEAL: '🕵️ 직업을 훔칠 대상을 고르세요 (밤 1회)',
   CITIZEN_WATCH: '🌙 밤 - 지켜볼 사람을 한 명 고르세요',
   VOTE: '🗳️ 처형할 사람에게 투표하세요',
@@ -124,6 +132,14 @@ export default function MafiaJobsPage() {
   const [mafiaCopMax, setMafiaCopMax] = useState(0);
   const [mafiaShadowMin, setMafiaShadowMin] = useState(0);
   const [mafiaShadowMax, setMafiaShadowMax] = useState(0);
+  const [observerMin, setObserverMin] = useState(0);
+  const [observerMax, setObserverMax] = useState(0);
+  const [blockerMin, setBlockerMin] = useState(0);
+  const [blockerMax, setBlockerMax] = useState(0);
+  const [mafiaObserverMin, setMafiaObserverMin] = useState(0);
+  const [mafiaObserverMax, setMafiaObserverMax] = useState(0);
+  const [mafiaBlockerMin, setMafiaBlockerMin] = useState(0);
+  const [mafiaBlockerMax, setMafiaBlockerMax] = useState(0);
   const [abilityIndependentKill, setAbilityIndependentKill] = useState(false);
   const [showRoles, setShowRoles] = useState(false);
 
@@ -224,7 +240,7 @@ export default function MafiaJobsPage() {
     try {
       const res = await api<{ roomCode: string; state: JobState }>(
         `/api/v1/jobmafia/new?clientId=${encodeURIComponent(clientId)}`,
-        { method: 'POST', body: JSON.stringify({ nick: n, nightSec, discussSec, voteSec, mafiaMin, mafiaMax, psychoMin, psychoMax, attentionMin, attentionMax, thiefMin, thiefMax, neutralGrouped, neutralMin, neutralMax, mafiaCopMin, mafiaCopMax, mafiaShadowMin, mafiaShadowMax, abilityIndependentKill }) }
+        { method: 'POST', body: JSON.stringify({ nick: n, nightSec, discussSec, voteSec, mafiaMin, mafiaMax, psychoMin, psychoMax, attentionMin, attentionMax, thiefMin, thiefMax, neutralGrouped, neutralMin, neutralMax, mafiaCopMin, mafiaCopMax, mafiaShadowMin, mafiaShadowMax, observerMin, observerMax, blockerMin, blockerMax, mafiaObserverMin, mafiaObserverMax, mafiaBlockerMin, mafiaBlockerMax, abilityIndependentKill }) }
       );
       changeRoom(res.roomCode);
       setSt(res.state);
@@ -513,7 +529,11 @@ export default function MafiaJobsPage() {
           {rangeRow('🔪 마피아', mafiaMin, setMafiaMin, mafiaMax, setMafiaMax, 0, 5)}
           {rangeRow('🕵️‍♂️ ⌞경찰마피아', mafiaCopMin, setMafiaCopMin, mafiaCopMax, setMafiaCopMax, 0, 4)}
           {rangeRow('🥷 ⌞그림자마피아', mafiaShadowMin, setMafiaShadowMin, mafiaShadowMax, setMafiaShadowMax, 0, 4)}
-          <p className="text-[11px] text-gray-400 -mt-1">경찰마피아·그림자마피아는 마피아 총원 안에서 배정돼요(나머지는 일반 마피아).</p>
+          {rangeRow('👁️‍🗨️ ⌞관찰자마피아', mafiaObserverMin, setMafiaObserverMin, mafiaObserverMax, setMafiaObserverMax, 0, 4)}
+          {rangeRow('⛔ ⌞봉쇄자마피아', mafiaBlockerMin, setMafiaBlockerMin, mafiaBlockerMax, setMafiaBlockerMax, 0, 4)}
+          <p className="text-[11px] text-gray-400 -mt-1">⌞ 능력마피아·그림자마피아는 마피아 총원 안에서 배정돼요(나머지는 일반 마피아). 능력마피아는 밤마다 능력/살해 택1.</p>
+          {rangeRow('👁️ 관찰자', observerMin, setObserverMin, observerMax, setObserverMax, 0, 4)}
+          {rangeRow('🚫 봉쇄자', blockerMin, setBlockerMin, blockerMax, setBlockerMax, 0, 4)}
           <label className="flex items-start gap-2 text-xs text-gray-600 pt-1 border-t border-gray-200 mt-1">
             <input type="checkbox" className="mt-0.5" checked={abilityIndependentKill} onChange={(e) => setAbilityIndependentKill(e.target.checked)} />
             <span>⚔️ <b>능력마피아 독립 킬</b> — 켜면 경찰마피아(살해)·그림자마피아가 <b>자기 표적을 각자 처치</b>해서 밤에 여러 명이 죽을 수 있어요(마피아 강화). 끄면 모든 마피아가 다수결로 1명만 처치.</span>
@@ -655,29 +675,31 @@ export default function MafiaJobsPage() {
       );
     }
     const kind = st!.actionKind;
-    const isCop = kind === 'MAFIA_COP';
-    const investigating = st!.copMafiaInvestigate;
-    const isMafia = kind === 'MAFIA_KILL' || (isCop && !investigating); // 살해모드 경찰마피아 포함
+    const isAbilityMafia = kind === 'MAFIA_COP' || kind === 'MAFIA_OBSERVER' || kind === 'MAFIA_BLOCKER';
+    const abilityOn = st!.copMafiaInvestigate; // 능력모드 여부(경찰=조사/관찰자=관찰/봉쇄자=봉쇄)
+    const abilityLabel = kind === 'MAFIA_OBSERVER' ? '👁️ 관찰' : kind === 'MAFIA_BLOCKER' ? '🚫 봉쇄' : '🔎 조사';
+    const abilityHint = kind === 'MAFIA_OBSERVER' ? '👁️ 한 명을 관찰해 밤 지목을 알아내요(살해엔 가담 안 함).'
+      : kind === 'MAFIA_BLOCKER' ? '🚫 한 명을 봉쇄해 능력을 막아요(살해엔 가담 안 함).'
+      : '🔎 한 명을 조사해요(살해엔 가담하지 않음). 결과는 아침에 내 기록에 나와요.';
+    const isMafia = kind === 'MAFIA_KILL' || (isAbilityMafia && !abilityOn); // 살해모드 능력마피아 포함
     return (
       <div className="mt-2 space-y-4">
         <p className="font-bold text-center">{ACTION_LABEL[kind] ?? '🌙 밤입니다'}</p>
-        {isCop && (
+        {isAbilityMafia && (
           <div className="grid grid-cols-2 gap-2">
             <button onClick={() => handleCopMode(false)} disabled={busy}
-              className={`py-2 rounded-lg border-2 text-sm font-bold ${!investigating ? 'border-red-500 bg-red-50 text-red-600' : 'border-gray-200 text-gray-500'}`}>🔪 살해</button>
+              className={`py-2 rounded-lg border-2 text-sm font-bold ${!abilityOn ? 'border-red-500 bg-red-50 text-red-600' : 'border-gray-200 text-gray-500'}`}>🔪 살해</button>
             <button onClick={() => handleCopMode(true)} disabled={busy}
-              className={`py-2 rounded-lg border-2 text-sm font-bold ${investigating ? 'border-blue-500 bg-blue-50 text-blue-600' : 'border-gray-200 text-gray-500'}`}>🔎 조사</button>
+              className={`py-2 rounded-lg border-2 text-sm font-bold ${abilityOn ? 'border-blue-500 bg-blue-50 text-blue-600' : 'border-gray-200 text-gray-500'}`}>{abilityLabel}</button>
           </div>
         )}
-        {(kind === 'MAFIA_KILL' || (isCop && !investigating)) && st!.fellowMafia.length > 1 && (
+        {(kind === 'MAFIA_KILL' || (isAbilityMafia && !abilityOn)) && st!.fellowMafia.length > 1 && (
           <p className="text-center text-xs text-red-400">
             동료 마피아: {st!.fellowMafia.map(nickOf).join(', ')} · 실시간으로 지목이 공유됩니다
           </p>
         )}
-        {isCop && (
-          <p className="text-center text-xs text-gray-400">
-            {investigating ? '🔎 한 명을 조사해요(살해엔 가담하지 않음). 결과는 아침에 내 기록에 나와요.' : '🔪 동료와 함께 살해에 가담해요.'}
-          </p>
+        {isAbilityMafia && (
+          <p className="text-center text-xs text-gray-400">{abilityOn ? abilityHint : '🔪 동료와 함께 살해에 가담해요.'}</p>
         )}
         {targetButtons(st!.selectable, handleAct, st!.myTarget)}
 

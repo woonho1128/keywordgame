@@ -32,11 +32,18 @@ import java.util.concurrent.ThreadLocalRandom;
 public class JobMafiaService implements RoomGame {
 
     enum Phase { LOBBY, NIGHT, MORNING, DISCUSS, VOTE, EXECUTE, ENDED }
-    // 마피아 3종: MAFIA(그냥), MAFIA_COP(경찰마피아-조사/살해 택1), MAFIA_SHADOW(그림자마피아-살해 시 정체공개 은폐)
-    enum Role { CITIZEN, POLICE, DOCTOR, PSYCHO, MAFIA, MAFIA_COP, MAFIA_SHADOW, ATTENTION, THIEF }
+    // 시민 능력직: 경찰·의사·관찰자(대상의 밤 지목 확인)·봉쇄자(대상 밤 능력 무효)
+    // 마피아 능력종(능력/킬 택1): 경찰마피아·관찰자마피아·봉쇄자마피아 / 그림자마피아(살해+정체은폐)
+    enum Role { CITIZEN, POLICE, DOCTOR, PSYCHO, OBSERVER, BLOCKER,
+                MAFIA, MAFIA_COP, MAFIA_SHADOW, MAFIA_OBSERVER, MAFIA_BLOCKER, ATTENTION, THIEF }
 
     private static boolean isMafia(Role r) {
-        return r == Role.MAFIA || r == Role.MAFIA_COP || r == Role.MAFIA_SHADOW;
+        return r == Role.MAFIA || r == Role.MAFIA_COP || r == Role.MAFIA_SHADOW
+                || r == Role.MAFIA_OBSERVER || r == Role.MAFIA_BLOCKER;
+    }
+    /** 능력/킬 택1이 가능한 마피아(밤마다 모드 선택). */
+    private static boolean isAbilityMafia(Role r) {
+        return r == Role.MAFIA_COP || r == Role.MAFIA_OBSERVER || r == Role.MAFIA_BLOCKER;
     }
 
     private static final long MORNING_MS = 6_000;
@@ -69,10 +76,15 @@ public class JobMafiaService implements RoomGame {
     private int neutralMin = 0, neutralMax = 1;
     private int mafiaCopMin = 0, mafiaCopMax = 0;       // 경찰마피아 인원(마피아 총원 안에서 배정)
     private int mafiaShadowMin = 0, mafiaShadowMax = 0; // 그림자마피아 인원
+    private int observerMin = 0, observerMax = 0;       // 시민 관찰자
+    private int blockerMin = 0, blockerMax = 0;         // 시민 봉쇄자
+    private int mafiaObserverMin = 0, mafiaObserverMax = 0; // 관찰자마피아
+    private int mafiaBlockerMin = 0, mafiaBlockerMax = 0;   // 봉쇄자마피아
     private boolean abilityIndependentKill = false;     // 능력마피아 독립 킬 모드
 
-    private final Map<Integer, Boolean> mafiaCopInvestigate = new HashMap<>(); // 경찰마피아 좌석 -> 이번 밤 조사모드(true)/살해모드(false)
+    private final Map<Integer, Boolean> mafiaAbilityMode = new HashMap<>(); // 능력마피아 좌석 -> 이번 밤 능력모드(true)/살해모드(false)
     private final Set<Integer> concealedSeats = new HashSet<>();                // 그림자마피아에게 살해돼 정체가 은폐된 좌석
+    private final Set<Integer> blockedSeats = new HashSet<>();                  // 이번 밤 봉쇄자에게 능력이 막힌 좌석
     private boolean revealOnDeath = true;
 
     // 밤 상태
@@ -126,6 +138,14 @@ public class JobMafiaService implements RoomGame {
         mafiaCopMax = clampInt(req.mafiaCopMax(), mafiaCopMin, 4, mafiaCopMin);
         mafiaShadowMin = clampInt(req.mafiaShadowMin(), 0, 4, 0);
         mafiaShadowMax = clampInt(req.mafiaShadowMax(), mafiaShadowMin, 4, mafiaShadowMin);
+        observerMin = clampInt(req.observerMin(), 0, 4, 0);
+        observerMax = clampInt(req.observerMax(), observerMin, 4, observerMin); // 기본 off
+        blockerMin = clampInt(req.blockerMin(), 0, 4, 0);
+        blockerMax = clampInt(req.blockerMax(), blockerMin, 4, blockerMin);   // 기본 off
+        mafiaObserverMin = clampInt(req.mafiaObserverMin(), 0, 4, 0);
+        mafiaObserverMax = clampInt(req.mafiaObserverMax(), mafiaObserverMin, 4, mafiaObserverMin);
+        mafiaBlockerMin = clampInt(req.mafiaBlockerMin(), 0, 4, 0);
+        mafiaBlockerMax = clampInt(req.mafiaBlockerMax(), mafiaBlockerMin, 4, mafiaBlockerMin);
         abilityIndependentKill = req.abilityIndependentKill() != null && req.abilityIndependentKill();
         addPlayer(clientId, req.nick());
         return me(clientId);
@@ -152,6 +172,8 @@ public class JobMafiaService implements RoomGame {
         // 범위 안에서 랜덤으로 각 직업 인원 결정
         int mafia = Math.max(1, randRange(mafiaMin, mafiaMax)); // 마피아는 최소 1 보장
         int psycho = randRange(psychoMin, psychoMax);
+        int observer = randRange(observerMin, observerMax);
+        int blocker = randRange(blockerMin, blockerMax);
         int attention, thief;
         if (neutralGrouped) {
             // 중립 통합: 총 인원만 뽑고, 각 자리를 관종/도적꾼 중 랜덤으로 채움
@@ -164,29 +186,37 @@ public class JobMafiaService implements RoomGame {
             attention = randRange(attentionMin, attentionMax);
             thief = randRange(thiefMin, thiefMax);
         }
-        // 인원 초과 시 특수직업부터 줄임(마피아는 1까지만 감축)
-        while (mafia + psycho + attention + thief + 2 > n) {
+        // 인원 초과 시 특수직업부터 줄임(마피아는 1까지만 감축). +2 = 경찰·의사 고정
+        while (mafia + psycho + observer + blocker + attention + thief + 2 > n) {
             if (thief > 0) thief--;
             else if (attention > 0) attention--;
+            else if (blocker > 0) blocker--;
+            else if (observer > 0) observer--;
             else if (psycho > 0) psycho--;
             else if (mafia > 1) mafia--;
             else break;
         }
-        if (mafia + psycho + attention + thief + 2 > n)
+        if (mafia + psycho + observer + blocker + attention + thief + 2 > n)
             throw new BusinessException(ErrorCode.INVALID_INPUT, "인원이 부족합니다");
 
         // 마피아 총원(mafia) 안에서 특수 마피아 배정(나머지는 일반 마피아)
         int cop = Math.min(randRange(mafiaCopMin, mafiaCopMax), mafia);
         int shadow = Math.min(randRange(mafiaShadowMin, mafiaShadowMax), mafia - cop);
-        int plainMafia = mafia - cop - shadow;
+        int mObs = Math.min(randRange(mafiaObserverMin, mafiaObserverMax), mafia - cop - shadow);
+        int mBlk = Math.min(randRange(mafiaBlockerMin, mafiaBlockerMax), mafia - cop - shadow - mObs);
+        int plainMafia = mafia - cop - shadow - mObs - mBlk;
 
         List<Role> roles = new ArrayList<>();
         for (int i = 0; i < plainMafia; i++) roles.add(Role.MAFIA);
         for (int i = 0; i < cop; i++) roles.add(Role.MAFIA_COP);
         for (int i = 0; i < shadow; i++) roles.add(Role.MAFIA_SHADOW);
+        for (int i = 0; i < mObs; i++) roles.add(Role.MAFIA_OBSERVER);
+        for (int i = 0; i < mBlk; i++) roles.add(Role.MAFIA_BLOCKER);
         roles.add(Role.POLICE);
         roles.add(Role.DOCTOR);
         for (int i = 0; i < psycho; i++) roles.add(Role.PSYCHO);
+        for (int i = 0; i < observer; i++) roles.add(Role.OBSERVER);
+        for (int i = 0; i < blocker; i++) roles.add(Role.BLOCKER);
         for (int i = 0; i < attention; i++) roles.add(Role.ATTENTION);
         for (int i = 0; i < thief; i++) roles.add(Role.THIEF);
         while (roles.size() < n) roles.add(Role.CITIZEN);
@@ -235,17 +265,17 @@ public class JobMafiaService implements RoomGame {
         return me(clientId);
     }
 
-    /** 경찰마피아: 이번 밤 모드(살해/조사) 선택. 모드가 바뀌면 지목을 초기화한다. */
-    public synchronized JobMafiaStateResponse setCopMafiaMode(String clientId, boolean investigate) {
+    /** 능력마피아(경찰·관찰자·봉쇄자마피아): 이번 밤 모드(능력/살해) 선택. 모드가 바뀌면 지목 초기화. */
+    public synchronized JobMafiaStateResponse setCopMafiaMode(String clientId, boolean ability) {
         tick();
         Player me = requirePlayer(clientId);
         if (phase != Phase.NIGHT) throw new BusinessException(ErrorCode.INVALID_INPUT, "지금은 밤이 아닙니다");
-        if (!me.alive || me.role != Role.MAFIA_COP)
-            throw new BusinessException(ErrorCode.INVALID_INPUT, "경찰마피아만 사용할 수 있습니다");
+        if (!me.alive || !isAbilityMafia(me.role))
+            throw new BusinessException(ErrorCode.INVALID_INPUT, "능력마피아만 사용할 수 있습니다");
         int seat = seatOf(me);
-        boolean prev = mafiaCopInvestigate.getOrDefault(seat, false);
-        if (prev != investigate) {           // 모드 변경 시 대상 초기화(선택 대상군이 달라짐)
-            mafiaCopInvestigate.put(seat, investigate);
+        boolean prev = mafiaAbilityMode.getOrDefault(seat, false);
+        if (prev != ability) {               // 모드 변경 시 대상 초기화(선택 대상군이 달라짐)
+            mafiaAbilityMode.put(seat, ability);
             nightTargetBySeat.remove(seat);
             nightActed.remove(seat);
         }
@@ -352,42 +382,58 @@ public class JobMafiaService implements RoomGame {
     private void prepareNight() {
         nightTargetBySeat.clear();
         nightActed.clear();
-        mafiaCopInvestigate.clear(); // 매 밤 경찰마피아 모드 초기화(기본 살해)
+        mafiaAbilityMode.clear(); // 매 밤 능력마피아 모드 초기화(기본 살해)
+        blockedSeats.clear();
     }
 
     /** 아침 판정: 조사·치료·살해를 이번 밤 지목으로 한 번에 처리. */
     private void resolveNight() {
         nightDeadSeat = -1;
-        int doctorTarget = roleTarget(Role.DOCTOR); // 진짜 의사의 보호 대상(없으면 -1)
 
-        // 이번 밤 살해 의도 수집. target -> 은폐(그림자가 노림)
+        // 0) 봉쇄 먼저: 봉쇄자(시민)·봉쇄자마피아(능력모드)의 대상은 이번 밤 능력 무효
+        blockedSeats.clear();
+        for (int i = 0; i < players.size(); i++) {
+            Player p = players.get(i);
+            if (!p.alive) continue;
+            boolean cityBlocker = p.role == Role.BLOCKER;
+            boolean mafBlocker = p.role == Role.MAFIA_BLOCKER && mafiaAbilityMode.getOrDefault(i, false);
+            if (!cityBlocker && !mafBlocker) continue;
+            Integer t = nightTargetBySeat.get(i);
+            if (t != null && t >= 0 && t < players.size()) blockedSeats.add(t);
+        }
+
+        int doctorTarget = roleTarget(Role.DOCTOR); // 의사 보호 대상(없으면 -1)
+        int docSeat0 = aliveSeatOfRole(Role.DOCTOR);
+        if (docSeat0 >= 0 && blockedSeats.contains(docSeat0)) doctorTarget = -1; // 의사 봉쇄 시 보호 무효
+
+        // 1) 살해 의도 수집(봉쇄된 마피아는 제외). target -> 은폐(그림자가 노림)
         Map<Integer, Boolean> killIntent = new LinkedHashMap<>();
         Set<Integer> targetedSet = new HashSet<>();
         if (!abilityIndependentKill) {
-            // 공유 킬(기본): 모든 살해 마피아 다수결로 1명
-            int mafiaTarget = mafiaPlurality();
+            int mafiaTarget = mafiaPlurality(); // isMafiaKilling이 봉쇄 반영
             if (mafiaTarget >= 0) {
-                boolean shadowAlive = players.stream().anyMatch(p -> p.alive && p.role == Role.MAFIA_SHADOW);
-                targetedSet.add(mafiaTarget); killIntent.put(mafiaTarget, shadowAlive);
+                boolean shadowKilling = false;
+                for (int i = 0; i < players.size(); i++)
+                    if (players.get(i).alive && players.get(i).role == Role.MAFIA_SHADOW && !blockedSeats.contains(i)) shadowKilling = true;
+                targetedSet.add(mafiaTarget); killIntent.put(mafiaTarget, shadowKilling);
             }
         } else {
-            // 독립 킬: 일반 마피아만 다수결 1명 + 능력마피아 각자 자기 표적
             int plain = plainMafiaPlurality();
             if (plain >= 0) { targetedSet.add(plain); killIntent.merge(plain, false, (a, b) -> a); }
             for (int i = 0; i < players.size(); i++) {
                 Player mp = players.get(i);
-                if (!mp.alive) continue;
-                boolean copKill = mp.role == Role.MAFIA_COP && !mafiaCopInvestigate.getOrDefault(i, false);
+                if (!mp.alive || blockedSeats.contains(i)) continue;
+                boolean abilityKill = isAbilityMafia(mp.role) && !mafiaAbilityMode.getOrDefault(i, false);
                 boolean shadow = mp.role == Role.MAFIA_SHADOW;
-                if (!copKill && !shadow) continue;
+                if (!abilityKill && !shadow) continue;
                 Integer t = nightTargetBySeat.get(i);
                 if (t == null || t < 0) continue;
                 targetedSet.add(t);
-                killIntent.merge(t, shadow, (prev, now) -> prev || now); // 그림자가 노리면 은폐
+                killIntent.merge(t, shadow, (prev, now) -> prev || now);
             }
         }
 
-        // 적용: 의사 보호 대상은 생존, 나머지 처치
+        // 2) 적용: 의사 보호 대상은 생존, 나머지 처치
         List<Integer> deaths = new ArrayList<>();
         for (var e : killIntent.entrySet()) {
             int t = e.getKey();
@@ -410,29 +456,50 @@ public class JobMafiaService implements RoomGame {
         }
         history.add(round + "일차 🌙 " + nightMessage);
 
-        // 개인 밤 행동 기록(자기만 봄) — 도적꾼 스왑 전 직업 기준
+        // 3) 의사 개인 기록
         int docSeat = aliveSeatOfRole(Role.DOCTOR);
         if (docSeat >= 0 && doctorTarget >= 0) {
-            boolean saved = targetedSet.contains(doctorTarget); // 노림당했으나 보호로 생존
+            boolean saved = targetedSet.contains(doctorTarget);
             myLog(docSeat).add(round + "일차 💉 보호: " + players.get(doctorTarget).nick
                     + (saved ? " ⭕ 성공 (마피아 공격을 막음!)" : " ❌ (마피아가 노린 대상이 아니었음)"));
         }
+
+        // 4) 마피아 개인 기록(능력/살해). 봉쇄 시 실패
         for (int i = 0; i < players.size(); i++) {
             Player mp = players.get(i);
             if (!isMafia(mp.role) || !mp.alive) continue;
             Integer t = nightTargetBySeat.get(i);
             if (t == null || t < 0) continue;
-            if (mp.role == Role.MAFIA_COP && mafiaCopInvestigate.getOrDefault(i, false)) {
-                myLog(i).add(round + "일차 🔎 조사: " + players.get(t).nick + " → " + realScan(t));
-            } else {
-                String res = deadSet.contains(t) ? players.get(t).nick + " 처치 성공" : "실패(보호/생존)";
-                myLog(i).add(round + "일차 🔪 지목: " + players.get(t).nick + " · 결과: " + res);
-            }
+            if (blockedSeats.contains(i)) { myLog(i).add(round + "일차 🚫 봉쇄당해 이번 밤 아무것도 못 했습니다."); continue; }
+            boolean ability = isAbilityMafia(mp.role) && mafiaAbilityMode.getOrDefault(i, false);
+            if (ability && mp.role == Role.MAFIA_COP) myLog(i).add(round + "일차 🔎 조사: " + players.get(t).nick + " → " + realScan(t));
+            else if (ability && mp.role == Role.MAFIA_OBSERVER) myLog(i).add(round + "일차 👁 관찰: " + players.get(t).nick + " → " + observeInfo(t));
+            else if (ability && mp.role == Role.MAFIA_BLOCKER) myLog(i).add(round + "일차 🚫 봉쇄: " + players.get(t).nick + "의 능력을 막았다");
+            else { String res = deadSet.contains(t) ? players.get(t).nick + " 처치 성공" : "실패(보호/생존)"; myLog(i).add(round + "일차 🔪 지목: " + players.get(t).nick + " · 결과: " + res); }
         }
 
-        // 경찰 조사(진짜: 직업 후보 2개 중 하나가 진짜) — 아침에 결과 1줄
+        // 5) 관찰자(시민) — 대상의 밤 지목만 확인(행동 종류는 모름). 봉쇄 시 실패
+        for (int i = 0; i < players.size(); i++) {
+            if (players.get(i).role != Role.OBSERVER || !players.get(i).alive) continue;
+            if (blockedSeats.contains(i)) { myLog(i).add(round + "일차 🚫 누군가 관찰을 방해했습니다."); continue; }
+            Integer t = nightTargetBySeat.get(i);
+            if (t == null || t < 0) continue;
+            myLog(i).add(round + "일차 👁 관찰: " + players.get(t).nick + " → " + observeInfo(t));
+        }
+
+        // 6) 봉쇄자(시민) 기록
+        for (int i = 0; i < players.size(); i++) {
+            if (players.get(i).role != Role.BLOCKER || !players.get(i).alive) continue;
+            Integer t = nightTargetBySeat.get(i);
+            if (t == null || t < 0) continue;
+            myLog(i).add(round + "일차 🚫 봉쇄: " + players.get(t).nick + "의 능력을 막았다");
+        }
+
+        // 경찰 조사(진짜: 직업 후보 2개 중 하나가 진짜) — 아침에 결과 1줄. 봉쇄 시 실패
         int copSeat = aliveSeatOfRole(Role.POLICE);
-        if (copSeat >= 0) {
+        if (copSeat >= 0 && blockedSeats.contains(copSeat)) {
+            myLog(copSeat).add(round + "일차 🚫 누군가 조사를 방해했습니다.");
+        } else if (copSeat >= 0) {
             Integer t = nightTargetBySeat.get(copSeat);
             if (t != null && t >= 0) {
                 copLog.add(round + "일차: " + players.get(t).nick + " → " + realScan(t));
@@ -442,7 +509,7 @@ public class JobMafiaService implements RoomGame {
         // 정신병자(가짜 경찰) 가짜 조사 — 직업 2개 동등확률(우연히 진짜가 섞일 수도)
         for (var e : psychoFakeRoles.entrySet()) {
             int ps = e.getKey();
-            if (e.getValue() != Role.POLICE || !players.get(ps).alive) continue;
+            if (e.getValue() != Role.POLICE || !players.get(ps).alive || blockedSeats.contains(ps)) continue;
             Integer t = nightTargetBySeat.get(ps);
             if (t != null && t >= 0) {
                 psychoCopLogBySeat(ps).add(round + "일차: " + players.get(t).nick + " → " + fakeScan());
@@ -455,6 +522,7 @@ public class JobMafiaService implements RoomGame {
         for (int i = 0; i < players.size(); i++) {
             Player thief = players.get(i);
             if (thief.role != Role.THIEF || !thief.alive) continue;
+            if (blockedSeats.contains(i)) { myLog(i).add(round + "일차 🚫 봉쇄당해 강탈에 실패했습니다."); continue; }
             Integer t = nightTargetBySeat.get(i);
             if (t == null || t < 0 || t >= players.size() || t == i) continue;
             Player victim = players.get(t);
@@ -478,9 +546,13 @@ public class JobMafiaService implements RoomGame {
             case POLICE -> "경찰";
             case DOCTOR -> "의사";
             case PSYCHO -> "정신병자";
+            case OBSERVER -> "관찰자";
+            case BLOCKER -> "봉쇄자";
             case MAFIA -> "마피아";
             case MAFIA_COP -> "경찰마피아";
             case MAFIA_SHADOW -> "그림자마피아";
+            case MAFIA_OBSERVER -> "관찰자마피아";
+            case MAFIA_BLOCKER -> "봉쇄자마피아";
             case ATTENTION -> "관종";
             case THIEF -> "도적꾼";
         };
@@ -550,11 +622,12 @@ public class JobMafiaService implements RoomGame {
         return t == null ? -1 : t;
     }
 
-    /** 이번 밤 살해에 가담하는 마피아 좌석인가(경찰마피아가 조사모드면 제외). */
+    /** 이번 밤 살해에 가담하는 마피아 좌석인가(능력마피아가 능력모드면 제외, 봉쇄당하면 제외). */
     private boolean isMafiaKilling(int seat) {
         Role r = players.get(seat).role;
         if (!isMafia(r)) return false;
-        return !(r == Role.MAFIA_COP && mafiaCopInvestigate.getOrDefault(seat, false));
+        if (blockedSeats.contains(seat)) return false;
+        return !(isAbilityMafia(r) && mafiaAbilityMode.getOrDefault(seat, false));
     }
 
     /** 살해에 가담하는 마피아들의 지목 다수결(동수는 낮은 좌석). 없으면 -1. */
@@ -562,12 +635,20 @@ public class JobMafiaService implements RoomGame {
     private int plainMafiaPlurality() {
         Map<Integer, Integer> counts = new HashMap<>();
         for (int i = 0; i < players.size(); i++) {
-            if (players.get(i).alive && players.get(i).role == Role.MAFIA) {
+            if (players.get(i).alive && players.get(i).role == Role.MAFIA && !blockedSeats.contains(i)) {
                 Integer t = nightTargetBySeat.get(i);
                 if (t != null && t >= 0) counts.merge(t, 1, Integer::sum);
             }
         }
         return pluralityWinner(counts);
+    }
+
+    /** 관찰 결과: 대상이 밤에 누구를 지목했는지만(행동 종류는 모름). */
+    private String observeInfo(int targetSeat) {
+        Integer p = nightTargetBySeat.get(targetSeat);
+        return (p != null && p >= 0 && p < players.size())
+                ? players.get(p).nick + "을(를) 지목함 (무언가 행동)"
+                : "밤에 아무 행동도 하지 않음";
     }
 
     private static int pluralityWinner(Map<Integer, Integer> counts) {
@@ -585,13 +666,16 @@ public class JobMafiaService implements RoomGame {
     void tSetup(java.util.List<Role> roles) {
         players.clear(); clientSeats.clear();
         for (int i = 0; i < roles.size(); i++) { Player p = new Player("c" + i, "P" + i); p.role = roles.get(i); players.add(p); }
-        round = 1; concealedSeats.clear(); nightTargetBySeat.clear(); mafiaCopInvestigate.clear();
+        round = 1; concealedSeats.clear(); nightTargetBySeat.clear(); mafiaAbilityMode.clear();
     }
     void tTarget(int seat, int target) { nightTargetBySeat.put(seat, target); }
     void tMode(boolean b) { abilityIndependentKill = b; }
+    void tAbilityMode(int seat, boolean on) { mafiaAbilityMode.put(seat, on); }
     void tResolve() { resolveNight(); }
     boolean tAlive(int seat) { return players.get(seat).alive; }
     boolean tConcealed(int seat) { return concealedSeats.contains(seat); }
+    List<String> tMyLog(int seat) { return myLog(seat); }
+    String tRole(int seat) { return jobLabel(players.get(seat).role); }
 
     private int mafiaPlurality() {
         Map<Integer, Integer> counts = new HashMap<>();
@@ -686,9 +770,13 @@ public class JobMafiaService implements RoomGame {
             if (phase == Phase.NIGHT && display != null) {
                 actionKind = switch (display) {
                     case MAFIA, MAFIA_SHADOW -> "MAFIA_KILL";  // 그림자마피아도 UI는 살해(은폐는 자동)
-                    case MAFIA_COP -> "MAFIA_COP";             // 경찰마피아: 살해/조사 택1
+                    case MAFIA_COP -> "MAFIA_COP";             // 능력마피아: 능력/살해 택1
+                    case MAFIA_OBSERVER -> "MAFIA_OBSERVER";
+                    case MAFIA_BLOCKER -> "MAFIA_BLOCKER";
                     case POLICE -> "POLICE_CHECK";
                     case DOCTOR -> "DOCTOR_SAVE";
+                    case OBSERVER -> "OBSERVER_WATCH";
+                    case BLOCKER -> "BLOCKER_BLOCK";
                     case THIEF -> "THIEF_STEAL";
                     default -> "CITIZEN_WATCH"; // 시민/관종(위장 지목)
                 };
@@ -748,7 +836,7 @@ public class JobMafiaService implements RoomGame {
                 joined && me.alive,
                 board,
                 actionKind,
-                joined && me.role == Role.MAFIA_COP && mafiaCopInvestigate.getOrDefault(mySeatIdx, false),
+                joined && isAbilityMafia(me.role) && mafiaAbilityMode.getOrDefault(mySeatIdx, false),
                 selectable,
                 myTarget,
                 fellow,
@@ -775,7 +863,7 @@ public class JobMafiaService implements RoomGame {
 
     private String teamOf(Role r) {
         return switch (r) {
-            case MAFIA, MAFIA_COP, MAFIA_SHADOW -> "MAFIA";
+            case MAFIA, MAFIA_COP, MAFIA_SHADOW, MAFIA_OBSERVER, MAFIA_BLOCKER -> "MAFIA";
             case ATTENTION, THIEF -> "NEUTRAL";
             default -> "CITIZEN";
         };
@@ -788,12 +876,12 @@ public class JobMafiaService implements RoomGame {
             if (!players.get(i).alive) continue;
             switch (acting) {
                 case MAFIA, MAFIA_SHADOW -> { if (!isMafia(players.get(i).role)) out.add(i); } // 동료 마피아 제외
-                case MAFIA_COP -> {
-                    boolean inv = mafiaCopInvestigate.getOrDefault(mySeat, false);
-                    if (inv ? (i != mySeat) : !isMafia(players.get(i).role)) out.add(i); // 조사=자기 제외, 살해=동료 제외
+                case MAFIA_COP, MAFIA_OBSERVER, MAFIA_BLOCKER -> {
+                    boolean ability = mafiaAbilityMode.getOrDefault(mySeat, false);
+                    if (ability ? (i != mySeat) : !isMafia(players.get(i).role)) out.add(i); // 능력=자기 제외, 살해=동료 제외
                 }
                 case DOCTOR -> out.add(i);            // 자기 보호 허용
-                default -> { if (i != mySeat) out.add(i); } // 경찰/시민/관종: 자기 제외
+                default -> { if (i != mySeat) out.add(i); } // 경찰/시민/관종/관찰자/봉쇄자: 자기 제외
             }
         }
         return out;
@@ -840,10 +928,13 @@ public class JobMafiaService implements RoomGame {
         nightActed.clear();
         psychoFakeRoles.clear();
         votes.clear();
-        mafiaCopInvestigate.clear();
+        mafiaAbilityMode.clear();
         concealedSeats.clear();
         mafiaCopMin = mafiaCopMax = mafiaShadowMin = mafiaShadowMax = 0;
+        observerMin = observerMax = blockerMin = blockerMax = 0;
+        mafiaObserverMin = mafiaObserverMax = mafiaBlockerMin = mafiaBlockerMax = 0;
         abilityIndependentKill = false;
+        blockedSeats.clear();
         nightMessage = null;
         nightDeadSeat = executedSeat = -1;
         winner = null;
