@@ -30,7 +30,7 @@ const GAMES: Game[] = [
   { href: '/tetris-battle', title: '🧱⚔️ 테트리스 배틀', desc: '줄을 지워 상대에게 방해 줄을 보내는 대전 테트리스. 1v1·배틀로얄(최대 6인), 봇과 혼자도 가능. 우승 랭킹.', hover: 'move', solo: true, soloLabel: '🤖 봇과 1인 가능' },
   { href: '/sixnimmt', title: '🐮 젝스님트', desc: '카드를 동시에 내어 6번째가 되면 벌점을 먹는 눈치 카드게임. 벌점 적게 먹기! 봇과 2~10인.', hover: 'hit', solo: true, soloLabel: '🤖 봇과 1인 가능' },
   { href: '/2048', title: '🔢 2048', desc: '같은 숫자 타일을 밀어 합쳐 2048을 만드는 중독성 퍼즐. 최고 점수 랭킹 (혼자 플레이).', hover: 'hit', solo: true, soloLabel: '🧩 1인 플레이' },
-  { href: '/yacht', title: '🎲 야찌', desc: '주사위 5개를 굴려 족보를 채우는 다이스 게임. 봇과 대결하거나 혼자 최고 점수 랭킹에 도전.', hover: 'hit', solo: true, soloLabel: '🤖 봇과 1인 가능' },
+  { href: '/yacht', title: '🎲 야찌', desc: '주사위 5개를 굴려 족보를 채우는 다이스 게임. 친구·봇과 방에서 대결하고 최고 점수 랭킹 도전. 봇과 1인~8인.', hover: 'hit', solo: true, soloLabel: '🤖 봇과 1인 가능' },
   { href: '/gartic', title: '🎨 그림 텔레폰', desc: '문장을 그림으로, 그림을 문장으로 넘기며 엉뚱하게 변해가는 갈틱폰 (3~10인).', hover: 'hit', solo: false },
   { href: '/bingo', title: '🔢 빙고', desc: '3×3~5×5 판을 채우고, 뽑히는 숫자로 먼저 빙고 줄을 완성하면 승리 (2~8인).', hover: 'hit', solo: false },
   { href: '/snake', title: '🐍 지렁이', desc: '먹이를 먹고 커지며 봇과 경쟁하는 지렁이 게임. 랭킹 등록 (혼자 플레이).', hover: 'hit', solo: true, soloLabel: '🤖 봇과 1인 가능' },
