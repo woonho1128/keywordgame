@@ -256,7 +256,7 @@ public class AvalonService implements RoomGame {
                 case TEAM_BUILD -> { autoPropose(); startTeamVote(); }
                 case TEAM_VOTE -> resolveVote();
                 case QUEST -> resolveQuest();
-                case ASSASSIN -> resolveAssassin(randomGoodSeat());
+                case ASSASSIN -> resolveAssassin(-1); // 시간 내 미지목 = 멀린 못 찾음 → 선 승리(정석)
                 default -> { }
             }
         }
@@ -522,13 +522,10 @@ public class AvalonService implements RoomGame {
         return -1;
     }
 
-    private int randomGoodSeat() {
-        List<Integer> good = new ArrayList<>();
-        for (int i = 0; i < players.size(); i++) if (!isEvil(players.get(i).role)) good.add(i);
-        return good.isEmpty() ? 0 : good.get(ThreadLocalRandom.current().nextInt(good.size()));
-    }
-
     private int seatOf(Player p) { return players.indexOf(p); }
+
+    /** 테스트용: 현재 페이즈 제한시간을 즉시 만료시켜 다음 tick에서 자동 처리되게 함. */
+    void expirePhaseForTest() { if (phaseEndsAt > 0) phaseEndsAt = 1; }
 
     private Player requirePlayer(String clientId) {
         Integer s = clientSeats.get(clientId);

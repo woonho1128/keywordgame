@@ -101,6 +101,20 @@ class AvalonServiceTest {
     }
 
     @Test
+    void 암살자_시간초과_미지목시_선_승리() throws Exception {
+        AvalonService svc = start7();
+        passQuestSuccess(svc);
+        passQuestSuccess(svc);
+        passQuestSuccess(svc);
+        assertThat(svc.me("host").status()).isEqualTo("ASSASSIN");
+        // 암살자가 제한시간 내 지목하지 않음 → 자동 처리는 선 승리(랜덤 지목 아님)
+        svc.expirePhaseForTest();
+        AvalonStateResponse end = svc.me("host");
+        assertThat(end.status()).isEqualTo("ENDED");
+        assertThat(end.winner()).isEqualTo("GOOD");
+    }
+
+    @Test
     void 암살자가_멀린을_맞히면_악_승리() throws Exception {
         AvalonService svc = start7();
         passQuestSuccess(svc);
