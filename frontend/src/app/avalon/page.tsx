@@ -341,6 +341,8 @@ export default function AvalonPage() {
         </div>
       )}
 
+      {phase !== 'NOT_STARTED' && rolesGuide()}
+
       <div className="flex-1 w-full">
         {phase === 'NOT_STARTED' && renderNotStarted()}
         {phase === 'LOBBY' && renderLobby()}
@@ -368,6 +370,36 @@ export default function AvalonPage() {
       <RoomChat game="avalon" roomCode={roomCode} clientId={clientId} nick={nick} />
     </main>
   );
+
+  function rolesGuide() {
+    const good = ['MERLIN', 'PERCIVAL', 'SERVANT'];
+    const evil = ['ASSASSIN', 'MORGANA', 'MORDRED', 'OBERON', 'MINION'];
+    const row = (k: string) => {
+      const m = ROLE_META[k];
+      return (
+        <div key={k} className="flex gap-2 text-xs leading-snug">
+          <span className="shrink-0 font-bold" style={{ minWidth: '5.5rem' }}>{m.emoji} {m.label}</span>
+          <span className="text-gray-500">{m.desc}</span>
+        </div>
+      );
+    };
+    return (
+      <details className="w-full my-2 rounded-xl border border-gray-200 p-3">
+        <summary className="text-sm font-bold cursor-pointer text-gray-700 select-none">📖 직업 설명 보기</summary>
+        <div className="mt-3 space-y-3">
+          <div>
+            <p className="text-xs font-bold text-blue-600 mb-1">🔵 선 (아서왕 편) · 원정 3회 성공이 목표</p>
+            <div className="space-y-1">{good.map(row)}</div>
+          </div>
+          <div>
+            <p className="text-xs font-bold text-red-500 mb-1">🔴 악 (모드레드 편) · 원정 3회 실패 또는 멀린 암살</p>
+            <div className="space-y-1">{evil.map(row)}</div>
+          </div>
+          <p className="text-[11px] text-gray-400">※ 퍼시발·모르가나·모드레드·오베론은 방 설정에 따라 포함 여부가 달라집니다.</p>
+        </div>
+      </details>
+    );
+  }
 
   function questTrack() {
     return (
