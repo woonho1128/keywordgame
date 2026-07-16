@@ -65,6 +65,23 @@ function botPlay(card: Card): { dice: number[]; cat: Cat; pts: number } {
   return { dice, cat: best, pts: bestPts };
 }
 
+// 주사위 눈 위치(3×3 격자 인덱스). 눈금은 붉은색으로 그려 테두리와 확실히 구분.
+const PIPS: Record<number, number[]> = {
+  1: [4], 2: [0, 8], 3: [0, 4, 8], 4: [0, 2, 6, 8], 5: [0, 2, 4, 6, 8], 6: [0, 2, 3, 5, 6, 8],
+};
+function DiceFace({ v }: { v: number }) {
+  const on = new Set(PIPS[v] ?? []);
+  return (
+    <div className="grid grid-cols-3 grid-rows-3 gap-[1px] w-[64%] h-[64%]">
+      {Array.from({ length: 9 }, (_, k) => (
+        <span key={k} className="flex items-center justify-center">
+          {on.has(k) && <span className="block rounded-full bg-red-500 shadow-[0_0_1px_rgba(0,0,0,0.3)]" style={{ width: '72%', aspectRatio: '1/1' }} />}
+        </span>
+      ))}
+    </div>
+  );
+}
+
 export default function YachtPage() {
   const [screen, setScreen] = useState<'setup' | 'play'>('setup');
   const [nick, setNick] = useState('');
@@ -229,8 +246,8 @@ export default function YachtPage() {
             <div className="flex justify-center gap-2 sm:gap-3 mb-3">
               {dice.map((d, i) => (
                 <button key={i} onClick={() => toggleHold(i)} disabled={!isMyTurn}
-                  className={`w-12 h-12 sm:w-14 sm:h-14 lg:w-16 lg:h-16 rounded-xl border-2 flex items-center justify-center text-3xl sm:text-4xl font-extrabold transition ${held[i] ? 'border-indigo-500 bg-indigo-100 text-indigo-700 -translate-y-1 shadow' : 'border-gray-300 bg-white text-gray-700'} ${isMyTurn ? 'hover:border-indigo-300' : ''}`}>
-                  {['', '⚀', '⚁', '⚂', '⚃', '⚄', '⚅'][d]}
+                  className={`w-12 h-12 sm:w-14 sm:h-14 lg:w-16 lg:h-16 rounded-xl border-2 flex items-center justify-center transition ${held[i] ? 'border-indigo-500 bg-indigo-100 -translate-y-1 shadow' : 'border-gray-300 bg-white'} ${isMyTurn ? 'hover:border-indigo-300' : ''}`}>
+                  <DiceFace v={d} />
                 </button>
               ))}
             </div>
