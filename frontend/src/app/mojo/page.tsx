@@ -27,7 +27,7 @@ function cid(): string {
 const COLORS = ['#3b82f6', '#22c55e', '#eab308', '#f97316', '#ef4444']; // 파랑 초록 노랑 주황 빨강
 const colorOf = (n: number) => (n <= 1 ? 0 : n <= 4 ? 1 : n <= 7 ? 2 : n <= 10 ? 3 : 4);
 function NumCard({ n, sm, onClick, dim, sel }: { n: number | null; sm?: boolean; onClick?: () => void; dim?: boolean; sel?: boolean }) {
-  const size = sm ? 'w-8 h-11 text-base' : 'w-11 h-16 sm:w-12 sm:h-[68px] text-xl sm:text-2xl';
+  const size = sm ? 'w-8 h-11 text-base lg:w-11 lg:h-16 lg:text-xl' : 'w-12 h-[68px] sm:w-14 sm:h-20 lg:w-[72px] lg:h-[104px] text-2xl sm:text-3xl lg:text-4xl';
   if (n === null) return <div className={`${size} rounded-md border-2 border-slate-400 bg-slate-300 dark:bg-slate-600 flex items-center justify-center font-bold text-slate-500`}>?</div>;
   return (
     <button onClick={onClick} disabled={!onClick}
@@ -120,7 +120,7 @@ export default function MojoPage() {
   const players = ss?.players ?? [];
 
   return (
-    <main className="min-h-screen flex flex-col items-center p-3 sm:p-5 max-w-2xl mx-auto w-full text-slate-800 dark:text-slate-100">
+    <main className="min-h-screen flex flex-col items-center p-3 sm:p-5 max-w-2xl lg:max-w-3xl mx-auto w-full text-slate-800 dark:text-slate-100">
       <div className="w-full flex items-center justify-between mb-3">
         <div className="flex items-center gap-2">{home}<h1 className="text-xl sm:text-2xl font-extrabold">🎴 모죠</h1></div>
         {roomCode && <button onClick={leave} className="text-xs px-2 py-1 rounded bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-100">나가기</button>}
@@ -242,7 +242,7 @@ export default function MojoPage() {
                 ))}
               </div>
               <div className="flex flex-col items-center gap-1">
-                <div className="w-11 h-16 sm:w-12 sm:h-[68px] rounded-md border-2 border-slate-400 bg-slate-500 flex items-center justify-center text-white font-bold text-sm">뽑기</div>
+                <div className="w-12 h-[68px] sm:w-14 sm:h-20 lg:w-[72px] lg:h-[104px] rounded-md border-2 border-slate-400 bg-slate-500 flex items-center justify-center text-white font-bold text-sm">뽑기</div>
                 <span className="text-[10px] text-slate-400">{ss.drawCount}장</span>
               </div>
             </div>
