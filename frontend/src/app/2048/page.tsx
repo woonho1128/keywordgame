@@ -178,7 +178,7 @@ export default function Game2048() {
       </div>
 
       <div className="relative w-full select-none" onTouchStart={onTouchStart} onTouchEnd={onTouchEnd} style={{ touchAction: 'none' }}>
-        <div className="rounded-xl bg-[#bbada0] p-2 grid grid-cols-4 gap-2" style={{ aspectRatio: '1/1' }}>
+        <div className="rounded-xl bg-[#bbada0] p-2 grid grid-cols-4 grid-rows-4 gap-2" style={{ aspectRatio: '1/1' }}>
           {board.flat().map((v, i) => {
             const c = tileColor(v);
             return (
