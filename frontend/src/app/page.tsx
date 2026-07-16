@@ -9,10 +9,10 @@ const GAME_SLUG: Record<string, string> = {
   mafia: 'mafia', 'mafia-jobs': 'jobmafia', avalon: 'avalon', codenames: 'codenames',
   rummikub: 'rummikub', halligalli: 'halligalli', lexio: 'lexio', bingo: 'bingo',
   gartic: 'gartic', othello: 'othello', coup: 'coup', omok: 'omok', horserace: 'horserace',
-  sixnimmt: 'sixnimmt', 'tetris-battle': 'tetris-battle', yacht: 'yacht',
+  sixnimmt: 'sixnimmt', 'tetris-battle': 'tetris-battle', yacht: 'yacht', mojo: 'mojo',
 };
 // 엔트리형(방을 localStorage로 복원하지 않는) 게임 → ?join=CODE 쿼리로 자동 참가
-const ENTRY_GAMES = new Set(['sixnimmt', 'tetris-battle', 'yacht']);
+const ENTRY_GAMES = new Set(['sixnimmt', 'tetris-battle', 'yacht', 'mojo']);
 
 type Game = {
   href: string;
@@ -40,6 +40,7 @@ const GAMES: Game[] = [
   { href: '/tetris', title: '🧱 테트리스', desc: '블록을 쌓아 줄을 지우는 고전 낙하 퍼즐. 마라톤·스프린트 모드 + 랭킹. T-스핀·홀드 지원 (혼자 플레이).', hover: 'hit', solo: true, soloLabel: '🧩 1인 플레이' },
   { href: '/tetris-battle', title: '🧱⚔️ 테트리스 배틀', desc: '줄을 지워 상대에게 방해 줄을 보내는 대전 테트리스. 1v1·배틀로얄(최대 6인), 봇과 혼자도 가능. 우승 랭킹.', hover: 'move', solo: true, soloLabel: '🤖 봇과 1인 가능' },
   { href: '/sixnimmt', title: '🐮 젝스님트', desc: '카드를 동시에 내어 6번째가 되면 벌점을 먹는 눈치 카드게임. 벌점 적게 먹기! 봇과 2~10인.', hover: 'hit', solo: true, soloLabel: '🤖 봇과 1인 가능' },
+  { href: '/mojo', title: '🎴 모죠', desc: '카드를 내며 비교하고, 모죠타임에 뒷면 카드를 공개하는 눈치·도박 카드게임. 색상별 최고 숫자만 벌점! 봇과 2~8인.', hover: 'hit', solo: true, soloLabel: '🤖 봇과 1인 가능' },
   { href: '/2048', title: '🔢 2048', desc: '같은 숫자 타일을 밀어 합쳐 2048을 만드는 중독성 퍼즐. 최고 점수 랭킹 (혼자 플레이).', hover: 'hit', solo: true, soloLabel: '🧩 1인 플레이' },
   { href: '/yacht', title: '🎲 야찌', desc: '주사위 5개를 굴려 족보를 채우는 다이스 게임. 친구·봇과 방에서 대결하고 최고 점수 랭킹 도전. 봇과 1인~8인.', hover: 'hit', solo: true, soloLabel: '🤖 봇과 1인 가능' },
   { href: '/gartic', title: '🎨 그림 텔레폰', desc: '문장을 그림으로, 그림을 문장으로 넘기며 엉뚱하게 변해가는 갈틱폰 (3~10인).', hover: 'hit', solo: false },
