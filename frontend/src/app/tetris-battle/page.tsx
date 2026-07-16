@@ -285,7 +285,7 @@ export default function TetrisBattlePage() {
   const ended = ss?.phase === 'ENDED';
 
   return (
-    <main className="min-h-screen flex flex-col items-center p-3 max-w-4xl mx-auto w-full text-slate-100">
+    <main className="min-h-screen flex flex-col items-center p-3 max-w-4xl mx-auto w-full text-slate-800 dark:text-slate-100">
       <div className="w-full flex items-center justify-between mb-3">
         <div className="flex items-center gap-2">
           <Link href="/" aria-label="홈으로" className="text-lg leading-none text-slate-500 hover:text-slate-800 dark:hover:text-slate-100">🏠</Link>
@@ -303,7 +303,7 @@ export default function TetrisBattlePage() {
             {(['DUEL', 'ROYALE'] as const).map((f) => (
               <button key={f} onClick={() => setFormat(f)} className={`rounded-xl border-2 p-3 text-left ${format === f ? 'border-fuchsia-500 bg-fuchsia-500/10' : 'border-slate-300 dark:border-slate-600'}`}>
                 <p className="font-bold">{f === 'DUEL' ? '⚔️ 1v1' : '👑 배틀로얄'}</p>
-                <p className="text-xs text-slate-400">{f === 'DUEL' ? '1:1 맞대결' : '최대 6인 최후생존'}</p>
+                <p className="text-xs text-slate-500 dark:text-slate-400">{f === 'DUEL' ? '1:1 맞대결' : '최대 6인 최후생존'}</p>
               </button>
             ))}
           </div>
@@ -316,12 +316,12 @@ export default function TetrisBattlePage() {
 
           <div className="rounded-xl border border-slate-200 dark:border-slate-700 p-3">
             <p className="text-sm font-bold text-slate-500 mb-2">🎮 열린 방</p>
-            {rooms.length === 0 ? <p className="text-slate-400 text-sm text-center py-2">방이 없어요. 만들어보세요!</p> : (
+            {rooms.length === 0 ? <p className="text-slate-500 dark:text-slate-400 text-sm text-center py-2">방이 없어요. 만들어보세요!</p> : (
               <div className="space-y-1">
                 {rooms.map((r) => (
                   <button key={r.code} onClick={() => join(r.code)} disabled={!nick.trim()} className="w-full flex justify-between text-sm py-1.5 px-2 rounded hover:bg-fuchsia-500/10 disabled:opacity-40">
                     <span className="font-bold">{r.code} · {r.host}</span>
-                    <span className="text-slate-400">{r.status === 'WAITING' ? '모집중' : r.status === 'PLAYING' ? '진행중' : '종료'} · {r.playerCount}명</span>
+                    <span className="text-slate-500 dark:text-slate-400">{r.status === 'WAITING' ? '모집중' : r.status === 'PLAYING' ? '진행중' : '종료'} · {r.playerCount}명</span>
                   </button>
                 ))}
               </div>
@@ -330,7 +330,7 @@ export default function TetrisBattlePage() {
 
           <div className="rounded-xl border border-slate-200 dark:border-slate-700 p-3">
             <p className="text-sm font-bold text-slate-500 mb-2">🏆 우승 랭킹</p>
-            {ranking.length === 0 ? <p className="text-slate-400 text-sm text-center py-2">아직 기록이 없어요</p> : (
+            {ranking.length === 0 ? <p className="text-slate-500 dark:text-slate-400 text-sm text-center py-2">아직 기록이 없어요</p> : (
               <div className="space-y-0.5">
                 {ranking.map((r) => (
                   <div key={r.rank} className="flex justify-between text-sm px-1">
@@ -348,15 +348,15 @@ export default function TetrisBattlePage() {
       {screen === 'lobby' && ss && (
         <div className="w-full space-y-4 text-slate-800 dark:text-slate-100">
           <div className="text-center">
-            <p className="text-sm text-slate-400">방 코드</p>
+            <p className="text-sm text-slate-500 dark:text-slate-400">방 코드</p>
             <p className="text-3xl font-extrabold tracking-widest text-fuchsia-500">{roomCode}</p>
-            <p className="text-xs text-slate-400">{ss.format === 'DUEL' ? '1v1' : '배틀로얄'} · {ss.totalPlayers}/{ss.format === 'DUEL' ? 2 : 6}명</p>
+            <p className="text-xs text-slate-500 dark:text-slate-400">{ss.format === 'DUEL' ? '1v1' : '배틀로얄'} · {ss.totalPlayers}/{ss.format === 'DUEL' ? 2 : 6}명</p>
           </div>
           <div className="rounded-xl border border-slate-200 dark:border-slate-700 p-3 space-y-1">
             {ss.players.map((p, i) => (
               <div key={i} className="flex justify-between text-sm px-1 py-0.5">
                 <span className="font-bold">{p.host ? '👑 ' : ''}{p.bot ? '🤖 ' : ''}{p.name}{p.me ? ' (나)' : ''}</span>
-                <span className="text-slate-400">{p.bot ? (p.botLevel === 'EASY' ? '초급' : p.botLevel === 'HARD' ? '고급' : '중급') : ''}</span>
+                <span className="text-slate-500 dark:text-slate-400">{p.bot ? (p.botLevel === 'EASY' ? '초급' : p.botLevel === 'HARD' ? '고급' : '중급') : ''}</span>
               </div>
             ))}
           </div>
@@ -370,26 +370,26 @@ export default function TetrisBattlePage() {
               </div>
               <button onClick={startMatch} disabled={ss.totalPlayers < 2} className="w-full bg-fuchsia-600 text-white font-bold py-3 rounded-lg disabled:opacity-40">시작하기</button>
             </div>
-          ) : <p className="text-center text-sm text-slate-400">방장이 시작하기를 기다리는 중…</p>}
+          ) : <p className="text-center text-sm text-slate-500 dark:text-slate-400">방장이 시작하기를 기다리는 중…</p>}
         </div>
       )}
 
       {/* ── 플레이 ── */}
       {screen === 'play' && (
-        <div className="w-full flex flex-col items-center">
+        <div className="w-full flex flex-col items-center text-slate-800 dark:text-slate-100">
           {ended && (
             <div className="mb-3 text-center rounded-xl border-2 border-fuchsia-500 bg-fuchsia-500/10 px-6 py-3">
               <p className="text-lg font-bold">{ss?.winner ? `🏆 ${ss.winner} 우승!` : '게임 종료'}</p>
-              {ss?.myPlacement && <p className="text-sm text-slate-300">내 등수: {ss.myPlacement}등 / {ss.totalPlayers}명</p>}
-              <button onClick={leaveRoom} className="mt-2 px-5 py-2 rounded-lg bg-fuchsia-600 font-bold">나가기</button>
+              {ss?.myPlacement && <p className="text-sm text-slate-600 dark:text-slate-300">내 등수: {ss.myPlacement}등 / {ss.totalPlayers}명</p>}
+              <button onClick={leaveRoom} className="mt-2 px-5 py-2 rounded-lg bg-fuchsia-600 text-white font-bold">나가기</button>
             </div>
           )}
           <div className="flex gap-3 items-start justify-center w-full">
             {/* HOLD + 받을 가비지 게이지 */}
             <div className="hidden sm:flex flex-col gap-2 items-center">
-              <span className="text-[11px] text-slate-400 font-bold">HOLD</span>
+              <span className="text-[11px] text-slate-500 dark:text-slate-400 font-bold">HOLD</span>
               <div className="p-1.5 rounded-lg bg-slate-800/70 border border-slate-700"><MiniPiece type={hold} /></div>
-              <span className="text-[11px] text-slate-400 font-bold mt-2">받을 공격</span>
+              <span className="text-[11px] text-slate-500 dark:text-slate-400 font-bold mt-2">받을 공격</span>
               <div className="w-4 rounded bg-slate-800 border border-slate-700 flex flex-col-reverse" style={{ height: 120 }}>
                 <div className="w-full rounded bg-red-500 transition-all" style={{ height: `${Math.min(100, (incoming / 20) * 100)}%` }} />
               </div>
@@ -401,32 +401,36 @@ export default function TetrisBattlePage() {
               {incoming > 0 && <div className="sm:hidden absolute -left-3 top-0 bottom-0 w-2 rounded bg-red-500/70" style={{ height: `${Math.min(100, (incoming / 20) * 100)}%` }} />}
               {dead && !ended && <div className="absolute inset-0 flex items-center justify-center bg-slate-900/80 rounded-lg"><span className="font-bold text-red-400">💀 탈락 · 관전 중</span></div>}
             </div>
-            {/* NEXT + 상대 */}
+            {/* NEXT + 상대(오른쪽 열에 배치해 세로 공간 절약) */}
             <div className="flex flex-col gap-2 items-center">
-              <span className="text-[11px] text-slate-400 font-bold">NEXT</span>
+              <span className="text-[11px] text-slate-500 dark:text-slate-400 font-bold">NEXT</span>
               <div className="p-1 rounded-lg bg-slate-800/70 border border-slate-700 flex flex-col gap-0.5">
-                {nextQ.slice(0, 4).map((t, i) => <MiniPiece key={i} type={t} />)}
+                {nextQ.slice(0, 3).map((t, i) => <MiniPiece key={i} type={t} />)}
               </div>
+              {(ss?.opponents?.length ?? 0) > 0 && (
+                <>
+                  <span className="text-[11px] text-slate-500 dark:text-slate-400 font-bold mt-1">상대</span>
+                  <div className="flex flex-col gap-1.5 items-center overflow-y-auto max-h-[36vh] sm:max-h-[46vh]">
+                    {(ss?.opponents || []).map((o, i) => <OppBoard key={i} o={o} />)}
+                  </div>
+                </>
+              )}
             </div>
           </div>
-          {/* 상대 미니보드 */}
-          <div className="mt-3 flex gap-2 flex-wrap justify-center max-w-full">
-            {(ss?.opponents || []).map((o, i) => <OppBoard key={i} o={o} />)}
-          </div>
-          <p className="text-xs text-slate-400 mt-1">생존 {ss?.aliveCount ?? '-'}명 · 줄을 지워 상대에게 공격! 받은 공격은 되받아치면 상쇄돼요.</p>
+          <p className="text-xs text-slate-500 dark:text-slate-400 mt-2 text-center px-2">생존 {ss?.aliveCount ?? '-'}명 · 줄을 지워 상대에게 공격! 받은 공격은 되받아치면 상쇄돼요.</p>
 
           {/* 모바일 조작 */}
           <div className="sm:hidden mt-3 pb-20 w-full max-w-sm select-none">
             <div className="grid grid-cols-3 gap-2 mb-2">
-              <button onPointerDown={() => act((e) => e.rotate(-1))} className="py-3 rounded-lg bg-slate-700 font-bold text-lg">⟲</button>
-              <button onPointerDown={hardDrop} className="py-3 rounded-lg bg-fuchsia-600 font-bold">⤓</button>
-              <button onPointerDown={() => act((e) => e.rotate(1))} className="py-3 rounded-lg bg-slate-700 font-bold text-lg">⟳</button>
+              <button onPointerDown={() => act((e) => e.rotate(-1))} className="py-3 rounded-lg bg-slate-700 text-white font-bold text-lg">⟲</button>
+              <button onPointerDown={hardDrop} className="py-3 rounded-lg bg-fuchsia-600 text-white font-bold">⤓</button>
+              <button onPointerDown={() => act((e) => e.rotate(1))} className="py-3 rounded-lg bg-slate-700 text-white font-bold text-lg">⟳</button>
             </div>
             <div className="grid grid-cols-4 gap-2">
-              <button onPointerDown={() => pressDir(-1)} onPointerUp={() => releaseDir(-1)} onPointerLeave={() => releaseDir(-1)} className="py-3 rounded-lg bg-slate-700 font-bold text-lg">◀</button>
-              <button onPointerDown={() => { loopRef.current.soft = true; }} onPointerUp={() => { loopRef.current.soft = false; }} onPointerLeave={() => { loopRef.current.soft = false; }} className="py-3 rounded-lg bg-slate-700 font-bold text-lg">▼</button>
-              <button onPointerDown={() => pressDir(1)} onPointerUp={() => releaseDir(1)} onPointerLeave={() => releaseDir(1)} className="py-3 rounded-lg bg-slate-700 font-bold text-lg">▶</button>
-              <button onPointerDown={doHold} className="py-3 rounded-lg bg-slate-700 font-bold text-sm">HOLD</button>
+              <button onPointerDown={() => pressDir(-1)} onPointerUp={() => releaseDir(-1)} onPointerLeave={() => releaseDir(-1)} className="py-3 rounded-lg bg-slate-700 text-white font-bold text-lg">◀</button>
+              <button onPointerDown={() => { loopRef.current.soft = true; }} onPointerUp={() => { loopRef.current.soft = false; }} onPointerLeave={() => { loopRef.current.soft = false; }} className="py-3 rounded-lg bg-slate-700 text-white font-bold text-lg">▼</button>
+              <button onPointerDown={() => pressDir(1)} onPointerUp={() => releaseDir(1)} onPointerLeave={() => releaseDir(1)} className="py-3 rounded-lg bg-slate-700 text-white font-bold text-lg">▶</button>
+              <button onPointerDown={doHold} className="py-3 rounded-lg bg-slate-700 text-white font-bold text-sm">HOLD</button>
             </div>
           </div>
         </div>
