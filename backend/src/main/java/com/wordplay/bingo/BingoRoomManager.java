@@ -12,7 +12,7 @@ import java.util.List;
 @Service
 public class BingoRoomManager {
 
-    private final RoomRegistry<BingoGame> reg = new RoomRegistry<>();
+    private final RoomRegistry<BingoGame> reg = new RoomRegistry<>("bingo");
 
     public String create(String clientId, NewBingoRequest req) {
         BingoGame game = new BingoGame();

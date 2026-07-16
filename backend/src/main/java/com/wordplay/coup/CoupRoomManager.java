@@ -13,7 +13,7 @@ import java.util.List;
 @Service
 public class CoupRoomManager {
 
-    private final RoomRegistry<CoupGame> reg = new RoomRegistry<>();
+    private final RoomRegistry<CoupGame> reg = new RoomRegistry<>("coup");
 
     public String create(String clientId, NewCoupRequest req) {
         CoupGame game = new CoupGame();

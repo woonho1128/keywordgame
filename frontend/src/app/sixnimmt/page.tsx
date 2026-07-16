@@ -85,13 +85,25 @@ export default function SixNimmtPage() {
       setRoomCode(res.roomCode); setSs(res.state); setScreen('lobby');
     } catch (e: any) { alert(e?.message || '방 생성 실패'); }
   };
-  const join = async (code: string) => {
-    const n = nick.trim(); if (!n || !code) return; try { localStorage.setItem('arcade_nick', n); } catch {}
+  const join = async (code: string, nickOverride?: string) => {
+    const n = (nickOverride ?? nick).trim(); if (!n || !code) return; setNick(n); try { localStorage.setItem('arcade_nick', n); } catch {}
     try {
       const s = await api<State>(`/api/v1/sixnimmt/join?roomCode=${code}&clientId=${id.current}`, { method: 'POST', body: JSON.stringify({ nick: n }) });
-      setRoomCode(code.toUpperCase()); setSs(s); setScreen('lobby');
+      setRoomCode(code.toUpperCase()); setSs(s); setScreen(s.phase === 'LOBBY' ? 'lobby' : 'game');
     } catch (e: any) { alert(e?.message || '참가 실패'); }
   };
+
+  // 메인에서 코드로 바로 입장(?join=CODE)
+  useEffect(() => {
+    const j = new URLSearchParams(window.location.search).get('join');
+    if (!j) return;
+    let n = ''; try { n = (localStorage.getItem('arcade_nick') || '').trim(); } catch {}
+    if (!n) return;
+    id.current = id.current || cid();
+    join(j.toUpperCase(), n);
+    try { window.history.replaceState({}, '', '/sixnimmt'); } catch {}
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const addBot = async () => { try { setSs(await api(`/api/v1/sixnimmt/add-bot?roomCode=${roomCode}&clientId=${id.current}&level=${botLevel}`, { method: 'POST', body: '{}' })); } catch (e: any) { alert(e?.message); } };
   const startMatch = async () => { try { setSs(await api(`/api/v1/sixnimmt/start?roomCode=${roomCode}&clientId=${id.current}`, { method: 'POST', body: '{}' })); setScreen('game'); } catch (e: any) { alert(e?.message); } };
   const playCard = async () => { if (sel == null) return; try { setSs(await api(`/api/v1/sixnimmt/play?roomCode=${roomCode}&clientId=${id.current}&card=${sel}`, { method: 'POST', body: '{}' })); setSel(null); } catch (e: any) { alert(e?.message); } };

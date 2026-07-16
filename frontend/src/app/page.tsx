@@ -1,7 +1,18 @@
 'use client';
 
 import Link from 'next/link';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { api } from '@/lib/api';
+
+// 코드 해석 결과(게임 키) → localStorage 슬러그. 대부분 경로와 동일, mafia-jobs만 다름.
+const GAME_SLUG: Record<string, string> = {
+  mafia: 'mafia', 'mafia-jobs': 'jobmafia', avalon: 'avalon', codenames: 'codenames',
+  rummikub: 'rummikub', halligalli: 'halligalli', lexio: 'lexio', bingo: 'bingo',
+  gartic: 'gartic', othello: 'othello', coup: 'coup', omok: 'omok', horserace: 'horserace',
+  sixnimmt: 'sixnimmt', 'tetris-battle': 'tetris-battle', yacht: 'yacht',
+};
+// 엔트리형(방을 localStorage로 복원하지 않는) 게임 → ?join=CODE 쿼리로 자동 참가
+const ENTRY_GAMES = new Set(['sixnimmt', 'tetris-battle', 'yacht']);
 
 type Game = {
   href: string;
@@ -42,10 +53,57 @@ export default function HomePage() {
   const games = soloOnly ? GAMES.filter((g) => g.solo) : GAMES;
   const soloCount = GAMES.filter((g) => g.solo).length;
 
+  const [joinNick, setJoinNick] = useState('');
+  const [joinCode, setJoinCode] = useState('');
+  const [joinErr, setJoinErr] = useState('');
+  const [joining, setJoining] = useState(false);
+
+  useEffect(() => { try { setJoinNick(localStorage.getItem('arcade_nick') || ''); } catch {} }, []);
+
+  const quickJoin = async () => {
+    const nick = joinNick.trim();
+    const code = joinCode.trim().toUpperCase();
+    if (!nick) { setJoinErr('닉네임을 입력하세요'); return; }
+    if (code.length < 4) { setJoinErr('코드 4자리를 입력하세요'); return; }
+    setJoining(true); setJoinErr('');
+    try {
+      const res = await api<{ game: string; code: string }>(`/api/v1/rooms/resolve?code=${encodeURIComponent(code)}`);
+      const game = res.game;
+      const slug = GAME_SLUG[game] || game;
+      try {
+        localStorage.setItem('arcade_nick', nick);
+        localStorage.setItem(`${slug}_nick`, nick);
+        localStorage.setItem(`${slug}_room`, res.code);
+      } catch {}
+      // 엔트리형은 ?join=으로 완전 자동 참가, 그 외는 방 로비로 진입(닉 미리 채워짐)
+      window.location.href = ENTRY_GAMES.has(game) ? `/${game}?join=${res.code}` : `/${game}`;
+    } catch (e) {
+      setJoinErr(e instanceof Error ? e.message : '방을 찾을 수 없습니다');
+      setJoining(false);
+    }
+  };
+
   return (
     <main className="min-h-screen flex flex-col items-center justify-center p-8">
       <h1 className="text-5xl font-extrabold mb-2 tracking-tight">🎮 gg</h1>
       <p className="text-gray-500 mb-6">친구들과 모여 하는 파티·보드게임</p>
+
+      <div className="mb-6 w-full max-w-md rounded-2xl border-2 border-gray-200 p-4">
+        <p className="text-sm font-bold text-gray-600 mb-2">🔑 코드로 방 바로 입장</p>
+        <div className="flex flex-col sm:flex-row gap-2">
+          <input value={joinNick} onChange={(e) => setJoinNick(e.target.value)} maxLength={16} placeholder="닉네임 (필수)"
+            className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-hit" />
+          <div className="flex gap-2">
+            <input value={joinCode} onChange={(e) => { setJoinCode(e.target.value.toUpperCase()); setJoinErr(''); }} maxLength={4}
+              onKeyDown={(e) => e.key === 'Enter' && quickJoin()} placeholder="코드" inputMode="text"
+              className="w-24 border border-gray-300 rounded-lg px-3 py-2 text-sm uppercase tracking-widest font-bold focus:outline-none focus:border-hit" />
+            <button onClick={quickJoin} disabled={joining || !joinNick.trim() || joinCode.trim().length < 4}
+              className="px-5 bg-hit text-white font-bold rounded-lg text-sm disabled:opacity-40">{joining ? '…' : '입장'}</button>
+          </div>
+        </div>
+        {joinErr && <p className="text-red-500 text-xs mt-2">{joinErr}</p>}
+        <p className="text-[11px] text-gray-400 mt-2">친구가 만든 방 코드를 입력하면 해당 게임 방으로 바로 들어가요.</p>
+      </div>
 
       <div className="mb-8">
         <button

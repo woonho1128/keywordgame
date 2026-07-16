@@ -145,13 +145,25 @@ export default function YachtPage() {
       setRoomCode(res.roomCode); setSs(res.state); setScreen('lobby'); submitted.current = false; setMyRank(null);
     } catch (e: any) { alert(e?.message || '방 생성 실패'); }
   };
-  const join = async (code: string) => {
-    const n = nick.trim(); if (!n || !code) return; saveNick(n);
+  const join = async (code: string, nickOverride?: string) => {
+    const n = (nickOverride ?? nick).trim(); if (!n || !code) return; saveNick(n); setNick(n);
     try {
       const s = await api<State>(`/api/v1/yacht-room/join?roomCode=${code}&clientId=${id.current}`, { method: 'POST', body: JSON.stringify({ nick: n }) });
       setRoomCode(code.toUpperCase()); setSs(s); setScreen(s.phase === 'LOBBY' ? 'lobby' : 'game'); submitted.current = false; setMyRank(null);
     } catch (e: any) { alert(e?.message || '참가 실패'); }
   };
+
+  // 메인에서 코드로 바로 입장(?join=CODE)
+  useEffect(() => {
+    const j = new URLSearchParams(window.location.search).get('join');
+    if (!j) return;
+    let n = ''; try { n = (localStorage.getItem('arcade_nick') || '').trim(); } catch {}
+    if (!n) return;
+    id.current = id.current || cid();
+    join(j.toUpperCase(), n);
+    try { window.history.replaceState({}, '', '/yacht'); } catch {}
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const addBot = async () => { try { setSs(await api(`/api/v1/yacht-room/add-bot?roomCode=${roomCode}&clientId=${id.current}&level=${botLevel}`, { method: 'POST', body: '{}' })); } catch (e: any) { alert(e?.message); } };
   const startMatch = async () => { try { setSs(await api(`/api/v1/yacht-room/start?roomCode=${roomCode}&clientId=${id.current}`, { method: 'POST', body: '{}' })); setScreen('game'); } catch (e: any) { alert(e?.message); } };
   const roll = async () => { try { setSs(await api(`/api/v1/yacht-room/roll?roomCode=${roomCode}&clientId=${id.current}`, { method: 'POST', body: '{}' })); } catch (e: any) { alert(e?.message); } };

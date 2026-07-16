@@ -13,7 +13,7 @@ import java.util.List;
 @Service
 public class AvalonRoomManager {
 
-    private final RoomRegistry<AvalonService> reg = new RoomRegistry<>();
+    private final RoomRegistry<AvalonService> reg = new RoomRegistry<>("avalon");
 
     public String create(String clientId, NewAvalonRequest req) {
         AvalonService game = new AvalonService();

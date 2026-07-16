@@ -13,7 +13,7 @@ import java.util.List;
 @Service
 public class HorseRaceRoomManager {
 
-    private final RoomRegistry<HorseRaceGame> reg = new RoomRegistry<>();
+    private final RoomRegistry<HorseRaceGame> reg = new RoomRegistry<>("horserace");
 
     public String create(String clientId, NewHorseRaceRequest req, Long accountId, long accountBalance) {
         HorseRaceGame game = new HorseRaceGame();

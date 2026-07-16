@@ -13,7 +13,7 @@ import java.util.List;
 @Service
 public class LexioRoomManager {
 
-    private final RoomRegistry<LexioGame> reg = new RoomRegistry<>();
+    private final RoomRegistry<LexioGame> reg = new RoomRegistry<>("lexio");
 
     public String create(String clientId, NewLexioRequest req) {
         LexioGame game = new LexioGame();

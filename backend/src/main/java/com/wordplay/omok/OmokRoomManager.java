@@ -13,7 +13,7 @@ import java.util.List;
 @Service
 public class OmokRoomManager {
 
-    private final RoomRegistry<OmokGame> reg = new RoomRegistry<>();
+    private final RoomRegistry<OmokGame> reg = new RoomRegistry<>("omok");
 
     public String create(String clientId, NewOmokRequest req) {
         OmokGame game = new OmokGame();

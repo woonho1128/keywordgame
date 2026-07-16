@@ -13,7 +13,7 @@ import java.util.List;
 @Service
 public class SixNimmtRoomManager {
 
-    private final RoomRegistry<SixNimmtGame> reg = new RoomRegistry<>();
+    private final RoomRegistry<SixNimmtGame> reg = new RoomRegistry<>("sixnimmt");
 
     public String create(String clientId, NewSixNimmtRequest req) {
         SixNimmtGame game = new SixNimmtGame(clientId, req.nick(), req.endMode(), req.targetHands());

@@ -21,7 +21,7 @@ public class HalliGalliRoomManager {
 
     private static final long SSE_TIMEOUT_MS = 30 * 60_000L; // 30분
 
-    private final RoomRegistry<HalliGalliGame> reg = new RoomRegistry<>();
+    private final RoomRegistry<HalliGalliGame> reg = new RoomRegistry<>("halligalli");
     // roomCode → (clientId → emitter)
     private final Map<String, Map<String, SseEmitter>> emitters = new ConcurrentHashMap<>();
 

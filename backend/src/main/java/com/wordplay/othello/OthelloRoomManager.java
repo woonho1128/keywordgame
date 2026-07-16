@@ -13,7 +13,7 @@ import java.util.List;
 @Service
 public class OthelloRoomManager {
 
-    private final RoomRegistry<OthelloGame> reg = new RoomRegistry<>();
+    private final RoomRegistry<OthelloGame> reg = new RoomRegistry<>("othello");
 
     public String create(String clientId, NewOthelloRequest req) {
         OthelloGame game = new OthelloGame();

@@ -13,7 +13,7 @@ import java.util.List;
 @Service
 public class YachtRoomManager {
 
-    private final RoomRegistry<YachtGame> reg = new RoomRegistry<>();
+    private final RoomRegistry<YachtGame> reg = new RoomRegistry<>("yacht");
 
     public String create(String clientId, NewYachtRequest req) {
         YachtGame game = new YachtGame(clientId, req.nick());

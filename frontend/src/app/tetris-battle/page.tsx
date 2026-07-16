@@ -125,8 +125,8 @@ export default function TetrisBattlePage() {
       setRoomCode(res.roomCode); setSs(res.state); setScreen('lobby');
     } catch (e: any) { alert(e?.message || '방 생성 실패'); }
   };
-  const join = async (code: string) => {
-    const n = nick.trim(); if (!n || !code) return;
+  const join = async (code: string, nickOverride?: string) => {
+    const n = (nickOverride ?? nick).trim(); if (!n || !code) return; setNick(n);
     try { localStorage.setItem('arcade_nick', n); } catch {}
     try {
       const s = await api<ServerState>(`/api/v1/tetris-battle/join?roomCode=${code}&clientId=${cid.current}`, {
@@ -135,6 +135,18 @@ export default function TetrisBattlePage() {
       setRoomCode(code.toUpperCase()); setSs(s); setScreen('lobby');
     } catch (e: any) { alert(e?.message || '참가 실패'); }
   };
+
+  // 메인에서 코드로 바로 입장(?join=CODE)
+  useEffect(() => {
+    const j = new URLSearchParams(window.location.search).get('join');
+    if (!j) return;
+    let n = ''; try { n = (localStorage.getItem('arcade_nick') || '').trim(); } catch {}
+    if (!n) return;
+    cid.current = cid.current || clientId();
+    join(j.toUpperCase(), n);
+    try { window.history.replaceState({}, '', '/tetris-battle'); } catch {}
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const addBot = async () => {
     try { setSs(await api(`/api/v1/tetris-battle/add-bot?roomCode=${roomCode}&clientId=${cid.current}&level=${botLevel}`, { method: 'POST', body: '{}' })); } catch (e: any) { alert(e?.message); }
   };

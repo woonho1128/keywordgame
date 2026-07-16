@@ -14,7 +14,7 @@ import java.util.List;
 @Service
 public class MafiaRoomManager {
 
-    private final RoomRegistry<MafiaService> reg = new RoomRegistry<>();
+    private final RoomRegistry<MafiaService> reg = new RoomRegistry<>("mafia");
     private final MafiaBotRuntime botRuntime;
 
     public MafiaRoomManager(MafiaBotRuntime botRuntime) {

@@ -15,7 +15,7 @@ import java.util.List;
 @RequiredArgsConstructor
 public class TetrisBattleRoomManager {
 
-    private final RoomRegistry<TetrisBattleGame> reg = new RoomRegistry<>();
+    private final RoomRegistry<TetrisBattleGame> reg = new RoomRegistry<>("tetris-battle");
     private final TetrisBattleRankService rankService;
 
     public String create(String clientId, NewBattleRequest req) {

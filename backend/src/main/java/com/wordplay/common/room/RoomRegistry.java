@@ -8,11 +8,15 @@ import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ThreadLocalRandom;
 
 /**
  * 방 코드 → 게임 인스턴스 레지스트리. 모드별로 하나씩 소유한다(인메모리).
  * 오래 방치되거나 종료된 방은 자동 정리한다.
+ *
+ * 전역 인덱스(GLOBAL): 코드 → 게임 키(프론트 경로). 코드를 전역에서 유일하게 발급하고,
+ * "코드만으로 어느 게임 방인지" 조회(메인에서 코드로 바로 입장)를 지원한다.
  */
 public class RoomRegistry<T extends RoomGame> {
 
@@ -21,13 +25,26 @@ public class RoomRegistry<T extends RoomGame> {
     private static final long ENDED_IDLE_MS = 40_000L;      // 종료 후 40초 → 제거
     private static final long EMPTY_IDLE_MS = 20_000L;      // 빈 방 20초 → 제거
 
+    /** 코드(대문자) → 게임 키. 모든 레지스트리가 공유. */
+    private static final Map<String, String> GLOBAL = new ConcurrentHashMap<>();
+
+    /** 코드가 속한 게임 키 반환(없으면 null). */
+    public static String resolveGame(String code) {
+        return code == null ? null : GLOBAL.get(code.toUpperCase());
+    }
+
+    private final String gameKey;
     private final Map<String, T> rooms = new HashMap<>();
+
+    /** gameKey는 프론트 경로(예: "othello", "mafia-jobs", "yacht"). */
+    public RoomRegistry(String gameKey) { this.gameKey = gameKey; }
 
     public synchronized String add(T game) {
         purge();
         if (rooms.size() >= MAX_ROOMS) throw new IllegalStateException("방이 너무 많습니다. 잠시 후 다시 시도하세요.");
         String code = uniqueCode();
         rooms.put(code, game);
+        GLOBAL.put(code, gameKey);
         return code;
     }
 
@@ -53,12 +70,17 @@ public class RoomRegistry<T extends RoomGame> {
     }
 
     public synchronized void clear() {
+        for (String c : rooms.keySet()) GLOBAL.remove(c);
         rooms.clear();
     }
 
     /** 특정 방 제거. 실제로 지웠으면 true. */
     public synchronized boolean remove(String code) {
-        return code != null && rooms.remove(code.toUpperCase()) != null;
+        if (code == null) return false;
+        String u = code.toUpperCase();
+        boolean removed = rooms.remove(u) != null;
+        if (removed) GLOBAL.remove(u);
+        return removed;
     }
 
     /** 클라이언트를 방에서 내보내고, 남은 인원이 0이면 방을 즉시 제거한다. */
@@ -66,7 +88,7 @@ public class RoomRegistry<T extends RoomGame> {
         T g = find(code);
         if (g == null) return;
         g.leave(clientId);
-        if (g.playerCount() == 0) rooms.remove(code.toUpperCase());
+        if (g.playerCount() == 0) remove(code);
         purge();
     }
 
@@ -74,12 +96,13 @@ public class RoomRegistry<T extends RoomGame> {
         long now = System.currentTimeMillis();
         Iterator<Map.Entry<String, T>> it = rooms.entrySet().iterator();
         while (it.hasNext()) {
-            T g = it.next().getValue();
+            Map.Entry<String, T> entry = it.next();
+            T g = entry.getValue();
             long idle = now - g.lastActiveMs();
             boolean dead = idle > IDLE_MS
                     || (g.isEnded() && idle > ENDED_IDLE_MS)
                     || (g.playerCount() == 0 && idle > EMPTY_IDLE_MS);
-            if (dead) it.remove();
+            if (dead) { it.remove(); GLOBAL.remove(entry.getKey()); }
         }
     }
 
@@ -88,7 +111,7 @@ public class RoomRegistry<T extends RoomGame> {
         int guard = 0;
         do {
             code = randomCode();
-        } while (rooms.containsKey(code) && guard++ < 50);
+        } while ((rooms.containsKey(code) || GLOBAL.containsKey(code)) && guard++ < 200);
         return code;
     }
 

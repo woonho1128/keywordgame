@@ -13,7 +13,7 @@ import java.util.List;
 @Service
 public class JobMafiaRoomManager {
 
-    private final RoomRegistry<JobMafiaService> reg = new RoomRegistry<>();
+    private final RoomRegistry<JobMafiaService> reg = new RoomRegistry<>("mafia-jobs");
 
     public String create(String clientId, NewJobMafiaRequest req) {
         JobMafiaService game = new JobMafiaService();

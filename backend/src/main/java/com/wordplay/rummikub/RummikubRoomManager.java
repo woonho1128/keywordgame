@@ -12,7 +12,7 @@ import java.util.List;
 @Service
 public class RummikubRoomManager {
 
-    private final RoomRegistry<RummikubGame> reg = new RoomRegistry<>();
+    private final RoomRegistry<RummikubGame> reg = new RoomRegistry<>("rummikub");
 
     public String create(String clientId, String nick) {
         return create(clientId, nick, null);
