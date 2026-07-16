@@ -154,7 +154,7 @@ export default function MojoPage() {
 
           <div className="rounded-xl border border-slate-200 dark:border-slate-700 p-3">
             <p className="text-sm font-bold text-slate-600 dark:text-slate-300 mb-2">🎮 열린 방</p>
-            {rooms.length === 0 ? <p className="text-slate-400 text-sm text-center py-2">방이 없어요. 만들어보세요!</p> : (
+            {rooms.length === 0 ? <p className="text-slate-500 dark:text-slate-400 text-sm text-center py-2">방이 없어요. 만들어보세요!</p> : (
               <div className="space-y-1">
                 {rooms.map((r) => (
                   <button key={r.code} onClick={() => join(r.code)} disabled={!nick.trim()} className="w-full flex justify-between text-sm py-1.5 px-2 rounded hover:bg-indigo-500/10 disabled:opacity-40">
@@ -221,10 +221,10 @@ export default function MojoPage() {
             <div className="text-center text-sm font-bold">
               {ss.myTurn
                 ? (ss.myInMojo
-                    ? <span className="text-indigo-600 dark:text-indigo-400">내 차례 · 카드 공개 {remaining > 0 && <span className="text-slate-400 font-normal">({remaining}s 후 자동)</span>}</span>
-                    : <span className="text-indigo-600 dark:text-indigo-400">내 차례 {ss.mustChain && '· 이어서 한 장 더!'} {remaining > 0 && <span className="text-slate-400 font-normal">({remaining}s)</span>}</span>)
+                    ? <span className="text-indigo-600 dark:text-indigo-400">내 차례 · 카드 공개 {remaining > 0 && <span className="text-slate-500 dark:text-slate-400 font-normal">({remaining}s 후 자동)</span>}</span>
+                    : <span className="text-indigo-600 dark:text-indigo-400">내 차례 {ss.mustChain && '· 이어서 한 장 더!'} {remaining > 0 && <span className="text-slate-500 dark:text-slate-400 font-normal">({remaining}s)</span>}</span>)
                 : <span className="text-slate-500 dark:text-slate-400">{players[ss.turnSeat]?.bot ? '🤖 ' : ''}{ss.turnName} 차례… {remaining > 0 && `(${remaining}s)`}</span>}
-              <span className="ml-2 text-xs text-slate-400 font-normal">R{ss.roundNum}</span>
+              <span className="ml-2 text-xs text-slate-500 dark:text-slate-400 font-normal">R{ss.roundNum}</span>
             </div>
           )}
 
@@ -237,17 +237,17 @@ export default function MojoPage() {
                     <div onClick={() => ss.doublePile && setSelPile(i)} className={ss.doublePile ? 'cursor-pointer' : ''}>
                       <NumCard n={top} sel={ss.doublePile && selPile === i && ss.myTurn && !ss.myInMojo} />
                     </div>
-                    <span className="text-[10px] text-slate-400">더미{ss.doublePile ? i + 1 : ''} ({ss.discardSizes[i]})</span>
+                    <span className="text-[10px] text-slate-500 dark:text-slate-400">더미{ss.doublePile ? i + 1 : ''} ({ss.discardSizes[i]})</span>
                   </div>
                 ))}
               </div>
               <div className="flex flex-col items-center gap-1">
                 <div className="w-12 h-[68px] sm:w-14 sm:h-20 lg:w-[72px] lg:h-[104px] rounded-md border-2 border-slate-400 bg-slate-500 flex items-center justify-center text-white font-bold text-sm">뽑기</div>
-                <span className="text-[10px] text-slate-400">{ss.drawCount}장</span>
+                <span className="text-[10px] text-slate-500 dark:text-slate-400">{ss.drawCount}장</span>
               </div>
             </div>
           )}
-          {!ended && ss.doublePile && ss.myTurn && !ss.myInMojo && <p className="text-center text-[11px] text-slate-400">낼 버림더미를 먼저 고르세요 (현재 더미{selPile + 1})</p>}
+          {!ended && ss.doublePile && ss.myTurn && !ss.myInMojo && <p className="text-center text-[11px] text-slate-500 dark:text-slate-400">낼 버림더미를 먼저 고르세요 (현재 더미{selPile + 1})</p>}
 
           {/* 점수판 */}
           <div className="rounded-xl border border-slate-200 dark:border-slate-700 divide-y divide-slate-100 dark:divide-slate-800">
@@ -258,7 +258,7 @@ export default function MojoPage() {
                     {p.bot ? '🤖 ' : ''}{p.name}{p.me ? ' (나)' : ''}{p.hasMojo && ' 🟣'}
                     {p.inMojo && <span className="ml-1 text-[10px] text-fuchsia-500">모죠타임</span>}
                   </span>
-                  <span className="text-sm"><b>{p.total}</b>점 {!ended && p.roundScore > 0 && <span className="text-[10px] text-slate-400">(+{p.roundScore})</span>} · 손패 {p.handCount}</span>
+                  <span className="text-sm"><b>{p.total}</b>점 {!ended && p.roundScore > 0 && <span className="text-[10px] text-slate-500 dark:text-slate-400">(+{p.roundScore})</span>} · 손패 {p.handCount}</span>
                 </div>
                 {p.front.length > 0 && (
                   <div className="flex gap-1 mt-1 flex-wrap">
@@ -276,12 +276,12 @@ export default function MojoPage() {
                 ss.myTurn && <div className="flex justify-center"><button onClick={reveal} className="px-6 py-2.5 rounded-lg bg-fuchsia-600 text-white font-bold">🃏 카드 공개</button></div>
               ) : (
                 <>
-                  <p className="text-xs text-slate-400 mb-1">내 손패 {ss.myTurn && !ss.myInMojo ? '(누르면 냄)' : ''}</p>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mb-1">내 손패 {ss.myTurn && !ss.myInMojo ? '(누르면 냄)' : ''}</p>
                   <div className="flex gap-1.5 flex-wrap justify-center">
                     {ss.myHand.map((v, i) => (
                       <NumCard key={i} n={v} onClick={ss.myTurn ? () => play(v) : undefined} />
                     ))}
-                    {ss.myHand.length === 0 && <span className="text-slate-400 text-sm py-4">손패 없음</span>}
+                    {ss.myHand.length === 0 && <span className="text-slate-500 dark:text-slate-400 text-sm py-4">손패 없음</span>}
                   </div>
                 </>
               )}
