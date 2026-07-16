@@ -30,7 +30,7 @@ public class AvalonService implements RoomGame {
     enum Role { MERLIN, PERCIVAL, SERVANT, ASSASSIN, MORGANA, MORDRED, OBERON, MINION }
 
     private static final long REVEAL_MS = 60_000, BUILD_MS = 120_000,
-            VOTE_MS = 60_000, QUEST_MS = 60_000, ASSASSIN_MS = 60_000;
+            VOTE_MS = 60_000, QUEST_MS = 60_000, ASSASSIN_MS = 120_000;
 
     // 원정 인원표 / 실패 필요 수 / 악 인원 (인원수 5~10)
     private static final int[][] TEAM = {
