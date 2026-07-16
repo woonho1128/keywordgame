@@ -33,8 +33,8 @@ function NumCard({ n, sm, onClick, dim, sel, neu }: { n: number | null; sm?: boo
     <div className="relative shrink-0">
       {neu && <span className="absolute -top-1.5 -right-1 z-10 text-[9px] font-extrabold bg-emerald-500 text-white rounded px-1 py-px">NEW</span>}
       <button onClick={onClick} disabled={!onClick}
-        className={`${size} rounded-md border-2 flex items-center justify-center font-extrabold text-white transition ${sel ? '-translate-y-2 ring-2 ring-slate-800 dark:ring-white' : ''} ${neu ? 'ring-2 ring-emerald-500' : ''} ${dim ? 'opacity-45' : ''} ${onClick ? 'active:scale-95 hover:-translate-y-1 cursor-pointer' : 'cursor-default'}`}
-        style={{ background: COLORS[colorOf(n)], borderColor: 'rgba(0,0,0,0.2)' }}>
+        className={`${size} rounded-md border-2 flex items-center justify-center font-extrabold text-white transition ${sel ? '-translate-y-2 ring-2 ring-slate-800 dark:ring-white' : ''} ${neu ? 'ring-2 ring-emerald-500' : ''} ${dim ? 'border-dashed border-slate-500 brightness-95' : ''} ${onClick ? 'active:scale-95 hover:-translate-y-1 cursor-pointer' : 'cursor-default'}`}
+        style={{ background: COLORS[colorOf(n)], borderColor: dim ? undefined : 'rgba(0,0,0,0.2)', textShadow: '0 1px 2px rgba(0,0,0,0.45)' }}>
         {n}
       </button>
     </div>
