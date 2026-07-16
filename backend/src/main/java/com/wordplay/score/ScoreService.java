@@ -26,7 +26,7 @@ public class ScoreService {
     private final JdbcTemplate jdbc;
 
     /** 랭킹을 지원하는 게임 키(화이트리스트). 새 게임 추가 시 여기에 등록. */
-    private static final Set<String> GAMES = Set.of("snake", "territory", "tetris", "tetris_sprint");
+    private static final Set<String> GAMES = Set.of("snake", "territory", "tetris", "tetris_sprint", "g2048", "yacht");
 
     @PostConstruct
     void init() {
