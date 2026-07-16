@@ -13,7 +13,7 @@ type State = {
   discardTops: number[]; discardSizes: number[]; drawCount: number;
   turnSeat: number; turnName: string | null; myTurn: boolean; mySeat: number;
   myInMojo: boolean; mustChain: boolean; myHand: number[];
-  roundNum: number; mojoHolderSeat: number; winner: string | null; deadline: number; serverNow: number;
+  roundNum: number; mojoHolderSeat: number; lastAction: string | null; myLastDrawn: number; winner: string | null; deadline: number; serverNow: number;
 };
 type Room = { code: string; status: string; playerCount: number; host: string };
 
@@ -26,15 +26,18 @@ function cid(): string {
 
 const COLORS = ['#3b82f6', '#22c55e', '#eab308', '#f97316', '#ef4444']; // 파랑 초록 노랑 주황 빨강
 const colorOf = (n: number) => (n <= 1 ? 0 : n <= 4 ? 1 : n <= 7 ? 2 : n <= 10 ? 3 : 4);
-function NumCard({ n, sm, onClick, dim, sel }: { n: number | null; sm?: boolean; onClick?: () => void; dim?: boolean; sel?: boolean }) {
+function NumCard({ n, sm, onClick, dim, sel, neu }: { n: number | null; sm?: boolean; onClick?: () => void; dim?: boolean; sel?: boolean; neu?: boolean }) {
   const size = sm ? 'w-8 h-11 text-base lg:w-11 lg:h-16 lg:text-xl' : 'w-12 h-[68px] sm:w-14 sm:h-20 lg:w-[72px] lg:h-[104px] text-2xl sm:text-3xl lg:text-4xl';
   if (n === null) return <div className={`${size} rounded-md border-2 border-slate-400 bg-slate-300 dark:bg-slate-600 flex items-center justify-center font-bold text-slate-500`}>?</div>;
   return (
-    <button onClick={onClick} disabled={!onClick}
-      className={`${size} rounded-md border-2 flex items-center justify-center font-extrabold text-white shrink-0 transition ${sel ? '-translate-y-2 ring-2 ring-slate-800 dark:ring-white' : ''} ${dim ? 'opacity-45' : ''} ${onClick ? 'active:scale-95 hover:-translate-y-1 cursor-pointer' : 'cursor-default'}`}
-      style={{ background: COLORS[colorOf(n)], borderColor: 'rgba(0,0,0,0.2)' }}>
-      {n}
-    </button>
+    <div className="relative shrink-0">
+      {neu && <span className="absolute -top-1.5 -right-1 z-10 text-[9px] font-extrabold bg-emerald-500 text-white rounded px-1 py-px">NEW</span>}
+      <button onClick={onClick} disabled={!onClick}
+        className={`${size} rounded-md border-2 flex items-center justify-center font-extrabold text-white transition ${sel ? '-translate-y-2 ring-2 ring-slate-800 dark:ring-white' : ''} ${neu ? 'ring-2 ring-emerald-500' : ''} ${dim ? 'opacity-45' : ''} ${onClick ? 'active:scale-95 hover:-translate-y-1 cursor-pointer' : 'cursor-default'}`}
+        style={{ background: COLORS[colorOf(n)], borderColor: 'rgba(0,0,0,0.2)' }}>
+        {n}
+      </button>
+    </div>
   );
 }
 
@@ -249,6 +252,13 @@ export default function MojoPage() {
           )}
           {!ended && ss.doublePile && ss.myTurn && !ss.myInMojo && <p className="text-center text-[11px] text-slate-500 dark:text-slate-400">낼 버림더미를 먼저 고르세요 (현재 더미{selPile + 1})</p>}
 
+          {/* 직전 행동 안내 */}
+          {!ended && ss.lastAction && (
+            <p className={`text-center text-sm font-bold ${ss.lastAction.includes('뽑음') ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-500 dark:text-slate-400'}`}>
+              {ss.lastAction}
+            </p>
+          )}
+
           {/* 점수판 */}
           <div className="rounded-xl border border-slate-200 dark:border-slate-700 divide-y divide-slate-100 dark:divide-slate-800">
             {players.filter((p) => !p.left).map((p) => (
@@ -278,9 +288,10 @@ export default function MojoPage() {
                 <>
                   <p className="text-xs text-slate-500 dark:text-slate-400 mb-1">내 손패 {ss.myTurn && !ss.myInMojo ? '(누르면 냄)' : ''}</p>
                   <div className="flex gap-1.5 flex-wrap justify-center">
-                    {ss.myHand.map((v, i) => (
-                      <NumCard key={i} n={v} onClick={ss.myTurn ? () => play(v) : undefined} />
-                    ))}
+                    {(() => { let flagged = false; return ss.myHand.map((v, i) => {
+                      const neu = !flagged && v === ss.myLastDrawn; if (neu) flagged = true;
+                      return <NumCard key={i} n={v} neu={neu} onClick={ss.myTurn ? () => play(v) : undefined} />;
+                    }); })()}
                     {ss.myHand.length === 0 && <span className="text-slate-500 dark:text-slate-400 text-sm py-4">손패 없음</span>}
                   </div>
                 </>

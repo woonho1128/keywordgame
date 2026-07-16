@@ -77,6 +77,42 @@ class MojoGameTest {
     }
 
     @Test
+    void 높은카드를_내면_뽑기에서_1장_뽑는다() {
+        MojoGame g = new MojoGame("host", "방장", false);
+        g.join("p2", "친구");
+        g.start("host");
+        MojoGame.P host = g.playersList().get(0);
+        int top = g.me("host").discardTops().get(0);
+        // host 손패에서 top보다 높은 카드 찾기
+        Integer high = null;
+        for (int v : host.hand) if (v > top) { high = v; break; }
+        if (high == null) return; // 이 판엔 높은 카드가 없으면 스킵(랜덤)
+        int handBefore = host.hand.size();
+        int drawBefore = g.me("host").drawCount();
+        g.play("host", high, 0);
+        // 높은 카드 냄 → 1장 뽑아서 손패 수 유지, 뽑기 더미 1 감소
+        assertThat(host.hand.size()).isEqualTo(handBefore);
+        assertThat(g.me("host").drawCount()).isEqualTo(drawBefore - 1);
+    }
+
+    @Test
+    void 낮은카드를_내면_뽑지_않고_손패가_준다() {
+        MojoGame g = new MojoGame("host", "방장", false);
+        g.join("p2", "친구");
+        g.start("host");
+        MojoGame.P host = g.playersList().get(0);
+        int top = g.me("host").discardTops().get(0);
+        Integer low = null;
+        for (int v : host.hand) if (v < top) { low = v; break; }
+        if (low == null) return;
+        int handBefore = host.hand.size();
+        int drawBefore = g.me("host").drawCount();
+        g.play("host", low, 0);
+        assertThat(host.hand.size()).isEqualTo(handBefore - 1);
+        assertThat(g.me("host").drawCount()).isEqualTo(drawBefore);
+    }
+
+    @Test
     void 이중더미_변형은_버림더미_2개() {
         MojoGame g = new MojoGame("host", "방장", true);
         g.join("p2", "친구");

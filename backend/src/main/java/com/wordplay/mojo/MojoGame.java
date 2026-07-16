@@ -49,6 +49,8 @@ public class MojoGame implements RoomGame {
     private boolean mustChain = false;
     private long turnEndsAt = 0, botAt = 0, lastActive = System.currentTimeMillis();
     private String winner = null;
+    private String lastAction = null;
+    private final java.util.Map<Integer, Integer> lastDrawn = new java.util.HashMap<>(); // seat → 이번에 뽑은 카드
 
     public MojoGame(String hostClientId, String nick, boolean doublePile) {
         this.hostClientId = hostClientId;
@@ -117,6 +119,8 @@ public class MojoGame implements RoomGame {
         for (int i = 0; i < piles; i++) { List<Integer> d = new ArrayList<>(); d.add(deck.remove(deck.size() - 1)); discards.add(d); }
         draw.clear(); draw.addAll(deck);
         mustChain = false;
+        lastDrawn.clear();
+        lastAction = "라운드 " + roundNum + " 시작";
         turnSeat = isActive(players.get(starter)) ? starter : nextActiveFrom(starter);
         lastActor = turnSeat;
         setTimers();
@@ -142,19 +146,30 @@ public class MojoGame implements RoomGame {
         dp.add(value);
         lastActor = turnSeat;
         p.lastSeen = now();
+        lastDrawn.remove(turnSeat);
         int cmp = Integer.compare(value, prevTop);
         if (cmp == 0 && !p.hand.isEmpty()) {   // 같음 → 즉시 한 장 더
             mustChain = true;
+            lastAction = p.nick + " ▸ " + value + " (같은 숫자! 한 장 더)";
             setTimers();
             return;
         }
-        if (cmp > 0) drawOne(p);               // 높음 → 1장 뽑기
+        if (cmp > 0) {                          // 높음 → 1장 뽑기
+            int drawn = drawOne(p);
+            if (drawn >= 0) lastDrawn.put(turnSeat, drawn);
+            lastAction = p.nick + " ▸ " + value + " (더미보다 높음 → 🎴 1장 뽑음)";
+        } else {                                // 낮음 → 그냥 종료
+            lastAction = p.nick + " ▸ " + value + " (더미보다 낮음 → 차례 종료)";
+        }
         endTurnChecks(p);
     }
 
-    private void drawOne(P p) {
+    private int drawOne(P p) {
         if (draw.isEmpty()) refillDraw();
-        if (!draw.isEmpty()) { p.hand.add(draw.remove(draw.size() - 1)); p.hand.sort(Integer::compareTo); }
+        if (draw.isEmpty()) return -1;
+        int c = draw.remove(draw.size() - 1);
+        p.hand.add(c); p.hand.sort(Integer::compareTo);
+        return c;
     }
 
     private void refillDraw() {
@@ -188,8 +203,10 @@ public class MojoGame implements RoomGame {
 
     private void doReveal(int seat) {
         P p = players.get(seat);
+        int shown = p.front.get(p.frontRevealed);
         p.frontRevealed++;
         lastActor = seat;
+        lastAction = p.nick + " ▸ 모죠 카드 공개 (" + shown + ")";
         p.lastSeen = now();
         advanceTurn();
     }
@@ -333,7 +350,9 @@ public class MojoGame implements RoomGame {
                 pv, tops, sizes, draw.size(),
                 turnSeat, turnName, myTurn, meSeat,
                 me != null && me.inMojo, mustChain, myHand,
-                roundNum, phase == Phase.LOBBY ? -1 : mojoHolderSeat, winner, turnEndsAt, now());
+                roundNum, phase == Phase.LOBBY ? -1 : mojoHolderSeat,
+                lastAction, meSeat >= 0 ? lastDrawn.getOrDefault(meSeat, -1) : -1,
+                winner, turnEndsAt, now());
     }
 
     // ── RoomGame ────────────────────────────────────────

@@ -21,6 +21,8 @@ public record MojoState(
         List<Integer> myHand,         // 내 손패(정렬)
         int roundNum,
         int mojoHolderSeat,           // 모죠 카드 보유자(-1 없음)
+        String lastAction,            // 직전 행동 안내(낮음/높음→뽑음/같음/공개)
+        int myLastDrawn,              // 내가 이번에 뽑은 카드(-1 없음) — 강조용
         String winner,
         long deadline,
         long serverNow
@@ -34,6 +36,6 @@ public record MojoState(
 
     public static MojoState notFound(long now) {
         return new MojoState("NONE", false, false, false, List.of(), List.of(), List.of(), 0,
-                -1, null, false, -1, false, false, List.of(), 0, -1, null, 0, now);
+                -1, null, false, -1, false, false, List.of(), 0, -1, null, -1, null, 0, now);
     }
 }
