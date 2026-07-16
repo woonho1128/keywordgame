@@ -12,6 +12,7 @@ type OthState = {
   currentColor: number; myTurn: boolean; validMoves: number[];
   blackCount: number; whiteCount: number; lastMove: number; turnEndsAt: number;
   lastAction: string | null; winner: number; playerCount: number; version: number;
+  history: number[];
 };
 type RoomSummary = { code: string; status: string; playerCount: number; host: string };
 
@@ -32,6 +33,31 @@ function getClientId(): string {
 }
 
 const colName = (c: number) => (c === 1 ? '흑' : c === 2 ? '백' : '');
+
+// 칸 인덱스 → 오델로 표기(a1~h8, 열=a~h, 행=1~8)
+const cellToCoord = (i: number) => `${String.fromCharCode(97 + (i % 8))}${Math.floor(i / 8) + 1}`;
+
+// 기보 텍스트 생성. 표준 표기(수순 연속 문자열) + 사람이 읽기 쉬운 번호 목록.
+function buildRecord(s: OthState): string {
+  const black = s.players.find((p) => p.color === 1);
+  const white = s.players.find((p) => p.color === 2);
+  const moves = s.history.map(cellToCoord);
+  const transcript = moves.join('');
+  const numbered = moves.map((m, i) => `${i + 1}.${m}`).join(' ');
+  const lines = [
+    '[오델로 기보 · gg]',
+    `흑(선): ${black?.nick ?? '-'}`,
+    `백: ${white?.nick ?? '-'}`,
+    s.status === 'ENDED'
+      ? `결과: 흑 ${s.blackCount} · 백 ${s.whiteCount} — ${s.winner === 3 ? '무승부' : (s.winner === 1 ? '흑' : '백') + ' 승'}`
+      : `진행 중 (흑 ${s.blackCount} · 백 ${s.whiteCount})`,
+    '',
+    `수순: ${transcript}`,
+    '',
+    numbered,
+  ];
+  return lines.join('\n');
+}
 
 function Disc({ color }: { color: number }) {
   if (color === 0) return null;
@@ -56,6 +82,8 @@ export default function OthelloPage() {
   const [remaining, setRemaining] = useState(0);
   const [showAdmin, setShowAdmin] = useState(false);
   const [adminInput, setAdminInput] = useState('');
+  const [copied, setCopied] = useState(false);
+  const [showRecord, setShowRecord] = useState(false);
 
   const cidRef = useRef('');
   const offsetRef = useRef(0);
@@ -114,6 +142,14 @@ export default function OthelloPage() {
   const handleStart = () => post(`/api/v1/othello/start?${rp()}`);
   const handlePlace = (cell: number) => post(`/api/v1/othello/place?${rp()}&cell=${cell}`);
   const handleLeave = () => { api(`/api/v1/othello/leave?${rp()}`, { method: 'POST' }).catch(() => {}); changeRoom(null); setSt(null); };
+  const copyRecord = async () => {
+    if (!st) return;
+    const text = buildRecord(st);
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(true); setTimeout(() => setCopied(false), 1500);
+    } catch { setShowRecord(true); } // 클립보드 불가 시 텍스트를 펼쳐 직접 복사하도록
+  };
   const handleAdminReset = async () => { const code = adminInput.trim(); if (!code) return; const res = await post(`/api/v1/othello/reset?code=${encodeURIComponent(code)}`); if (res) { setShowAdmin(false); setAdminInput(''); changeRoom(null); setSt(null); } };
   const handleCloseRoom = async (rc: string) => { const code = adminInput.trim(); if (!code) { setError('관리자 코드를 먼저 입력하세요'); return; } if (!confirm(`${rc} 방을 삭제할까요?`)) return; try { await api<boolean>(`/api/v1/othello/close-room?code=${encodeURIComponent(code)}&roomCode=${rc}`, { method: 'POST' }); setRooms((cur) => cur.filter((r) => r.code !== rc)); } catch (e) { setError(e instanceof Error ? e.message : '방 삭제 실패'); } };
 
@@ -271,6 +307,25 @@ export default function OthelloPage() {
           </div>
 
           {st.lastAction && <p className="text-center text-[11px] text-gray-400">{st.lastAction}</p>}
+
+          {/* 기보 복사 */}
+          {st.history.length > 0 && (
+            <div className="space-y-2">
+              <div className="flex items-center justify-center gap-2">
+                <button onClick={copyRecord} className="text-sm px-3 py-1.5 rounded-lg border border-gray-300 text-gray-600 hover:border-hit hover:text-hit">
+                  {copied ? '✓ 복사됨' : '📋 기보 복사'}
+                </button>
+                <button onClick={() => setShowRecord((v) => !v)} className="text-sm px-3 py-1.5 rounded-lg border border-gray-300 text-gray-600 hover:border-hit hover:text-hit">
+                  {showRecord ? '기보 숨기기' : '기보 보기'}
+                </button>
+              </div>
+              {showRecord && (
+                <textarea readOnly value={buildRecord(st)} onFocus={(e) => e.currentTarget.select()}
+                  className="w-full h-40 text-xs font-mono border border-gray-200 rounded-lg p-2 bg-gray-50 text-gray-600 resize-none" />
+              )}
+            </div>
+          )}
+
           {phase === 'ENDED' && st.isHost && <button onClick={() => { handleLeave(); setShowCreate(true); }} className="w-full bg-hit text-white font-bold py-3 rounded-lg">🔄 새 방 만들기</button>}
           {error && <p className="text-red-500 text-sm text-center">{error}</p>}
         </div>

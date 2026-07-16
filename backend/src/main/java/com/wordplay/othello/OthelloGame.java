@@ -557,7 +557,7 @@ public class OthelloGame implements RoomGame {
                 myColor, hostColor, pv, boardList,
                 phase == Phase.PLAYING ? currentColor : 0, myTurn, valid,
                 count(1), count(2), lastMove, turnDeadlineMs, lastAction, winner,
-                players.size(), version);
+                players.size(), version, new ArrayList<>(history));
     }
 
     // =================== RoomGame ===================

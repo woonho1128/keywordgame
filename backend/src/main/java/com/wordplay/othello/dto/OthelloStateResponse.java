@@ -26,7 +26,8 @@ public record OthelloStateResponse(
         String lastAction,
         int winner,             // 0 미정, 1 흑, 2 백, 3 무승부
         int playerCount,
-        long version
+        long version,
+        List<Integer> history   // 착수 순서(칸 인덱스). 기보 텍스트 변환용
 ) {
     public record PlayerView(int seat, String nick, boolean ai, int color) {}
 
@@ -34,6 +35,6 @@ public record OthelloStateResponse(
         return new OthelloStateResponse(
                 "NULL_ROOM", now, false, false, 0, null, 0, 1,
                 List.of(), List.of(), 0, false, List.of(),
-                0, 0, -1, 0, null, 0, 0, 0);
+                0, 0, -1, 0, null, 0, 0, 0, List.of());
     }
 }
