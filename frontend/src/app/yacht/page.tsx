@@ -196,17 +196,17 @@ export default function YachtPage() {
   }
 
   return (
-    <main className="min-h-screen flex flex-col items-center p-3 max-w-lg mx-auto w-full">
-      <div className="w-full flex items-center justify-between mb-2">
+    <main className="min-h-screen flex flex-col items-center p-3 sm:p-5 max-w-lg lg:max-w-4xl mx-auto w-full">
+      <div className="w-full flex items-center justify-between mb-3">
         <div className="flex items-center gap-2">
           <Link href="/" aria-label="홈" className="text-lg text-slate-500 hover:text-slate-800">🏠</Link>
-          <h1 className="text-xl font-extrabold">🎲 야찌</h1>
+          <h1 className="text-xl sm:text-2xl font-extrabold">🎲 야찌</h1>
         </div>
         <button onClick={() => setScreen('setup')} className="text-xs px-2 py-1 rounded bg-slate-200 text-slate-600">나가기</button>
       </div>
 
       {over && (
-        <div className="w-full mb-3 text-center rounded-xl border-2 border-indigo-500 bg-indigo-50 p-3">
+        <div className="w-full mb-4 text-center rounded-xl border-2 border-indigo-500 bg-indigo-50 p-3">
           {(() => {
             const ranked = [...players].map((p) => ({ p, t: total(p.card) })).sort((a, b) => b.t - a.t);
             const win = ranked[0];
@@ -219,83 +219,91 @@ export default function YachtPage() {
         </div>
       )}
 
-      {/* 턴/주사위 */}
-      {!over && (
-        <div className="w-full mb-3">
-          <p className="text-center text-sm font-bold mb-2">
-            {isMyTurn ? <span className="text-indigo-600">내 차례 · 굴림 {rollsLeft}회 남음</span> : <span className="text-gray-400">🤖 {players[cur]?.name} 차례…</span>}
-          </p>
-          <div className="flex justify-center gap-2 mb-2">
-            {dice.map((d, i) => (
-              <button key={i} onClick={() => toggleHold(i)} disabled={!isMyTurn}
-                className={`w-12 h-12 sm:w-14 sm:h-14 rounded-xl border-2 flex items-center justify-center text-2xl font-extrabold ${held[i] ? 'border-indigo-500 bg-indigo-100 text-indigo-700' : 'border-gray-300 bg-white text-gray-700'}`}>
-                {['', '⚀', '⚁', '⚂', '⚃', '⚄', '⚅'][d]}
-              </button>
-            ))}
+      <div className="w-full lg:grid lg:grid-cols-[minmax(0,340px)_minmax(0,1fr)] lg:gap-8 lg:items-start">
+        {/* 턴/주사위 */}
+        {!over && (
+          <div className="w-full mb-4 lg:mb-0 lg:sticky lg:top-5">
+            <p className="text-center text-sm sm:text-base font-bold mb-3">
+              {isMyTurn ? <span className="text-indigo-600">내 차례 · 굴림 {rollsLeft}회 남음</span> : <span className="text-gray-400">🤖 {players[cur]?.name} 차례…</span>}
+            </p>
+            <div className="flex justify-center gap-2 sm:gap-3 mb-3">
+              {dice.map((d, i) => (
+                <button key={i} onClick={() => toggleHold(i)} disabled={!isMyTurn}
+                  className={`w-12 h-12 sm:w-14 sm:h-14 lg:w-16 lg:h-16 rounded-xl border-2 flex items-center justify-center text-3xl sm:text-4xl font-extrabold transition ${held[i] ? 'border-indigo-500 bg-indigo-100 text-indigo-700 -translate-y-1 shadow' : 'border-gray-300 bg-white text-gray-700'} ${isMyTurn ? 'hover:border-indigo-300' : ''}`}>
+                  {['', '⚀', '⚁', '⚂', '⚃', '⚄', '⚅'][d]}
+                </button>
+              ))}
+            </div>
+            {isMyTurn && (
+              <div className="flex justify-center">
+                <button onClick={roll} disabled={rollsLeft <= 0} className="px-8 py-2.5 rounded-lg bg-indigo-600 text-white font-bold text-base disabled:opacity-40 hover:bg-indigo-700">
+                  🎲 굴리기 ({rollsLeft})
+                </button>
+              </div>
+            )}
+            {isMyTurn && <p className="text-[11px] sm:text-xs text-gray-400 text-center mt-2">고정할 주사위를 누르고 · 아래 족보를 눌러 점수 확정</p>}
+
+            {log.length > 0 && (
+              <div className="hidden lg:block w-full mt-5 rounded-xl border border-gray-100 bg-gray-50 p-3 text-xs text-gray-500 space-y-1">
+                {log.map((l, i) => <p key={i}>{l}</p>)}
+              </div>
+            )}
           </div>
-          {isMyTurn && (
-            <div className="flex justify-center">
-              <button onClick={roll} disabled={rollsLeft <= 0} className="px-6 py-2 rounded-lg bg-indigo-600 text-white font-bold disabled:opacity-40">
-                🎲 굴리기 ({rollsLeft})
-              </button>
+        )}
+
+        {/* 점수판 */}
+        <div className={`w-full overflow-x-auto ${over ? 'lg:col-span-2' : ''}`}>
+          <table className="w-full text-sm sm:text-base border-collapse">
+            <thead>
+              <tr>
+                <th className="text-left py-1.5 px-1 text-gray-400 font-medium">족보</th>
+                {players.map((p, i) => (
+                  <th key={i} className={`py-1.5 px-2 text-center ${i === cur && !over ? 'text-indigo-600' : 'text-gray-500'}`}>{p.bot ? '🤖' : ''}{p.name}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {ALL.map((cat, idx) => (
+                <tr key={cat} className={`border-t border-gray-100 ${idx === 6 ? 'border-t-2 border-gray-300' : ''}`}>
+                  <td className="py-1.5 px-1">
+                    <button onClick={() => pick(cat)} disabled={!isMyTurn || meCard[cat] !== undefined}
+                      className={`text-left ${isMyTurn && meCard[cat] === undefined ? 'text-gray-800 font-bold' : 'text-gray-400'}`}>
+                      {LABEL[cat]} <span className="text-[10px] sm:text-[11px] text-gray-300">{HINT[cat]}</span>
+                    </button>
+                  </td>
+                  {players.map((p, i) => {
+                    const filled = p.card[cat];
+                    const preview = i === cur && isMyTurn && filled === undefined ? scoreOf(cat, dice) : null;
+                    return (
+                      <td key={i} className="py-1.5 px-2 text-center">
+                        {filled !== undefined
+                          ? <span className="font-bold text-gray-700">{filled}</span>
+                          : preview != null
+                            ? <button onClick={() => pick(cat)} className="text-indigo-500 font-bold hover:underline">+{preview}</button>
+                            : <span className="text-gray-200">·</span>}
+                      </td>
+                    );
+                  })}
+                </tr>
+              ))}
+              <tr className="border-t-2 border-gray-300 bg-gray-50">
+                <td className="py-1.5 px-1 font-bold text-gray-500">보너스(63↑)</td>
+                {players.map((p, i) => <td key={i} className="py-1.5 px-2 text-center text-gray-400">{upperSum(p.card) >= 63 ? '+35' : `${upperSum(p.card)}/63`}</td>)}
+              </tr>
+              <tr className="bg-indigo-50">
+                <td className="py-2 px-1 font-extrabold">합계</td>
+                {players.map((p, i) => <td key={i} className="py-2 px-2 text-center font-extrabold text-indigo-700 text-base sm:text-lg">{total(p.card)}</td>)}
+              </tr>
+            </tbody>
+          </table>
+
+          {log.length > 0 && (
+            <div className="lg:hidden w-full mt-4 text-xs text-gray-400 space-y-0.5">
+              {log.map((l, i) => <p key={i}>{l}</p>)}
             </div>
           )}
-          {isMyTurn && <p className="text-[11px] text-gray-400 text-center mt-1">주사위를 눌러 고정 · 아래 족보를 눌러 점수 확정</p>}
         </div>
-      )}
-
-      {/* 점수판 */}
-      <div className="w-full overflow-x-auto">
-        <table className="w-full text-sm border-collapse">
-          <thead>
-            <tr>
-              <th className="text-left py-1 px-1 text-gray-400 font-medium">족보</th>
-              {players.map((p, i) => (
-                <th key={i} className={`py-1 px-2 text-center ${i === cur && !over ? 'text-indigo-600' : 'text-gray-500'}`}>{p.bot ? '🤖' : ''}{p.name}</th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {ALL.map((cat, idx) => (
-              <tr key={cat} className={`border-t border-gray-100 ${idx === 6 ? 'border-t-2 border-gray-300' : ''}`}>
-                <td className="py-1 px-1">
-                  <button onClick={() => pick(cat)} disabled={!isMyTurn || meCard[cat] !== undefined}
-                    className={`text-left ${isMyTurn && meCard[cat] === undefined ? 'text-gray-800 font-bold' : 'text-gray-400'}`}>
-                    {LABEL[cat]} <span className="text-[10px] text-gray-300">{HINT[cat]}</span>
-                  </button>
-                </td>
-                {players.map((p, i) => {
-                  const filled = p.card[cat];
-                  const preview = i === cur && isMyTurn && filled === undefined ? scoreOf(cat, dice) : null;
-                  return (
-                    <td key={i} className="py-1 px-2 text-center">
-                      {filled !== undefined
-                        ? <span className="font-bold text-gray-700">{filled}</span>
-                        : preview != null
-                          ? <button onClick={() => pick(cat)} className="text-indigo-500 font-bold">+{preview}</button>
-                          : <span className="text-gray-200">·</span>}
-                    </td>
-                  );
-                })}
-              </tr>
-            ))}
-            <tr className="border-t-2 border-gray-300 bg-gray-50">
-              <td className="py-1 px-1 font-bold text-gray-500">보너스(63↑)</td>
-              {players.map((p, i) => <td key={i} className="py-1 px-2 text-center text-gray-400">{upperSum(p.card) >= 63 ? '+35' : `${upperSum(p.card)}/63`}</td>)}
-            </tr>
-            <tr className="bg-indigo-50">
-              <td className="py-1.5 px-1 font-extrabold">합계</td>
-              {players.map((p, i) => <td key={i} className="py-1.5 px-2 text-center font-extrabold text-indigo-700">{total(p.card)}</td>)}
-            </tr>
-          </tbody>
-        </table>
       </div>
-
-      {log.length > 0 && (
-        <div className="w-full mt-3 text-xs text-gray-400 space-y-0.5">
-          {log.map((l, i) => <p key={i}>{l}</p>)}
-        </div>
-      )}
     </main>
   );
 }
