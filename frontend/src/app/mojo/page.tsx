@@ -200,6 +200,17 @@ export default function MojoPage() {
       {/* ── 게임/종료 ── */}
       {screen === 'game' && ss && (
         <div className="w-full space-y-4">
+          <details className="rounded-lg border border-slate-200 dark:border-slate-700 px-3 py-2 text-sm text-slate-500 dark:text-slate-400">
+            <summary className="font-bold cursor-pointer select-none text-slate-600 dark:text-slate-300">📖 규칙 보기</summary>
+            <div className="mt-2 space-y-1">
+              <p>· 카드 숫자=벌점, 색은 숫자 구간(🔵0-1 🟢2-4 🟡5-7 🟠8-10 🔴11-12).</p>
+              <p>· 차례에 카드 1장 내고 <b>직전 버림더미와 비교</b>: 낮으면 종료, <b>높으면 1장 뽑고</b> 종료, 같으면 즉시 한 장 더.</p>
+              <p>· 손패 ≤ 3장(2인 2장)이 되면 <b>모죠타임</b> — 남은 손패를 뒷면으로 깔고 매 차례 1장씩 공개.</p>
+              <p>· 점수: 앞면+손패에서 <b>색상별 최고 숫자만</b> 합산. 🟣모죠 카드 보유자는 최저점이면 0, 아니면 +10.</p>
+              <p>· 누적 <b>50점</b> 도달 시 종료, <b>최저 총점 승</b>{ss.doublePile && ' · 🌀이중더미: 낼 더미를 골라서 냄'}.</p>
+            </div>
+          </details>
+
           {ended ? (
             <div className="w-full text-center rounded-xl border-2 border-indigo-500 bg-indigo-50 dark:bg-indigo-500/10 p-3">
               <p className="text-lg font-bold">🏆 {ss.winner} 승리!</p>
