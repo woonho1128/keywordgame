@@ -205,6 +205,12 @@ export default function YutPage() {
   // 이동 헬퍼
   const movesForVal = ss && selValue != null ? ss.moves.filter((m) => m.value === selValue) : [];
   const movableIdx = new Set(movesForVal.map((m) => m.tokenIndex));
+  // 셀 → 이동 가능한 내 말 index(업힌 말은 대표 1개만 move에 있으므로, 스택 어디를 눌러도 잡히도록)
+  const cellMoveTi: Record<string, number> = {};
+  if (ss?.myTurn) {
+    const myTokens = players.find((p) => p.seat === ss.mySeat)?.tokens ?? [];
+    movesForVal.forEach((m) => { const cell = myTokens[m.tokenIndex]; if (cell) cellMoveTi[cell] = m.tokenIndex; });
+  }
   const destHighlights: Record<string, { value: number; token: number; dest: Dest }> = {};
   if (selToken != null) {
     const m = movesForVal.find((mm) => mm.tokenIndex === selToken);
@@ -348,7 +354,9 @@ export default function YutPage() {
                 if (abilityMode) {
                   if ((aStep === 'myToken' || aStep === 'myToken2') && isMine) { onClk = () => abilityClickToken(ss.mySeat, t.ti); ring = '#d946ef'; }
                   else if (aStep === 'oppToken' && teamOf(t.seat) !== ss.myTeam) { onClk = () => abilityClickToken(t.seat, t.ti); ring = '#d946ef'; }
-                } else if (ss.myTurn && isMine && movableIdx.has(t.ti)) { onClk = () => tapToken(t.ti); ring = '#fff'; }
+                } else if (ss.myTurn && isMine && cellMoveTi[t.cell] !== undefined) {
+                  const repTi = cellMoveTi[t.cell]; onClk = () => tapToken(repTi); ring = '#fff'; // 스택 어느 말을 눌러도 대표 이동 실행
+                }
                 const showBadge = cellCount[t.cell] > 1 && badgeAt[t.cell] === idKey;
                 return (
                   <g key={idKey} onClick={onClk} style={{ cursor: onClk ? 'pointer' : 'default', transform: `translate(${x}px,${y}px)`, transition: 'transform .45s cubic-bezier(.4,1,.5,1)' }}>
