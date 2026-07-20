@@ -21,12 +21,17 @@ public record YutState(
         String lastAction,
         int winnerTeam,             // -1 없음
         String winnerLabel,
+        boolean abilitiesOn,
+        String myAbility,           // 내 능력 타입(없으면 null) — 남의 것은 비공개
+        String myAbilityName,
+        String myAbilityDesc,
+        boolean myAbilityUsed,
         long deadline,
         long serverNow
 ) {
-    /** tokens: 말 4개의 셀 id("wait"/"done"/셀). */
+    /** tokens: 말 4개의 셀 id("wait"/"done"/셀). hasAbility: 아직 안 쓴 능력 보유(종류는 비공개). */
     public record PlayerView(int seat, String name, boolean bot, boolean host, boolean me,
-                             int team, int color, List<String> tokens, int doneCount, boolean left) {}
+                             int team, int color, List<String> tokens, int doneCount, boolean left, boolean hasAbility) {}
 
     /** 던지기 결과. value: 도1 개2 걸3 윷4 모5 백도-1. */
     public record ThrowResult(String name, int value, boolean extra) {}
@@ -37,6 +42,6 @@ public record YutState(
 
     public static YutState notFound(long now) {
         return new YutState("NONE", false, true, false, false, List.of(), -1, null, false, -1, -1,
-                0, List.of(), List.of(), null, -1, null, 0, now);
+                0, List.of(), List.of(), null, -1, null, false, null, null, null, false, 0, now);
     }
 }

@@ -27,6 +27,24 @@ public class YutGame implements RoomGame {
 
     public enum Phase { LOBBY, PLAYING, ENDED }
 
+    /** 특수능력(1회·비공개·내 차례). */
+    public enum Ability { PLACE, MO_OR_DO, SWAP, SEND_HOME, RALLY, EXTRA }
+    static String abilityName(Ability a) {
+        return switch (a) { case PLACE -> "지정 소환"; case MO_OR_DO -> "모 아니면 도"; case SWAP -> "자리바꿈";
+            case SEND_HOME -> "귀환"; case RALLY -> "소집"; case EXTRA -> "한 번 더"; };
+    }
+    static String abilityDesc(Ability a) {
+        return switch (a) {
+            case PLACE -> "내 말 하나를 앞쪽 1~10칸 중 원하는 곳에 놓기";
+            case MO_OR_DO -> "다음 던지기를 모 또는 도 중 골라 확정";
+            case SWAP -> "판 위 내 말 1개 ↔ 상대 말 1개 위치 교환";
+            case SEND_HOME -> "판 위 상대 말 1개를 원점으로";
+            case RALLY -> "내 말 하나를 다른 내 말 위치로 모으기(업기)";
+            case EXTRA -> "즉시 추가 던지기 1회";
+        };
+    }
+    static final int PLACE_MAX = 10; // 지정 소환 최대 칸(o1~o10)
+
     static final int MAX_PLAYERS = 4, TOKENS = 4;
     static final long TURN_MS = 90_000, BOT_DELAY_MS = 1100;
     static final String WAIT = "wait", DONE = "done";
@@ -99,11 +117,12 @@ public class YutGame implements RoomGame {
         final String[] tok = new String[TOKENS];
         final String[] tokPrev = new String[TOKENS];
         int done = 0;
+        Ability ability = null; boolean abilityUsed = false;
         long lastSeen;
         P() { for (int i = 0; i < TOKENS; i++) { tok[i] = WAIT; tokPrev[i] = null; } }
     }
 
-    private final boolean teamMode, backDo;
+    private final boolean teamMode, backDo, abilities;
     private Phase phase = Phase.LOBBY;
     private final String hostClientId;
     private final List<P> players = new ArrayList<>();
@@ -113,10 +132,11 @@ public class YutGame implements RoomGame {
     private String winnerLabel = null, lastAction = null;
     private long turnEndsAt = 0, botAt = 0, lastActive = System.currentTimeMillis();
 
-    public YutGame(String hostClientId, String nick, boolean teamMode, boolean backDo) {
+    public YutGame(String hostClientId, String nick, boolean teamMode, boolean backDo, boolean abilities) {
         this.hostClientId = hostClientId;
         this.teamMode = teamMode;
         this.backDo = backDo;
+        this.abilities = abilities;
         P host = new P(); host.clientId = hostClientId; host.nick = clean(nick); host.host = true; host.lastSeen = now();
         players.add(host);
     }
@@ -144,12 +164,15 @@ public class YutGame implements RoomGame {
         int n = activeCount();
         if (n < 2) throw bad("최소 2명(봇 포함)이 필요합니다");
         if (teamMode && n != 4) throw bad("팀전은 4명이 필요합니다");
+        Ability[] pool = Ability.values();
         for (int i = 0; i < players.size(); i++) {
             P p = players.get(i);
             p.team = teamMode ? (i % 2) : i;
             p.color = i;
             p.done = 0;
             for (int t = 0; t < TOKENS; t++) { p.tok[t] = WAIT; p.tokPrev[t] = null; }
+            p.ability = abilities ? pool[ThreadLocalRandom.current().nextInt(pool.length)] : null;
+            p.abilityUsed = false;
         }
         phase = Phase.PLAYING;
         winnerTeam = -1; winnerLabel = null;
@@ -234,6 +257,100 @@ public class YutGame implements RoomGame {
         }
         if (chosen == null || chosenDest == null) throw bad("불가능한 이동입니다");
         applyMove(p, value, tokenIndex, chosenDest);
+    }
+
+    // ── 특수능력 ──
+    private static boolean onBoard(String c) { return c != null && !WAIT.equals(c) && !DONE.equals(c); }
+    private static boolean isPlaceCell(String c) { for (int i = 1; i <= PLACE_MAX; i++) if (("o" + i).equals(c)) return true; return false; }
+
+    /** tokenIndex: 내 말, cell: PLACE 대상 칸, oppSeat/oppToken: 상대 말, choice: MO/DO. */
+    public synchronized void useAbility(String clientId, int tokenIndex, String cell, int oppSeat, int oppToken, String choice) {
+        touch(); tick();
+        requireTurn(clientId);
+        P p = players.get(turnSeat);
+        if (!abilities || p.ability == null) throw bad("사용할 능력이 없습니다");
+        if (p.abilityUsed) throw bad("이미 능력을 사용했습니다");
+        switch (p.ability) {
+            case EXTRA -> throwsOwed++;
+            case MO_OR_DO -> {
+                int v = "MO".equalsIgnoreCase(choice) ? 5 : 1;
+                pending.add(v);
+                if (v == 5) throwsOwed++;
+            }
+            case PLACE -> {
+                if (tokenIndex < 0 || tokenIndex >= TOKENS || DONE.equals(p.tok[tokenIndex])) throw bad("놓을 내 말을 선택하세요");
+                if (!isPlaceCell(cell)) throw bad("앞쪽 1~10칸 중 선택하세요");
+                p.tok[tokenIndex] = cell; p.tokPrev[tokenIndex] = "o0";
+                resolveCatch(p.team, cell);
+            }
+            case SEND_HOME -> {
+                P q = seatPlayer(oppSeat);
+                if (q == null || q.team == p.team) throw bad("상대 말을 선택하세요");
+                if (oppToken < 0 || oppToken >= TOKENS || !onBoard(q.tok[oppToken])) throw bad("판 위 상대 말을 선택하세요");
+                q.tok[oppToken] = WAIT; q.tokPrev[oppToken] = null;
+            }
+            case SWAP -> {
+                P q = seatPlayer(oppSeat);
+                if (q == null || q.team == p.team) throw bad("상대 말을 선택하세요");
+                if (tokenIndex < 0 || tokenIndex >= TOKENS || !onBoard(p.tok[tokenIndex])) throw bad("판 위 내 말을 선택하세요");
+                if (oppToken < 0 || oppToken >= TOKENS || !onBoard(q.tok[oppToken])) throw bad("판 위 상대 말을 선택하세요");
+                String tmp = p.tok[tokenIndex]; p.tok[tokenIndex] = q.tok[oppToken]; q.tok[oppToken] = tmp;
+                String tp = p.tokPrev[tokenIndex]; p.tokPrev[tokenIndex] = q.tokPrev[oppToken]; q.tokPrev[oppToken] = tp;
+            }
+            case RALLY -> {
+                if (tokenIndex < 0 || tokenIndex >= TOKENS || DONE.equals(p.tok[tokenIndex])) throw bad("옮길 내 말을 선택하세요");
+                if (oppToken < 0 || oppToken >= TOKENS || !onBoard(p.tok[oppToken]) || oppToken == tokenIndex) throw bad("모을 대상(판 위 내 다른 말)을 선택하세요");
+                p.tok[tokenIndex] = p.tok[oppToken]; p.tokPrev[tokenIndex] = p.tokPrev[oppToken];
+            }
+        }
+        p.abilityUsed = true;
+        lastAction = p.nick + " ▸ [" + abilityName(p.ability) + "] 사용!";
+        if (checkWin(p.team)) endGame(p.team);
+    }
+
+    private P seatPlayer(int seat) { return seat >= 0 && seat < players.size() ? players.get(seat) : null; }
+
+    /** 봇: 능력을 상황에 맞게 1회 사용(불가하면 스킵). */
+    private void botTryAbility(P p) {
+        if (!abilities || p.ability == null || p.abilityUsed) return;
+        try {
+            switch (p.ability) {
+                case EXTRA -> throwsOwed++;
+                case MO_OR_DO -> { pending.add(5); throwsOwed++; }
+                case PLACE -> {
+                    int ti = firstNotDone(p);
+                    if (ti < 0) return;
+                    p.tok[ti] = "o10"; p.tokPrev[ti] = "o0"; resolveCatch(p.team, "o10");
+                }
+                case SEND_HOME -> {
+                    int[] t = bestOppOnBoard(p.team);
+                    if (t == null) return;
+                    players.get(t[0]).tok[t[1]] = WAIT; players.get(t[0]).tokPrev[t[1]] = null;
+                }
+                case SWAP -> {
+                    int myi = worstMyOnBoard(p); int[] opp = bestOppOnBoard(p.team);
+                    if (myi < 0 || opp == null) return;
+                    P q = players.get(opp[0]);
+                    String tmp = p.tok[myi]; p.tok[myi] = q.tok[opp[1]]; q.tok[opp[1]] = tmp;
+                }
+                case RALLY -> {
+                    int a = -1, b = -1;
+                    for (int i = 0; i < TOKENS; i++) if (onBoard(p.tok[i])) { if (a < 0) a = i; else b = i; }
+                    if (a < 0 || b < 0) return;
+                    p.tok[a] = p.tok[b]; p.tokPrev[a] = p.tokPrev[b];
+                }
+            }
+            p.abilityUsed = true;
+            lastAction = p.nick + " ▸ [" + abilityName(p.ability) + "] 사용!";
+        } catch (Exception ignore) { }
+    }
+    private int firstNotDone(P p) { for (int i = 0; i < TOKENS; i++) if (!DONE.equals(p.tok[i])) return i; return -1; }
+    private int worstMyOnBoard(P p) { int best = -1, bd = -1; for (int i = 0; i < TOKENS; i++) if (onBoard(p.tok[i])) { int d = distToDone(p.tok[i]); if (d > bd) { bd = d; best = i; } } return best; }
+    private int[] bestOppOnBoard(int team) {
+        int bs = -1, bt = -1, bd = Integer.MAX_VALUE;
+        for (int s = 0; s < players.size(); s++) { P q = players.get(s); if (q.team == team || q.left) continue;
+            for (int i = 0; i < TOKENS; i++) if (onBoard(q.tok[i])) { int d = distToDone(q.tok[i]); if (d < bd) { bd = d; bs = s; bt = i; } } }
+        return bs < 0 ? null : new int[]{bs, bt};
     }
 
     private void applyMove(P p, int value, int tokenIndex, Dest dest) {
@@ -363,6 +480,7 @@ public class YutGame implements RoomGame {
     }
 
     private void botStep(P p) {
+        botTryAbility(p); // 능력 보유 시 상황 맞춰 1회 사용
         int guard = 0;
         while (turnSeat == seatOf(p) && phase == Phase.PLAYING && guard++ < 60) {
             if (throwsOwed > 0) { doThrow(p, botPower(p)); continue; }
@@ -409,7 +527,8 @@ public class YutGame implements RoomGame {
             if (p.left && phase == Phase.LOBBY) continue;
             List<String> toks = new ArrayList<>();
             for (int t = 0; t < TOKENS; t++) toks.add(p.tok[t]);
-            pv.add(new PlayerView(i, p.nick, p.bot, p.host, p == me, p.team, p.color, toks, p.done, p.left));
+            pv.add(new PlayerView(i, p.nick, p.bot, p.host, p == me, p.team, p.color, toks, p.done, p.left,
+                    abilities && p.ability != null && !p.abilityUsed));
         }
         List<ThrowResult> pend = new ArrayList<>();
         for (int v : pending) pend.add(new ThrowResult(nameOf(v), v, v == 4 || v == 5));
@@ -417,12 +536,16 @@ public class YutGame implements RoomGame {
         List<Move> moves = myTurn && throwsOwed <= 0 || (myTurn && !pending.isEmpty()) ? legalMoves(me) : List.of();
         String turnName = phase == Phase.PLAYING && turnSeat >= 0 ? players.get(turnSeat).nick : null;
 
+        Ability mya = me == null ? null : me.ability;
         return new YutState(
                 phase.name(), teamMode, backDo,
                 clientId != null && clientId.equals(hostClientId), me != null,
                 pv, turnSeat, turnName, myTurn, meSeat, me == null ? -1 : me.team,
                 myTurn ? throwsOwed : 0, myTurn ? pend : List.of(), moves,
-                lastAction, winnerTeam, winnerLabel, turnEndsAt, now());
+                lastAction, winnerTeam, winnerLabel,
+                abilities, mya == null ? null : mya.name(), mya == null ? null : abilityName(mya),
+                mya == null ? null : abilityDesc(mya), me != null && me.abilityUsed,
+                turnEndsAt, now());
     }
 
     // ── RoomGame ──

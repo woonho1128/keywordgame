@@ -79,6 +79,19 @@ public class YutController {
         return ApiResponse.success(g.me(clientId));
     }
 
+    @PostMapping("/ability")
+    public ApiResponse<YutState> ability(@RequestParam String roomCode, @RequestParam String clientId,
+                                         @RequestParam(defaultValue = "-1") int tokenIndex,
+                                         @RequestParam(defaultValue = "") String cell,
+                                         @RequestParam(defaultValue = "-1") int oppSeat,
+                                         @RequestParam(defaultValue = "-1") int oppToken,
+                                         @RequestParam(defaultValue = "") String choice) {
+        validateClientId(clientId);
+        YutGame g = rooms.require(roomCode);
+        g.useAbility(clientId, tokenIndex, cell, oppSeat, oppToken, choice);
+        return ApiResponse.success(g.me(clientId));
+    }
+
     @GetMapping("/me")
     public ApiResponse<YutState> me(@RequestParam String roomCode, @RequestParam String clientId) {
         validateClientId(clientId);

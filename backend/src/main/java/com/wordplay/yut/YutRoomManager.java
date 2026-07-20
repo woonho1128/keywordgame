@@ -16,7 +16,7 @@ public class YutRoomManager {
     private final RoomRegistry<YutGame> reg = new RoomRegistry<>("yut");
 
     public String create(String clientId, NewYutRequest req) {
-        YutGame game = new YutGame(clientId, req.nick(), req.teamMode(), req.backDo());
+        YutGame game = new YutGame(clientId, req.nick(), req.teamMode(), req.backDo(), req.abilities());
         try {
             return reg.add(game);
         } catch (IllegalStateException e) {

@@ -8,12 +8,14 @@ import RoomChat from '@/components/RoomChat';
 type Dest = { cell: string; label: string; caught: boolean; finish: boolean };
 type Move = { value: number; name: string; tokenIndex: number; dests: Dest[] };
 type ThrowResult = { name: string; value: number; extra: boolean };
-type PlayerView = { seat: number; name: string; bot: boolean; host: boolean; me: boolean; team: number; color: number; tokens: string[]; doneCount: number; left: boolean };
+type PlayerView = { seat: number; name: string; bot: boolean; host: boolean; me: boolean; team: number; color: number; tokens: string[]; doneCount: number; left: boolean; hasAbility: boolean };
 type State = {
   phase: string; teamMode: boolean; backDo: boolean; isHost: boolean; joined: boolean;
   players: PlayerView[]; turnSeat: number; turnName: string | null; myTurn: boolean; mySeat: number; myTeam: number;
   throwsOwed: number; pending: ThrowResult[]; moves: Move[];
-  lastAction: string | null; winnerTeam: number; winnerLabel: string | null; deadline: number; serverNow: number;
+  lastAction: string | null; winnerTeam: number; winnerLabel: string | null;
+  abilitiesOn: boolean; myAbility: string | null; myAbilityName: string | null; myAbilityDesc: string | null; myAbilityUsed: boolean;
+  deadline: number; serverNow: number;
 };
 type Room = { code: string; status: string; playerCount: number; host: string };
 
@@ -47,6 +49,10 @@ export default function YutPage() {
   const [roomCode, setRoomCode] = useState<string | null>(null);
   const [teamMode, setTeamMode] = useState(false);
   const [backDo, setBackDo] = useState(true);
+  const [abilitiesOn, setAbilitiesOn] = useState(true);
+  const [abilityMode, setAbilityMode] = useState(false);
+  const [aStep, setAStep] = useState<string | null>(null); // myToken|myToken2|oppToken|cell|choice
+  const [aMyToken, setAMyToken] = useState(-1);
   const [joinCode, setJoinCode] = useState('');
   const [rooms, setRooms] = useState<Room[]>([]);
   const [ss, setSs] = useState<State | null>(null);
@@ -97,7 +103,7 @@ export default function YutPage() {
   const movesSig = ss?.myTurn ? ss.moves.map((m) => `${m.value}:${m.tokenIndex}`).join('|') : '';
   // 내 차례 값 자동 선택 + 유효하지 않은 선택만 정리(폴링 시 선택 유지)
   useEffect(() => {
-    if (!ss?.myTurn) { setSelValue(null); setSelToken(null); return; }
+    if (!ss?.myTurn) { setSelValue(null); setSelToken(null); setAbilityMode(false); setAStep(null); setAMyToken(-1); return; }
     const vals = [...new Set(ss.moves.map((m) => m.value))];
     setSelValue((cur) => (cur != null && vals.includes(cur) ? cur : vals[0] ?? null));
     setSelToken((cur) => (cur != null && ss.moves.some((m) => m.tokenIndex === cur) ? cur : null));
@@ -108,7 +114,7 @@ export default function YutPage() {
   const create = async () => {
     const n = nick.trim(); if (!n) return; saveNick(n);
     try {
-      const res = await api<{ roomCode: string; state: State }>(`/api/v1/yut/new?clientId=${id.current}`, { method: 'POST', body: JSON.stringify({ nick: n, teamMode, backDo }) });
+      const res = await api<{ roomCode: string; state: State }>(`/api/v1/yut/new?clientId=${id.current}`, { method: 'POST', body: JSON.stringify({ nick: n, teamMode, backDo, abilities: abilitiesOn }) });
       setRoomCode(res.roomCode); setSs(res.state); setScreen('lobby');
     } catch (e: any) { alert(e?.message || '방 생성 실패'); }
   };
@@ -158,6 +164,39 @@ export default function YutPage() {
   };
   const leave = async () => { const rc = roomRef.current; if (rc) { try { await api(`/api/v1/yut/leave?roomCode=${rc}&clientId=${id.current}`, { method: 'POST', body: '{}' }); } catch {} } setScreen('entry'); setRoomCode(null); setSs(null); };
 
+  // ── 특수능력 ──
+  const resetAbility = () => { setAbilityMode(false); setAStep(null); setAMyToken(-1); };
+  const callAbility = async (p: { tokenIndex?: number; cell?: string; oppSeat?: number; oppToken?: number; choice?: string }) => {
+    const qs = `tokenIndex=${p.tokenIndex ?? -1}&cell=${p.cell ?? ''}&oppSeat=${p.oppSeat ?? -1}&oppToken=${p.oppToken ?? -1}&choice=${p.choice ?? ''}`;
+    try { setSs(await api(`/api/v1/yut/ability?roomCode=${roomCode}&clientId=${id.current}&${qs}`, { method: 'POST', body: '{}' })); } catch (e: any) { alert(e?.message); }
+    resetAbility();
+  };
+  const startAbility = () => {
+    const a = ss?.myAbility; if (!a) return;
+    if (a === 'EXTRA') { callAbility({}); return; }
+    setAbilityMode(true); setAMyToken(-1);
+    setAStep(a === 'MO_OR_DO' ? 'choice' : a === 'SEND_HOME' ? 'oppToken' : 'myToken');
+  };
+  const abilityClickToken = (seat: number, tokenIndex: number) => {
+    if (!abilityMode || !ss) return;
+    const a = ss.myAbility; const isMine = seat === ss.mySeat;
+    if (aStep === 'myToken') {
+      if (!isMine) return;
+      if (a === 'PLACE') { setAMyToken(tokenIndex); setAStep('cell'); }
+      else if (a === 'SWAP') { setAMyToken(tokenIndex); setAStep('oppToken'); }
+      else if (a === 'RALLY') { setAMyToken(tokenIndex); setAStep('myToken2'); }
+    } else if (aStep === 'myToken2') {
+      if (!isMine || tokenIndex === aMyToken) return;
+      callAbility({ tokenIndex: aMyToken, oppToken: tokenIndex });
+    } else if (aStep === 'oppToken') {
+      if (isMine) return;
+      if (a === 'SEND_HOME') callAbility({ oppSeat: seat, oppToken: tokenIndex });
+      else if (a === 'SWAP') callAbility({ tokenIndex: aMyToken, oppSeat: seat, oppToken: tokenIndex });
+    }
+  };
+  const abilityClickCell = (cell: string) => { if (abilityMode && aStep === 'cell') callAbility({ tokenIndex: aMyToken, cell }); };
+  const isPlaceCell = (c: string) => { const n = Number(c.replace('o', '')); return c.startsWith('o') && n >= 1 && n <= 10; };
+
   const home = <Link href="/" aria-label="홈으로" className="text-lg leading-none text-slate-500 hover:text-slate-800 dark:hover:text-slate-100">🏠</Link>;
   const ended = ss?.phase === 'ENDED';
   const players = ss?.players ?? [];
@@ -179,11 +218,12 @@ export default function YutPage() {
   };
 
   // 판 위 말 그룹핑
-  const tokensAt: Record<string, { color: number; seat: number }[]> = {};
+  const tokensAt: Record<string, { color: number; seat: number; tokenIndex: number }[]> = {};
   players.forEach((p) => p.tokens.forEach((c, ti) => {
     if (c === 'wait' || c === 'done') return;
-    (tokensAt[c] ||= []).push({ color: p.color, seat: p.seat });
+    (tokensAt[c] ||= []).push({ color: p.color, seat: p.seat, tokenIndex: ti });
   }));
+  const teamOf = (seat: number) => players.find((p) => p.seat === seat)?.team;
 
   return (
     <main className="min-h-screen flex flex-col items-center p-3 sm:p-5 max-w-3xl mx-auto w-full text-slate-800 dark:text-slate-100">
@@ -207,6 +247,9 @@ export default function YutPage() {
           </div>
           <label className="flex items-center gap-2 text-sm rounded-lg border border-slate-200 dark:border-slate-700 px-3 py-2">
             <input type="checkbox" checked={backDo} onChange={(e) => setBackDo(e.target.checked)} /> 백도(뒤로 1칸) 사용
+          </label>
+          <label className="flex items-center gap-2 text-sm rounded-lg border border-slate-200 dark:border-slate-700 px-3 py-2">
+            <input type="checkbox" checked={abilitiesOn} onChange={(e) => setAbilitiesOn(e.target.checked)} /> ✨ 랜덤 특수능력 (각자 1회·비공개)
           </label>
           <button onClick={create} disabled={!nick.trim()} className="w-full bg-blue-600 text-white font-bold py-3 rounded-lg disabled:opacity-40">방 만들기</button>
           <div className="flex gap-2">
@@ -276,10 +319,13 @@ export default function YutPage() {
               {Object.entries(COORD).map(([c, [x, y]]) => {
                 const big = BIG.has(c);
                 const hi = !!destHighlights[c];
+                const aCell = abilityMode && aStep === 'cell' && isPlaceCell(c);
+                const clickable = hi || aCell;
                 return (
-                  <g key={c} onClick={hi ? () => { const h = destHighlights[c]; doMove(h.value, h.token, h.dest.cell); } : undefined} style={{ cursor: hi ? 'pointer' : 'default' }}>
-                    {hi && <circle cx={x} cy={y} r={8} fill="transparent" />}
+                  <g key={c} onClick={clickable ? () => { if (hi) { const h = destHighlights[c]; doMove(h.value, h.token, h.dest.cell); } else abilityClickCell(c); } : undefined} style={{ cursor: clickable ? 'pointer' : 'default' }}>
+                    {clickable && <circle cx={x} cy={y} r={8} fill="transparent" />}
                     {hi && <circle cx={x} cy={y} r={big ? 7.4 : 6} fill="none" stroke="#facc15" strokeWidth={1.6}><animate attributeName="opacity" values="1;.35;1" dur="1s" repeatCount="indefinite" /></circle>}
+                    {aCell && <circle cx={x} cy={y} r={big ? 7.4 : 6} fill="none" stroke="#d946ef" strokeWidth={1.6}><animate attributeName="opacity" values="1;.35;1" dur="1s" repeatCount="indefinite" /></circle>}
                     <circle cx={x} cy={y} r={big ? 4.6 : 2.7} fill={big ? '#4a3f2d' : '#3c332a'} stroke={big ? '#c9a24b' : '#a8987a'} strokeWidth={big ? 1.6 : 1.2} />
                     {hi && destHighlights[c].dest.caught && <text x={x} y={y - 6.5} textAnchor="middle" fill="#fca5a5" fontSize={3.6} fontWeight={800}>잡기!</text>}
                   </g>
@@ -291,12 +337,18 @@ export default function YutPage() {
               {Object.entries(tokensAt).map(([c, arr]) => {
                 const [x, y] = COORD[c];
                 const first = arr[0];
-                const mine = players[ss.mySeat]?.color === first.color;
-                const myMovable = ss.myTurn && mine && [...movableIdx].some((ti) => players[ss.mySeat].tokens[ti] === c);
-                const clickToken = myMovable ? players[ss.mySeat].tokens.findIndex((tc) => tc === c) : -1;
+                const myEntry = arr.find((e) => e.seat === ss.mySeat);
+                const oppEntry = arr.find((e) => teamOf(e.seat) !== ss.myTeam);
+                let onClk: (() => void) | undefined;
+                let ring: string | null = null;
+                if (abilityMode) {
+                  if ((aStep === 'myToken' || aStep === 'myToken2') && myEntry) { onClk = () => abilityClickToken(ss.mySeat, myEntry.tokenIndex); ring = '#d946ef'; }
+                  else if (aStep === 'oppToken' && oppEntry) { onClk = () => abilityClickToken(oppEntry.seat, oppEntry.tokenIndex); ring = '#d946ef'; }
+                } else if (ss.myTurn && myEntry && movableIdx.has(myEntry.tokenIndex)) { onClk = () => tapToken(myEntry.tokenIndex); ring = '#fff'; }
                 return (
-                  <g key={'t' + c} onClick={clickToken >= 0 ? () => tapToken(clickToken) : undefined} style={{ cursor: clickToken >= 0 ? 'pointer' : 'default' }}>
-                    {myMovable && <circle cx={x} cy={y} r={4.6} fill="none" stroke="#fff" strokeWidth={1} opacity={0.9} />}
+                  <g key={'t' + c} onClick={onClk} style={{ cursor: onClk ? 'pointer' : 'default' }}>
+                    {onClk && <circle cx={x} cy={y} r={7} fill="transparent" />}
+                    {ring && <circle cx={x} cy={y} r={4.8} fill="none" stroke={ring} strokeWidth={1.1} opacity={0.95} />}
                     <circle cx={x} cy={y} r={3.4} fill={PCOL[first.color]} stroke="rgba(0,0,0,.3)" strokeWidth={0.8} />
                     {arr.length > 1 && <><circle cx={x + 2.6} cy={y - 2.6} r={2.3} fill="rgba(20,14,8,.85)" /><text x={x + 2.6} y={y - 1.4} textAnchor="middle" fill="#fff" fontSize={3.4} fontWeight={800}>{arr.length}</text></>}
                   </g>
@@ -378,7 +430,32 @@ export default function YutPage() {
                   </>
                 ) : null}
 
-                {ss.lastAction && <p className={`text-xs text-center mt-2 font-bold ${ss.lastAction.includes('잡') || ss.lastAction.includes('도착') ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-500 dark:text-slate-400'}`}>{ss.lastAction}</p>}
+                {ss.lastAction && <p className={`text-xs text-center mt-2 font-bold ${ss.lastAction.includes('잡') || ss.lastAction.includes('도착') || ss.lastAction.includes('사용') ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-500 dark:text-slate-400'}`}>{ss.lastAction}</p>}
+              </div>
+            )}
+
+            {/* 내 특수능력 */}
+            {!ended && ss.abilitiesOn && ss.myAbility && (
+              <div className="rounded-xl border-2 border-fuchsia-400 bg-fuchsia-500/5 p-3">
+                <p className="text-sm font-bold text-fuchsia-600 dark:text-fuchsia-400">✨ 내 능력: {ss.myAbilityName}{ss.myAbilityUsed ? ' (사용함)' : ''}</p>
+                <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">{ss.myAbilityDesc}</p>
+                {!ss.myAbilityUsed && ss.myTurn && !abilityMode && (
+                  <button onClick={startAbility} className="w-full mt-2 py-2 rounded-lg bg-fuchsia-600 text-white font-bold text-sm">능력 사용</button>
+                )}
+                {abilityMode && (
+                  <div className="mt-2">
+                    <p className="text-xs text-center font-bold text-fuchsia-600 dark:text-fuchsia-400">
+                      {aStep === 'choice' ? '모 / 도 선택' : aStep === 'myToken' ? '내 말을 누르세요' : aStep === 'myToken2' ? '모을 대상(내 다른 말) 누르기' : aStep === 'oppToken' ? '상대 말을 누르세요' : aStep === 'cell' ? '놓을 칸(앞쪽 1~10) 누르기' : ''}
+                    </p>
+                    {aStep === 'choice' && (
+                      <div className="flex gap-2 mt-2">
+                        <button onClick={() => callAbility({ choice: 'MO' })} className="flex-1 py-2 rounded-lg border-2 border-fuchsia-500 bg-fuchsia-500/10 font-bold text-sm">모 (5·한번더)</button>
+                        <button onClick={() => callAbility({ choice: 'DO' })} className="flex-1 py-2 rounded-lg border-2 border-fuchsia-500 bg-fuchsia-500/10 font-bold text-sm">도 (1)</button>
+                      </div>
+                    )}
+                    <button onClick={resetAbility} className="w-full mt-2 py-1.5 rounded-lg bg-slate-200 dark:bg-slate-700 text-xs font-bold">취소</button>
+                  </div>
+                )}
               </div>
             )}
 
@@ -392,15 +469,18 @@ export default function YutPage() {
                       <span className="w-3.5 h-3.5 rounded-full shrink-0" style={{ background: PCOL[p.color] }} />
                       <span className="font-bold">{p.bot ? '🤖' : ''}{p.name}{p.me ? '*' : ''}</span>
                       {ss.teamMode && <span className="text-[10px] text-slate-400">팀{p.team + 1}</span>}
+                      {p.hasAbility && !p.me && <span className="text-[11px]" title="미사용 능력 보유(비공개)">✨</span>}
                       <span className="ml-auto text-xs">🏁 {p.doneCount}/4</span>
                     </div>
-                    {/* 대기 말: 내 것이고 움직일 수 있으면 클릭 */}
+                    {/* 대기 말: 이동/능력 대상 클릭 */}
                     <div className="flex gap-1 mt-1">
                       {p.tokens.map((t, ti) => {
                         if (t !== 'wait') return null;
-                        const clickable = p.me && ss.myTurn && movableIdx.has(ti);
-                        return <button key={ti} onClick={clickable ? () => tapToken(ti) : undefined} disabled={!clickable}
-                          className={`w-4 h-4 rounded-full ${clickable ? 'ring-2 ring-offset-1 ring-slate-800 dark:ring-white' : ''}`}
+                        const cMove = p.me && !abilityMode && ss.myTurn && movableIdx.has(ti);
+                        const cAbil = p.me && abilityMode && aStep === 'myToken' && ss.myAbility === 'PLACE';
+                        const clickable = cMove || cAbil;
+                        return <button key={ti} onClick={cMove ? () => tapToken(ti) : cAbil ? () => abilityClickToken(ss.mySeat, ti) : undefined} disabled={!clickable}
+                          className={`w-4 h-4 rounded-full ${clickable ? `ring-2 ring-offset-1 ${cAbil ? 'ring-fuchsia-500' : 'ring-slate-800 dark:ring-white'}` : ''}`}
                           style={{ background: PCOL[p.color], opacity: clickable ? 1 : 0.55 }} />;
                       })}
                       {waitCount === 0 && p.doneCount < 4 && <span className="text-[10px] text-slate-400">전원 출발</span>}

@@ -22,20 +22,20 @@ class YutGameTest {
 
     @Test
     void 최소인원_미달_시작불가() {
-        YutGame g = new YutGame("host", "방장", false, true);
+        YutGame g = new YutGame("host", "방장", false, true, false);
         assertThatThrownBy(() -> g.start("host")).hasMessageContaining("최소 2명");
     }
 
     @Test
     void 팀전은_4명_필요() {
-        YutGame g = new YutGame("host", "방장", true, true);
+        YutGame g = new YutGame("host", "방장", true, true, false);
         g.addBot("host", "NORMAL");
         assertThatThrownBy(() -> g.start("host")).hasMessageContaining("팀전은 4명");
     }
 
     @Test
     void 시작하면_말4개_대기_첫차례_던지기() {
-        YutGame g = new YutGame("host", "방장", false, true);
+        YutGame g = new YutGame("host", "방장", false, true, false);
         g.join("p2", "친구");
         g.start("host");
         assertThat(g.phase()).isEqualTo(YutGame.Phase.PLAYING);
@@ -52,7 +52,7 @@ class YutGameTest {
     @Test
     void 던지면_pending에_값이_쌓이고_이동하면_말이_전진한다() {
         for (int attempt = 0; attempt < 80; attempt++) {
-            YutGame g = new YutGame("host", "방장", false, true);
+            YutGame g = new YutGame("host", "방장", false, true, false);
             g.join("p2", "친구");
             g.start("host");
             while (g.me("host").throwsOwed() > 0) g.throwYut("host", 60); // 윷/모 연속 포함
@@ -68,8 +68,20 @@ class YutGameTest {
     }
 
     @Test
+    void 능력_켜면_각자_랜덤능력을_받는다() {
+        YutGame g = new YutGame("host", "방장", false, true, true);
+        g.join("p2", "친구");
+        g.start("host");
+        for (YutGame.P p : g.playersList()) assertThat(p.ability).isNotNull();
+        // 내 능력은 노출, 능력 보유 플래그
+        YutState st = g.me("host");
+        assertThat(st.abilitiesOn()).isTrue();
+        assertThat(st.myAbility()).isNotBlank();
+    }
+
+    @Test
     void 봇들끼리_게임이_끝까지_진행되어_승리팀이_나온다() {
-        YutGame g = new YutGame("host", "방장", false, true);
+        YutGame g = new YutGame("host", "방장", false, true, false);
         g.addBot("host", "NORMAL");
         g.start("host"); // host(사람) + 봇1 = 2인
         int guard = 0;
