@@ -218,12 +218,16 @@ export default function YutPage() {
     else setSelToken((cur) => (cur === tokenIndex ? null : tokenIndex));
   };
 
-  // 판 위 말 그룹핑
-  const tokensAt: Record<string, { color: number; seat: number; tokenIndex: number }[]> = {};
+  // 판 위 말(개별 정체성 → 이동 애니메이션 유지)
+  const boardTokens: { seat: number; ti: number; color: number; cell: string }[] = [];
   players.forEach((p) => p.tokens.forEach((c, ti) => {
     if (c === 'wait' || c === 'done') return;
-    (tokensAt[c] ||= []).push({ color: p.color, seat: p.seat, tokenIndex: ti });
+    boardTokens.push({ seat: p.seat, ti, color: p.color, cell: c });
   }));
+  const cellCount: Record<string, number> = {};
+  boardTokens.forEach((t) => { cellCount[t.cell] = (cellCount[t.cell] || 0) + 1; });
+  const badgeAt: Record<string, string> = {};
+  boardTokens.forEach((t) => { if (!(t.cell in badgeAt)) badgeAt[t.cell] = `${t.seat}-${t.ti}`; });
   const teamOf = (seat: number) => players.find((p) => p.seat === seat)?.team;
 
   return (
@@ -334,24 +338,24 @@ export default function YutPage() {
               })}
               {/* 출발 표시 */}
               <text x={COORD.o0[0]} y={COORD.o0[1] + 9.5} textAnchor="middle" fill="#c9a24b" fontSize={3.1} fontWeight={700}>출발·도착</text>
-              {/* 말 */}
-              {Object.entries(tokensAt).map(([c, arr]) => {
-                const [x, y] = COORD[c];
-                const first = arr[0];
-                const myEntry = arr.find((e) => e.seat === ss.mySeat);
-                const oppEntry = arr.find((e) => teamOf(e.seat) !== ss.myTeam);
+              {/* 말(개별 렌더 → transform 트랜지션으로 미끄러지듯 이동) */}
+              {boardTokens.map((t) => {
+                const [x, y] = COORD[t.cell];
+                const idKey = `${t.seat}-${t.ti}`;
+                const isMine = t.seat === ss.mySeat;
                 let onClk: (() => void) | undefined;
                 let ring: string | null = null;
                 if (abilityMode) {
-                  if ((aStep === 'myToken' || aStep === 'myToken2') && myEntry) { onClk = () => abilityClickToken(ss.mySeat, myEntry.tokenIndex); ring = '#d946ef'; }
-                  else if (aStep === 'oppToken' && oppEntry) { onClk = () => abilityClickToken(oppEntry.seat, oppEntry.tokenIndex); ring = '#d946ef'; }
-                } else if (ss.myTurn && myEntry && movableIdx.has(myEntry.tokenIndex)) { onClk = () => tapToken(myEntry.tokenIndex); ring = '#fff'; }
+                  if ((aStep === 'myToken' || aStep === 'myToken2') && isMine) { onClk = () => abilityClickToken(ss.mySeat, t.ti); ring = '#d946ef'; }
+                  else if (aStep === 'oppToken' && teamOf(t.seat) !== ss.myTeam) { onClk = () => abilityClickToken(t.seat, t.ti); ring = '#d946ef'; }
+                } else if (ss.myTurn && isMine && movableIdx.has(t.ti)) { onClk = () => tapToken(t.ti); ring = '#fff'; }
+                const showBadge = cellCount[t.cell] > 1 && badgeAt[t.cell] === idKey;
                 return (
-                  <g key={'t' + c} onClick={onClk} style={{ cursor: onClk ? 'pointer' : 'default' }}>
-                    {onClk && <circle cx={x} cy={y} r={7} fill="transparent" />}
-                    {ring && <circle cx={x} cy={y} r={4.8} fill="none" stroke={ring} strokeWidth={1.1} opacity={0.95} />}
-                    <circle cx={x} cy={y} r={3.4} fill={PCOL[first.color]} stroke="rgba(0,0,0,.3)" strokeWidth={0.8} />
-                    {arr.length > 1 && <><circle cx={x + 2.6} cy={y - 2.6} r={2.3} fill="rgba(20,14,8,.85)" /><text x={x + 2.6} y={y - 1.4} textAnchor="middle" fill="#fff" fontSize={3.4} fontWeight={800}>{arr.length}</text></>}
+                  <g key={idKey} onClick={onClk} style={{ cursor: onClk ? 'pointer' : 'default', transform: `translate(${x}px,${y}px)`, transition: 'transform .45s cubic-bezier(.4,1,.5,1)' }}>
+                    {onClk && <circle r={7} fill="transparent" />}
+                    {ring && <circle r={4.8} fill="none" stroke={ring} strokeWidth={1.1} opacity={0.95} />}
+                    <circle r={3.4} fill={PCOL[t.color]} stroke="rgba(0,0,0,.3)" strokeWidth={0.8} />
+                    {showBadge && <><circle cx={2.6} cy={-2.6} r={2.3} fill="rgba(20,14,8,.85)" /><text x={2.6} y={-1.4} textAnchor="middle" fill="#fff" fontSize={3.4} fontWeight={800}>{cellCount[t.cell]}</text></>}
                   </g>
                 );
               })}

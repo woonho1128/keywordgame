@@ -46,7 +46,7 @@ public class YutGame implements RoomGame {
     static final int PLACE_MAX = 10; // 지정 소환 최대 칸(o1~o10)
 
     static final int MAX_PLAYERS = 4, TOKENS = 4;
-    static final long TURN_MS = 90_000, BOT_DELAY_MS = 1100;
+    static final long TURN_MS = 90_000, BOT_DELAY_MS = 650; // 봇 한 동작 간 간격(폴링 1s마다 한 동작씩 보이도록)
     static final String WAIT = "wait", DONE = "done";
 
     // ── 이동 그래프 ──
@@ -132,6 +132,7 @@ public class YutGame implements RoomGame {
     private String winnerLabel = null, lastAction = null;
     private final List<String> log = new ArrayList<>(); // 최근 이력
     private long turnEndsAt = 0, botAt = 0, lastActive = System.currentTimeMillis();
+    private boolean botAbilityTried = false;
 
     private void note(String s) { lastAction = s; log.add(s); if (log.size() > 40) log.remove(0); } // 이력 남김
     private void flash(String s) { lastAction = s; } // 표시만(이력 X)
@@ -186,6 +187,7 @@ public class YutGame implements RoomGame {
 
     private void beginTurn() {
         throwsOwed = 1; pending.clear();
+        botAbilityTried = false;
         turnEndsAt = now() + TURN_MS; botAt = now() + BOT_DELAY_MS;
     }
 
@@ -481,18 +483,24 @@ public class YutGame implements RoomGame {
         P cur = players.get(turnSeat);
         if (cur.left) { endTurn(); return; }
         long t = now();
-        if (cur.bot) { if (t >= botAt) botStep(cur); }
+        if (cur.bot) { if (t >= botAt) botOneStep(cur); }
         else if (t >= turnEndsAt) autoStep(cur);
     }
 
-    private void botStep(P p) {
-        botTryAbility(p); // 능력 보유 시 상황 맞춰 1회 사용
-        int guard = 0;
-        while (turnSeat == seatOf(p) && phase == Phase.PLAYING && guard++ < 60) {
-            if (throwsOwed > 0) { doThrow(p, botPower(p)); continue; }
-            if (pending.isEmpty()) break;
-            if (!applyBestMove(p)) break;
+    /** 봇은 한 번에 한 동작(능력/던지기/이동 하나)만 → 폴링 간격만큼 눈에 보이게 진행. */
+    private void botOneStep(P p) {
+        botAt = now() + BOT_DELAY_MS; // 다음 동작 예약
+        if (!botAbilityTried) {
+            botAbilityTried = true;
+            if (abilities && p.ability != null && !p.abilityUsed) {
+                boolean before = p.abilityUsed;
+                botTryAbility(p);
+                if (p.abilityUsed != before) return; // 능력 사용 = 이번 동작
+            }
         }
+        if (throwsOwed > 0) { doThrow(p, botPower(p)); return; }
+        if (!pending.isEmpty()) { applyBestMove(p); return; }
+        endTurn();
     }
     private void autoStep(P p) {
         int guard = 0;
