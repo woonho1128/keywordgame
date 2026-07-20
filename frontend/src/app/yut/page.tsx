@@ -335,12 +335,11 @@ export default function YutPage() {
 
                 {ss.myTurn && ss.throwsOwed > 0 ? (
                   <div className="select-none">
-                    {/* 파워 게이지 */}
+                    {/* 파워 게이지: 굿존 안에 떼면 정상(도개걸윷모 랜덤), 밖이면 낙 */}
                     <div className="relative h-7 rounded-full overflow-hidden border border-slate-300 dark:border-slate-600 flex">
-                      {[['도', '#94a3b8', 25], ['개', '#3a7fc4', 18.33], ['걸', '#3f9a70', 16.67], ['윷', '#e0a021', 15], ['모', '#e2593b', 13.33], ['낙', '#7f1d1d', 11.67]].map(([lb, col, w], i) => (
-                        <div key={i} style={{ width: `${w}%`, background: col as string }} className="flex items-center justify-center text-[10px] font-bold text-white/90">{lb}</div>
+                      {[['약해서 낙', '#7f1d1d', 20.83], ['던지기 좋음', '#3f9a70', 62.5], ['세서 낙', '#7f1d1d', 16.67]].map(([lb, col, w], i) => (
+                        <div key={i} style={{ width: `${w}%`, background: col as string }} className="flex items-center justify-center text-[9px] font-bold text-white/90 whitespace-nowrap overflow-hidden">{lb}</div>
                       ))}
-                      {/* 채움 오버레이(어둡게) + 마커 */}
                       <div className="absolute inset-y-0 right-0 bg-slate-900/45" style={{ left: `${(power / 120) * 100}%` }} />
                       <div className="absolute inset-y-0 w-[3px] bg-white shadow" style={{ left: `calc(${(power / 120) * 100}% - 1.5px)`, opacity: power > 0 ? 1 : 0 }} />
                     </div>
@@ -349,9 +348,9 @@ export default function YutPage() {
                       onPointerUp={releaseCharge} onPointerLeave={releaseCharge} onPointerCancel={releaseCharge}
                       className="w-full mt-2 py-3 rounded-lg text-white font-extrabold active:scale-[.99] touch-none"
                       style={{ background: 'linear-gradient(180deg,#b6382f,#8f2b24)' }}>
-                      🎋 {chargingRef.current ? '떼면 던짐!' : '꾹 눌러 던지기'} {ss.throwsOwed > 1 ? `(${ss.throwsOwed})` : ''}
+                      🎋 {chargingRef.current ? '지금 떼세요!' : '꾹 눌러 던지기'} {ss.throwsOwed > 1 ? `(${ss.throwsOwed})` : ''}
                     </button>
-                    <p className="text-[11px] text-center text-slate-500 dark:text-slate-400 mt-1">누르는 세기로 결과가 달라져요 · 너무 세면 <b className="text-red-500">낙!</b></p>
+                    <p className="text-[11px] text-center text-slate-500 dark:text-slate-400 mt-1"><b className="text-emerald-600 dark:text-emerald-400">굿존</b>에서 떼면 정상 던지기(결과는 랜덤) · 벗어나면 <b className="text-red-500">낙!</b></p>
                   </div>
                 ) : ss.myTurn && ss.moves.length > 0 ? (
                   <p className="text-xs text-center text-slate-500 dark:text-slate-400">

@@ -171,22 +171,28 @@ public class YutGame implements RoomGame {
         doThrow(players.get(turnSeat), power);
     }
 
+    // 파워 유효 구간(이 밖이면 낙). 안이면 도개걸윷모는 실제 윷처럼 랜덤.
+    static final int POWER_MIN = 25, POWER_MAX = 100;
+
     private void doThrow(P p, int power) {
         power = Math.max(0, Math.min(120, power));
         botAt = now() + BOT_DELAY_MS; turnEndsAt = now() + TURN_MS;
-        if (power >= 106) { // 낙: 너무 세게 던져 허탕
+        if (power < POWER_MIN || power > POWER_MAX) { // 낙: 너무 약하거나 세게 던짐
             throwsOwed--;
-            lastAction = p.nick + " ▸ 낙! (너무 세게 던짐)";
+            lastAction = p.nick + " ▸ 낙! (" + (power < POWER_MIN ? "너무 약하게" : "너무 세게") + " 던짐)";
             maybeAutoEnd(p);
             return;
         }
-        int tier = power >= 90 ? 4 : power >= 72 ? 3 : power >= 52 ? 2 : power >= 30 ? 1 : 0; // 도개걸윷모
-        double r = ThreadLocalRandom.current().nextDouble();
-        if (r < 0.09 && tier > 0) tier--;
-        else if (r < 0.18 && tier < 4) tier++;
-        int value = new int[]{1, 2, 3, 4, 5}[tier];
-        boolean extra = tier >= 3;
-        if (tier == 0 && backDo && ThreadLocalRandom.current().nextDouble() < 0.2) value = -1;
+        // 유효 구간 → 윷짝 4개 랜덤(세기와 무관하게 결과는 운)
+        boolean[] flat = new boolean[4];
+        int flats = 0;
+        for (int i = 0; i < 4; i++) { flat[i] = ThreadLocalRandom.current().nextBoolean(); if (flat[i]) flats++; }
+        int value; boolean extra = false;
+        if (flats == 0) { value = 5; extra = true; }          // 모
+        else if (flats == 4) { value = 4; extra = true; }     // 윷
+        else if (flats == 1) { value = (backDo && flat[0]) ? -1 : 1; } // 백도/도
+        else if (flats == 2) { value = 2; }                   // 개
+        else { value = 3; }                                   // 걸
         throwsOwed--;
         if (extra) throwsOwed++;
         pending.add(value);
@@ -194,12 +200,12 @@ public class YutGame implements RoomGame {
         maybeAutoEnd(p);
     }
 
-    /** 봇 파워: 난이도가 높을수록 좋은 구간을 노림. */
+    /** 봇 파워: 난이도가 높을수록 유효 구간(25~100)을 잘 맞춰 낙이 적음(결과는 여전히 랜덤). */
     private int botPower(P p) {
         return switch (p.botLevel == null ? "NORMAL" : p.botLevel) {
-            case "HARD" -> 68 + ThreadLocalRandom.current().nextInt(36);   // 68~103
-            case "EASY" -> 10 + ThreadLocalRandom.current().nextInt(109);  // 10~118(가끔 낙)
-            default -> 35 + ThreadLocalRandom.current().nextInt(70);       // 35~104
+            case "HARD" -> 32 + ThreadLocalRandom.current().nextInt(60);   // 32~91 (거의 유효)
+            case "EASY" -> 8 + ThreadLocalRandom.current().nextInt(112);   // 8~119 (가끔 낙)
+            default -> 20 + ThreadLocalRandom.current().nextInt(90);       // 20~109 (가끔 낙)
         };
     }
 
