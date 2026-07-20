@@ -162,31 +162,45 @@ public class YutGame implements RoomGame {
         turnEndsAt = now() + TURN_MS; botAt = now() + BOT_DELAY_MS;
     }
 
-    // ── 던지기 ──
-    public synchronized void throwYut(String clientId) {
+    // ── 던지기(파워 게이지) ──
+    // power 0~120: 약하면 도/개, 알맞으면 걸/윷, 강하면 모, 과도(≥106)하면 낙(허탕).
+    public synchronized void throwYut(String clientId, int power) {
         touch(); tick();
         requireTurn(clientId);
         if (throwsOwed <= 0) throw bad("먼저 말을 이동하세요");
-        doThrow(players.get(turnSeat));
+        doThrow(players.get(turnSeat), power);
     }
 
-    private void doThrow(P p) {
-        boolean[] flat = new boolean[4];
-        int flats = 0;
-        for (int i = 0; i < 4; i++) { flat[i] = ThreadLocalRandom.current().nextBoolean(); if (flat[i]) flats++; }
-        int value; String name; boolean extra = false;
-        if (flats == 0) { value = 5; name = "모"; extra = true; }
-        else if (flats == 4) { value = 4; name = "윷"; extra = true; }
-        else if (flats == 1) {
-            if (backDo && flat[0]) { value = -1; name = "백도"; } else { value = 1; name = "도"; }
-        } else if (flats == 2) { value = 2; name = "개"; }
-        else { value = 3; name = "걸"; }
+    private void doThrow(P p, int power) {
+        power = Math.max(0, Math.min(120, power));
+        botAt = now() + BOT_DELAY_MS; turnEndsAt = now() + TURN_MS;
+        if (power >= 106) { // 낙: 너무 세게 던져 허탕
+            throwsOwed--;
+            lastAction = p.nick + " ▸ 낙! (너무 세게 던짐)";
+            maybeAutoEnd(p);
+            return;
+        }
+        int tier = power >= 90 ? 4 : power >= 72 ? 3 : power >= 52 ? 2 : power >= 30 ? 1 : 0; // 도개걸윷모
+        double r = ThreadLocalRandom.current().nextDouble();
+        if (r < 0.09 && tier > 0) tier--;
+        else if (r < 0.18 && tier < 4) tier++;
+        int value = new int[]{1, 2, 3, 4, 5}[tier];
+        boolean extra = tier >= 3;
+        if (tier == 0 && backDo && ThreadLocalRandom.current().nextDouble() < 0.2) value = -1;
         throwsOwed--;
         if (extra) throwsOwed++;
         pending.add(value);
-        lastAction = p.nick + " ▸ " + name + (extra ? " (한 번 더!)" : "");
-        botAt = now() + BOT_DELAY_MS; turnEndsAt = now() + TURN_MS;
+        lastAction = p.nick + " ▸ " + nameOf(value) + (extra ? " (한 번 더!)" : "");
         maybeAutoEnd(p);
+    }
+
+    /** 봇 파워: 난이도가 높을수록 좋은 구간을 노림. */
+    private int botPower(P p) {
+        return switch (p.botLevel == null ? "NORMAL" : p.botLevel) {
+            case "HARD" -> 68 + ThreadLocalRandom.current().nextInt(36);   // 68~103
+            case "EASY" -> 10 + ThreadLocalRandom.current().nextInt(109);  // 10~118(가끔 낙)
+            default -> 35 + ThreadLocalRandom.current().nextInt(70);       // 35~104
+        };
     }
 
     /** 던지기 다 끝났는데(빚 0) 쓸 수 있는 이동이 하나도 없으면 자동 종료. */
@@ -341,7 +355,7 @@ public class YutGame implements RoomGame {
     private void botStep(P p) {
         int guard = 0;
         while (turnSeat == seatOf(p) && phase == Phase.PLAYING && guard++ < 60) {
-            if (throwsOwed > 0) { doThrow(p); continue; }
+            if (throwsOwed > 0) { doThrow(p, botPower(p)); continue; }
             if (pending.isEmpty()) break;
             if (!applyBestMove(p)) break;
         }
@@ -349,7 +363,7 @@ public class YutGame implements RoomGame {
     private void autoStep(P p) {
         int guard = 0;
         while (turnSeat == seatOf(p) && phase == Phase.PLAYING && guard++ < 60) {
-            if (throwsOwed > 0) { doThrow(p); continue; }
+            if (throwsOwed > 0) { doThrow(p, 40 + ThreadLocalRandom.current().nextInt(60)); continue; } // 시간초과 자동: 무난한 파워
             if (pending.isEmpty()) break;
             if (!applyBestMove(p)) break;
         }

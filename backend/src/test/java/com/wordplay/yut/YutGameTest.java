@@ -34,7 +34,7 @@ class YutGameTest {
         // 던지기 전엔 이동 불가
         assertThatThrownBy(() -> g.move("host", 1, 0, "o0")).hasMessageContaining("사용할 수 없");
         // 남의 차례엔 던지기 불가
-        assertThatThrownBy(() -> g.throwYut("p2")).hasMessageContaining("차례");
+        assertThatThrownBy(() -> g.throwYut("p2", 60)).hasMessageContaining("차례");
     }
 
     @Test
@@ -43,7 +43,7 @@ class YutGameTest {
             YutGame g = new YutGame("host", "방장", false, true);
             g.join("p2", "친구");
             g.start("host");
-            while (g.me("host").throwsOwed() > 0) g.throwYut("host"); // 윷/모 연속 포함
+            while (g.me("host").throwsOwed() > 0) g.throwYut("host", 60); // 윷/모 연속 포함
             YutState st = g.me("host");
             YutState.Move mv = st.moves().stream().filter(m -> m.value() > 0).findFirst().orElse(null);
             if (mv == null) continue; // 첫 던지기가 백도뿐이면 다시
@@ -66,7 +66,7 @@ class YutGameTest {
             if (g.turnSeat() == 0 && g.phase() == YutGame.Phase.PLAYING) {
                 // host(사람) 차례를 봇처럼 자동 진행: 던질 게 있으면 던지고, 이동 후보 있으면 첫 후보
                 YutState st = g.me("host");
-                if (st.throwsOwed() > 0) g.throwYut("host");
+                if (st.throwsOwed() > 0) g.throwYut("host", 60);
                 else if (!st.moves().isEmpty()) {
                     YutState.Move m = st.moves().get(0);
                     g.move("host", m.value(), m.tokenIndex(), m.dests().get(0).cell());

@@ -54,8 +54,14 @@ export default function YutPage() {
   const [remaining, setRemaining] = useState(0);
   const [selValue, setSelValue] = useState<number | null>(null);
   const [selToken, setSelToken] = useState<number | null>(null); // 도착 선택 대기 중인 말
+  const [power, setPower] = useState(0);
   const roomRef = useRef<string | null>(null); roomRef.current = roomCode;
   const offsetRef = useRef(0);
+  const chargingRef = useRef(false);
+  const powerRef = useRef(0);
+  const rafRef = useRef<number | null>(null);
+  const startRef = useRef(0);
+  const CHARGE_MS = 1350; // 이 시간에 파워 120(=낙 한계)
 
   useEffect(() => { id.current = cid(); try { setNick(localStorage.getItem('arcade_nick') || ''); } catch {} }, []);
 
@@ -123,7 +129,26 @@ export default function YutPage() {
 
   const addBot = async () => { try { setSs(await api(`/api/v1/yut/add-bot?roomCode=${roomCode}&clientId=${id.current}&level=${botLevel}`, { method: 'POST', body: '{}' })); } catch (e: any) { alert(e?.message); } };
   const startMatch = async () => { try { setSs(await api(`/api/v1/yut/start?roomCode=${roomCode}&clientId=${id.current}`, { method: 'POST', body: '{}' })); setScreen('game'); } catch (e: any) { alert(e?.message); } };
-  const throwYut = async () => { try { setSs(await api(`/api/v1/yut/throw?roomCode=${roomCode}&clientId=${id.current}`, { method: 'POST', body: '{}' })); } catch (e: any) { alert(e?.message); } };
+  const throwYut = async (pw: number) => { try { setSs(await api(`/api/v1/yut/throw?roomCode=${roomCode}&clientId=${id.current}&power=${Math.round(pw)}`, { method: 'POST', body: '{}' })); } catch (e: any) { alert(e?.message); } };
+  const tickCharge = () => {
+    if (!chargingRef.current) return;
+    const t = performance.now() - startRef.current;
+    const p = Math.min(120, (t / CHARGE_MS) * 120);
+    powerRef.current = p; setPower(p);
+    rafRef.current = requestAnimationFrame(tickCharge);
+  };
+  const startCharge = () => {
+    if (!ss?.myTurn || ss.throwsOwed <= 0 || chargingRef.current) return;
+    chargingRef.current = true; startRef.current = performance.now(); powerRef.current = 0;
+    rafRef.current = requestAnimationFrame(tickCharge);
+  };
+  const releaseCharge = () => {
+    if (!chargingRef.current) return;
+    chargingRef.current = false;
+    if (rafRef.current) cancelAnimationFrame(rafRef.current);
+    const p = powerRef.current; setPower(0); powerRef.current = 0;
+    throwYut(p);
+  };
   const doMove = async (value: number, tokenIndex: number, dest: string) => {
     try { setSs(await api(`/api/v1/yut/move?roomCode=${roomCode}&clientId=${id.current}&value=${value}&tokenIndex=${tokenIndex}&dest=${dest}`, { method: 'POST', body: '{}' })); setSelToken(null); }
     catch (e: any) { alert(e?.message); }
@@ -309,9 +334,25 @@ export default function YutPage() {
                 )}
 
                 {ss.myTurn && ss.throwsOwed > 0 ? (
-                  <button onClick={throwYut} className="w-full py-3 rounded-lg text-white font-extrabold" style={{ background: 'linear-gradient(180deg,#b6382f,#8f2b24)' }}>
-                    🎋 윷 던지기 {ss.throwsOwed > 1 ? `(${ss.throwsOwed})` : ''}
-                  </button>
+                  <div className="select-none">
+                    {/* 파워 게이지 */}
+                    <div className="relative h-7 rounded-full overflow-hidden border border-slate-300 dark:border-slate-600 flex">
+                      {[['도', '#94a3b8', 25], ['개', '#3a7fc4', 18.33], ['걸', '#3f9a70', 16.67], ['윷', '#e0a021', 15], ['모', '#e2593b', 13.33], ['낙', '#7f1d1d', 11.67]].map(([lb, col, w], i) => (
+                        <div key={i} style={{ width: `${w}%`, background: col as string }} className="flex items-center justify-center text-[10px] font-bold text-white/90">{lb}</div>
+                      ))}
+                      {/* 채움 오버레이(어둡게) + 마커 */}
+                      <div className="absolute inset-y-0 right-0 bg-slate-900/45" style={{ left: `${(power / 120) * 100}%` }} />
+                      <div className="absolute inset-y-0 w-[3px] bg-white shadow" style={{ left: `calc(${(power / 120) * 100}% - 1.5px)`, opacity: power > 0 ? 1 : 0 }} />
+                    </div>
+                    <button
+                      onPointerDown={(e) => { e.preventDefault(); startCharge(); }}
+                      onPointerUp={releaseCharge} onPointerLeave={releaseCharge} onPointerCancel={releaseCharge}
+                      className="w-full mt-2 py-3 rounded-lg text-white font-extrabold active:scale-[.99] touch-none"
+                      style={{ background: 'linear-gradient(180deg,#b6382f,#8f2b24)' }}>
+                      🎋 {chargingRef.current ? '떼면 던짐!' : '꾹 눌러 던지기'} {ss.throwsOwed > 1 ? `(${ss.throwsOwed})` : ''}
+                    </button>
+                    <p className="text-[11px] text-center text-slate-500 dark:text-slate-400 mt-1">누르는 세기로 결과가 달라져요 · 너무 세면 <b className="text-red-500">낙!</b></p>
+                  </div>
                 ) : ss.myTurn && ss.moves.length > 0 ? (
                   <p className="text-xs text-center text-slate-500 dark:text-slate-400">
                     {selToken != null ? '도착 지점을 선택하세요' : '움직일 말(흰 테두리)을 누르세요'}

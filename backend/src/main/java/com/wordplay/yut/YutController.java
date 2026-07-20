@@ -62,10 +62,11 @@ public class YutController {
     }
 
     @PostMapping("/throw")
-    public ApiResponse<YutState> throwYut(@RequestParam String roomCode, @RequestParam String clientId) {
+    public ApiResponse<YutState> throwYut(@RequestParam String roomCode, @RequestParam String clientId,
+                                          @RequestParam(defaultValue = "60") int power) {
         validateClientId(clientId);
         YutGame g = rooms.require(roomCode);
-        g.throwYut(clientId);
+        g.throwYut(clientId, power);
         return ApiResponse.success(g.me(clientId));
     }
 
