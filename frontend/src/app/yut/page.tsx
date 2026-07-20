@@ -55,11 +55,13 @@ export default function YutPage() {
   const [selValue, setSelValue] = useState<number | null>(null);
   const [selToken, setSelToken] = useState<number | null>(null); // 도착 선택 대기 중인 말
   const [charging, setCharging] = useState(false);
+  const [power, setPower] = useState(0);
   const roomRef = useRef<string | null>(null); roomRef.current = roomCode;
   const offsetRef = useRef(0);
   const chargingRef = useRef(false);
   const startRef = useRef(0);
-  const CHARGE_MS = 1350; // 이 시간에 파워 120(측정용, 화면엔 비노출)
+  const rafRef = useRef<number | null>(null);
+  const CHARGE_MS = 1500; // 이 시간에 파워 120
 
   useEffect(() => { id.current = cid(); try { setNick(localStorage.getItem('arcade_nick') || ''); } catch {} }, []);
 
@@ -131,14 +133,23 @@ export default function YutPage() {
   const addBot = async () => { try { setSs(await api(`/api/v1/yut/add-bot?roomCode=${roomCode}&clientId=${id.current}&level=${botLevel}`, { method: 'POST', body: '{}' })); } catch (e: any) { alert(e?.message); } };
   const startMatch = async () => { try { setSs(await api(`/api/v1/yut/start?roomCode=${roomCode}&clientId=${id.current}`, { method: 'POST', body: '{}' })); setScreen('game'); } catch (e: any) { alert(e?.message); } };
   const throwYut = async (pw: number) => { try { setSs(await api(`/api/v1/yut/throw?roomCode=${roomCode}&clientId=${id.current}&power=${Math.round(pw)}`, { method: 'POST', body: '{}' })); } catch (e: any) { alert(e?.message); } };
+  const tickCharge = () => {
+    if (!chargingRef.current) return;
+    const p = Math.min(120, ((performance.now() - startRef.current) / CHARGE_MS) * 120);
+    setPower(p);
+    rafRef.current = requestAnimationFrame(tickCharge);
+  };
   const startCharge = () => {
     if (!ss?.myTurn || ss.throwsOwed <= 0 || chargingRef.current) return;
-    chargingRef.current = true; setCharging(true); startRef.current = performance.now();
+    chargingRef.current = true; setCharging(true); startRef.current = performance.now(); setPower(0);
+    rafRef.current = requestAnimationFrame(tickCharge);
   };
   const releaseCharge = () => {
     if (!chargingRef.current) return;
     chargingRef.current = false; setCharging(false);
+    if (rafRef.current) cancelAnimationFrame(rafRef.current);
     const p = Math.min(120, ((performance.now() - startRef.current) / CHARGE_MS) * 120);
+    setPower(0);
     throwYut(p);
   };
   const doMove = async (value: number, tokenIndex: number, dest: string) => {
@@ -328,19 +339,43 @@ export default function YutPage() {
 
                 {ss.myTurn && ss.throwsOwed > 0 ? (
                   <div className="select-none">
+                    {/* 파워 게이지: 초록 구간(굿존)에서 떼면 성공률↑, 결과 자체는 랜덤 */}
+                    <div className="relative h-6 rounded-full bg-slate-200 dark:bg-slate-700 overflow-hidden mb-2">
+                      <div className="absolute inset-y-0 bg-emerald-500/35 border-x border-emerald-500/60" style={{ left: `${(28 / 120) * 100}%`, width: `${((98 - 28) / 120) * 100}%` }} />
+                      <div className="absolute inset-y-0 left-0 rounded-r bg-blue-500/70" style={{ width: `${(power / 120) * 100}%` }} />
+                      <div className="absolute inset-y-0 w-[3px] bg-slate-900 dark:bg-white" style={{ left: `calc(${(power / 120) * 100}% - 1.5px)`, opacity: power > 0 ? 1 : 0 }} />
+                      <span className="absolute inset-0 flex items-center justify-center text-[10px] font-bold text-slate-600 dark:text-slate-200 pointer-events-none">초록 구간에서 떼기</span>
+                    </div>
                     <button
                       onPointerDown={(e) => { e.preventDefault(); startCharge(); }}
                       onPointerUp={releaseCharge} onPointerLeave={releaseCharge} onPointerCancel={releaseCharge}
                       className={`w-full py-4 rounded-lg text-white font-extrabold text-lg active:scale-[.99] touch-none transition ${charging ? 'animate-pulse' : ''}`}
                       style={{ background: charging ? 'linear-gradient(180deg,#8f2b24,#5f1b16)' : 'linear-gradient(180deg,#b6382f,#8f2b24)' }}>
-                      🎋 {charging ? '던지는 중… 손을 떼세요!' : '꾹 눌렀다 떼서 던지기'} {ss.throwsOwed > 1 ? `(${ss.throwsOwed})` : ''}
+                      🎋 {charging ? '지금 떼세요!' : '꾹 눌렀다 떼서 던지기'} {ss.throwsOwed > 1 ? `(${ss.throwsOwed})` : ''}
                     </button>
-                    <p className="text-[11px] text-center text-slate-500 dark:text-slate-400 mt-1">힘 조절이 어긋나면 <b className="text-red-500">낙!</b>(헛던짐) · 결과는 운</p>
+                    <p className="text-[11px] text-center text-slate-500 dark:text-slate-400 mt-1">초록에서 벗어나면 <b className="text-red-500">낙!</b> 확률↑ · 도개걸윷모는 랜덤</p>
                   </div>
                 ) : ss.myTurn && ss.moves.length > 0 ? (
-                  <p className="text-xs text-center text-slate-500 dark:text-slate-400">
-                    {selToken != null ? '도착 지점을 선택하세요' : '움직일 말(흰 테두리)을 누르세요'}
-                  </p>
+                  <>
+                    <p className="text-xs text-center text-slate-500 dark:text-slate-400">
+                      {selToken != null ? '도착 방향을 고르세요' : '움직일 말(흰 테두리)을 누르세요'}
+                    </p>
+                    {/* 갈림길: 선택한 말의 도착 후보를 큰 버튼으로(확실한 선택) */}
+                    {(() => {
+                      const m = movesForVal.find((mm) => mm.tokenIndex === selToken);
+                      if (!m || m.dests.length < 2) return null;
+                      return (
+                        <div className="flex gap-2 mt-2">
+                          {m.dests.map((d, i) => (
+                            <button key={d.cell} onClick={() => doMove(m.value, selToken!, d.cell)}
+                              className="flex-1 py-2.5 rounded-lg border-2 border-blue-500 bg-blue-500/10 text-sm font-bold hover:bg-blue-500/20">
+                              {i === 0 ? '⤳ 지름길' : '→ 직진'}{d.caught ? ' · 잡기!' : ''}{d.finish ? ' · 도착!' : ''}
+                            </button>
+                          ))}
+                        </div>
+                      );
+                    })()}
+                  </>
                 ) : null}
 
                 {ss.lastAction && <p className={`text-xs text-center mt-2 font-bold ${ss.lastAction.includes('잡') || ss.lastAction.includes('도착') ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-500 dark:text-slate-400'}`}>{ss.lastAction}</p>}

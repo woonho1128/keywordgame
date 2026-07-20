@@ -171,12 +171,11 @@ public class YutGame implements RoomGame {
         doThrow(players.get(turnSeat), power);
     }
 
-    /** 세기(0~120)에 따른 낙 확률. 적당하면 낮고 극단이면 높지만 결정론은 아님(게이지는 비노출). */
+    /** 세기(0~120)에 따른 낙 확률. 초록 구간(28~98)은 매우 낮고 극단만 높음. */
     private static double nakChance(int power) {
-        if (power < 15 || power > 110) return 0.65;
-        if (power < 25 || power > 100) return 0.42;
-        if (power < 40 || power > 85) return 0.22;
-        return 0.08; // 40~85 편안한 구간
+        if (power < 18 || power > 107) return 0.45;
+        if (power < 28 || power > 98) return 0.18;
+        return 0.05; // 28~98 편안한 구간(넓게)
     }
 
     private void doThrow(P p, int power) {
