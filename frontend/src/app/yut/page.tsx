@@ -91,13 +91,16 @@ export default function YutPage() {
     return () => clearInterval(t);
   }, [ss?.deadline]);
 
-  // 내 차례 값 자동 선택 + 말 선택 초기화
+  // 이동 후보의 안정적 시그니처(폴링으로 배열 참조만 바뀌어도 재실행되지 않도록)
+  const movesSig = ss?.myTurn ? ss.moves.map((m) => `${m.value}:${m.tokenIndex}`).join('|') : '';
+  // 내 차례 값 자동 선택 + 유효하지 않은 선택만 정리(폴링 시 선택 유지)
   useEffect(() => {
     if (!ss?.myTurn) { setSelValue(null); setSelToken(null); return; }
     const vals = [...new Set(ss.moves.map((m) => m.value))];
     setSelValue((cur) => (cur != null && vals.includes(cur) ? cur : vals[0] ?? null));
-    setSelToken(null);
-  }, [ss?.moves, ss?.myTurn, ss?.turnSeat, ss?.throwsOwed]);
+    setSelToken((cur) => (cur != null && ss.moves.some((m) => m.tokenIndex === cur) ? cur : null));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [movesSig, ss?.myTurn]);
 
   const saveNick = (n: string) => { try { localStorage.setItem('arcade_nick', n); } catch {} };
   const create = async () => {
@@ -264,6 +267,7 @@ export default function YutPage() {
                 const hi = !!destHighlights[c];
                 return (
                   <g key={c} onClick={hi ? () => { const h = destHighlights[c]; doMove(h.value, h.token, h.dest.cell); } : undefined} style={{ cursor: hi ? 'pointer' : 'default' }}>
+                    {hi && <circle cx={x} cy={y} r={8} fill="transparent" />}
                     {hi && <circle cx={x} cy={y} r={big ? 7.4 : 6} fill="none" stroke="#facc15" strokeWidth={1.6}><animate attributeName="opacity" values="1;.35;1" dur="1s" repeatCount="indefinite" /></circle>}
                     <circle cx={x} cy={y} r={big ? 4.6 : 2.7} fill={big ? '#4a3f2d' : '#3c332a'} stroke={big ? '#c9a24b' : '#a8987a'} strokeWidth={big ? 1.6 : 1.2} />
                     {hi && destHighlights[c].dest.caught && <text x={x} y={y - 6.5} textAnchor="middle" fill="#fca5a5" fontSize={3.6} fontWeight={800}>잡기!</text>}
