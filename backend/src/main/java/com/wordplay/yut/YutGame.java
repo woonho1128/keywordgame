@@ -171,19 +171,24 @@ public class YutGame implements RoomGame {
         doThrow(players.get(turnSeat), power);
     }
 
-    // 파워 유효 구간(이 밖이면 낙). 안이면 도개걸윷모는 실제 윷처럼 랜덤.
-    static final int POWER_MIN = 25, POWER_MAX = 100;
+    /** 세기(0~120)에 따른 낙 확률. 적당하면 낮고 극단이면 높지만 결정론은 아님(게이지는 비노출). */
+    private static double nakChance(int power) {
+        if (power < 15 || power > 110) return 0.65;
+        if (power < 25 || power > 100) return 0.42;
+        if (power < 40 || power > 85) return 0.22;
+        return 0.08; // 40~85 편안한 구간
+    }
 
     private void doThrow(P p, int power) {
         power = Math.max(0, Math.min(120, power));
         botAt = now() + BOT_DELAY_MS; turnEndsAt = now() + TURN_MS;
-        if (power < POWER_MIN || power > POWER_MAX) { // 낙: 너무 약하거나 세게 던짐
+        if (ThreadLocalRandom.current().nextDouble() < nakChance(power)) { // 낙(확률적)
             throwsOwed--;
-            lastAction = p.nick + " ▸ 낙! (" + (power < POWER_MIN ? "너무 약하게" : "너무 세게") + " 던짐)";
+            lastAction = p.nick + " ▸ 낙! (헛던짐)";
             maybeAutoEnd(p);
             return;
         }
-        // 유효 구간 → 윷짝 4개 랜덤(세기와 무관하게 결과는 운)
+        // 정상 던지기 → 윷짝 4개 랜덤(세기와 무관하게 결과는 운)
         boolean[] flat = new boolean[4];
         int flats = 0;
         for (int i = 0; i < 4; i++) { flat[i] = ThreadLocalRandom.current().nextBoolean(); if (flat[i]) flats++; }
@@ -200,12 +205,12 @@ public class YutGame implements RoomGame {
         maybeAutoEnd(p);
     }
 
-    /** 봇 파워: 난이도가 높을수록 유효 구간(25~100)을 잘 맞춰 낙이 적음(결과는 여전히 랜덤). */
+    /** 봇 파워: 난이도가 높을수록 편안한 구간을 노려 낙이 적음(결과는 여전히 랜덤). */
     private int botPower(P p) {
         return switch (p.botLevel == null ? "NORMAL" : p.botLevel) {
-            case "HARD" -> 32 + ThreadLocalRandom.current().nextInt(60);   // 32~91 (거의 유효)
-            case "EASY" -> 8 + ThreadLocalRandom.current().nextInt(112);   // 8~119 (가끔 낙)
-            default -> 20 + ThreadLocalRandom.current().nextInt(90);       // 20~109 (가끔 낙)
+            case "HARD" -> 45 + ThreadLocalRandom.current().nextInt(40);   // 45~84 (낙 적음)
+            case "EASY" -> 5 + ThreadLocalRandom.current().nextInt(115);   // 5~119 (낙 잦음)
+            default -> 25 + ThreadLocalRandom.current().nextInt(75);       // 25~99
         };
     }
 

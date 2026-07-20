@@ -54,14 +54,12 @@ export default function YutPage() {
   const [remaining, setRemaining] = useState(0);
   const [selValue, setSelValue] = useState<number | null>(null);
   const [selToken, setSelToken] = useState<number | null>(null); // 도착 선택 대기 중인 말
-  const [power, setPower] = useState(0);
+  const [charging, setCharging] = useState(false);
   const roomRef = useRef<string | null>(null); roomRef.current = roomCode;
   const offsetRef = useRef(0);
   const chargingRef = useRef(false);
-  const powerRef = useRef(0);
-  const rafRef = useRef<number | null>(null);
   const startRef = useRef(0);
-  const CHARGE_MS = 1350; // 이 시간에 파워 120(=낙 한계)
+  const CHARGE_MS = 1350; // 이 시간에 파워 120(측정용, 화면엔 비노출)
 
   useEffect(() => { id.current = cid(); try { setNick(localStorage.getItem('arcade_nick') || ''); } catch {} }, []);
 
@@ -130,23 +128,14 @@ export default function YutPage() {
   const addBot = async () => { try { setSs(await api(`/api/v1/yut/add-bot?roomCode=${roomCode}&clientId=${id.current}&level=${botLevel}`, { method: 'POST', body: '{}' })); } catch (e: any) { alert(e?.message); } };
   const startMatch = async () => { try { setSs(await api(`/api/v1/yut/start?roomCode=${roomCode}&clientId=${id.current}`, { method: 'POST', body: '{}' })); setScreen('game'); } catch (e: any) { alert(e?.message); } };
   const throwYut = async (pw: number) => { try { setSs(await api(`/api/v1/yut/throw?roomCode=${roomCode}&clientId=${id.current}&power=${Math.round(pw)}`, { method: 'POST', body: '{}' })); } catch (e: any) { alert(e?.message); } };
-  const tickCharge = () => {
-    if (!chargingRef.current) return;
-    const t = performance.now() - startRef.current;
-    const p = Math.min(120, (t / CHARGE_MS) * 120);
-    powerRef.current = p; setPower(p);
-    rafRef.current = requestAnimationFrame(tickCharge);
-  };
   const startCharge = () => {
     if (!ss?.myTurn || ss.throwsOwed <= 0 || chargingRef.current) return;
-    chargingRef.current = true; startRef.current = performance.now(); powerRef.current = 0;
-    rafRef.current = requestAnimationFrame(tickCharge);
+    chargingRef.current = true; setCharging(true); startRef.current = performance.now();
   };
   const releaseCharge = () => {
     if (!chargingRef.current) return;
-    chargingRef.current = false;
-    if (rafRef.current) cancelAnimationFrame(rafRef.current);
-    const p = powerRef.current; setPower(0); powerRef.current = 0;
+    chargingRef.current = false; setCharging(false);
+    const p = Math.min(120, ((performance.now() - startRef.current) / CHARGE_MS) * 120);
     throwYut(p);
   };
   const doMove = async (value: number, tokenIndex: number, dest: string) => {
@@ -335,22 +324,14 @@ export default function YutPage() {
 
                 {ss.myTurn && ss.throwsOwed > 0 ? (
                   <div className="select-none">
-                    {/* 파워 게이지: 굿존 안에 떼면 정상(도개걸윷모 랜덤), 밖이면 낙 */}
-                    <div className="relative h-7 rounded-full overflow-hidden border border-slate-300 dark:border-slate-600 flex">
-                      {[['약해서 낙', '#7f1d1d', 20.83], ['던지기 좋음', '#3f9a70', 62.5], ['세서 낙', '#7f1d1d', 16.67]].map(([lb, col, w], i) => (
-                        <div key={i} style={{ width: `${w}%`, background: col as string }} className="flex items-center justify-center text-[9px] font-bold text-white/90 whitespace-nowrap overflow-hidden">{lb}</div>
-                      ))}
-                      <div className="absolute inset-y-0 right-0 bg-slate-900/45" style={{ left: `${(power / 120) * 100}%` }} />
-                      <div className="absolute inset-y-0 w-[3px] bg-white shadow" style={{ left: `calc(${(power / 120) * 100}% - 1.5px)`, opacity: power > 0 ? 1 : 0 }} />
-                    </div>
                     <button
                       onPointerDown={(e) => { e.preventDefault(); startCharge(); }}
                       onPointerUp={releaseCharge} onPointerLeave={releaseCharge} onPointerCancel={releaseCharge}
-                      className="w-full mt-2 py-3 rounded-lg text-white font-extrabold active:scale-[.99] touch-none"
-                      style={{ background: 'linear-gradient(180deg,#b6382f,#8f2b24)' }}>
-                      🎋 {chargingRef.current ? '지금 떼세요!' : '꾹 눌러 던지기'} {ss.throwsOwed > 1 ? `(${ss.throwsOwed})` : ''}
+                      className={`w-full py-4 rounded-lg text-white font-extrabold text-lg active:scale-[.99] touch-none transition ${charging ? 'animate-pulse' : ''}`}
+                      style={{ background: charging ? 'linear-gradient(180deg,#8f2b24,#5f1b16)' : 'linear-gradient(180deg,#b6382f,#8f2b24)' }}>
+                      🎋 {charging ? '던지는 중… 손을 떼세요!' : '꾹 눌렀다 떼서 던지기'} {ss.throwsOwed > 1 ? `(${ss.throwsOwed})` : ''}
                     </button>
-                    <p className="text-[11px] text-center text-slate-500 dark:text-slate-400 mt-1"><b className="text-emerald-600 dark:text-emerald-400">굿존</b>에서 떼면 정상 던지기(결과는 랜덤) · 벗어나면 <b className="text-red-500">낙!</b></p>
+                    <p className="text-[11px] text-center text-slate-500 dark:text-slate-400 mt-1">힘 조절이 어긋나면 <b className="text-red-500">낙!</b>(헛던짐) · 결과는 운</p>
                   </div>
                 ) : ss.myTurn && ss.moves.length > 0 ? (
                   <p className="text-xs text-center text-slate-500 dark:text-slate-400">
