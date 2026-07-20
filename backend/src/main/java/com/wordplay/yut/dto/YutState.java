@@ -26,6 +26,7 @@ public record YutState(
         String myAbilityName,
         String myAbilityDesc,
         boolean myAbilityUsed,
+        List<String> log,           // 최근 이력(오래된→최신)
         long deadline,
         long serverNow
 ) {
@@ -42,6 +43,6 @@ public record YutState(
 
     public static YutState notFound(long now) {
         return new YutState("NONE", false, true, false, false, List.of(), -1, null, false, -1, -1,
-                0, List.of(), List.of(), null, -1, null, false, null, null, null, false, 0, now);
+                0, List.of(), List.of(), null, -1, null, false, null, null, null, false, List.of(), 0, now);
     }
 }

@@ -130,7 +130,10 @@ public class YutGame implements RoomGame {
     private final List<Integer> pending = new ArrayList<>();   // 던진 값(미사용)
     private int winnerTeam = -1;
     private String winnerLabel = null, lastAction = null;
+    private final List<String> log = new ArrayList<>(); // 최근 이력
     private long turnEndsAt = 0, botAt = 0, lastActive = System.currentTimeMillis();
+
+    private void note(String s) { lastAction = s; log.add(s); if (log.size() > 40) log.remove(0); }
 
     public YutGame(String hostClientId, String nick, boolean teamMode, boolean backDo, boolean abilities) {
         this.hostClientId = hostClientId;
@@ -206,7 +209,7 @@ public class YutGame implements RoomGame {
         botAt = now() + BOT_DELAY_MS; turnEndsAt = now() + TURN_MS;
         if (ThreadLocalRandom.current().nextDouble() < nakChance(power)) { // 낙(확률적)
             throwsOwed--;
-            lastAction = p.nick + " ▸ 낙! (헛던짐)";
+            note(p.nick + " ▸ 낙! (헛던짐)");
             maybeAutoEnd(p);
             return;
         }
@@ -223,7 +226,7 @@ public class YutGame implements RoomGame {
         throwsOwed--;
         if (extra) throwsOwed++;
         pending.add(value);
-        lastAction = p.nick + " ▸ " + nameOf(value) + (extra ? " (한 번 더!)" : "");
+        note(p.nick + " ▸ " + nameOf(value) + (extra ? " (한 번 더!)" : ""));
         maybeAutoEnd(p);
     }
 
@@ -240,7 +243,7 @@ public class YutGame implements RoomGame {
     private void maybeAutoEnd(P p) {
         if (throwsOwed > 0) return;
         if (pending.isEmpty()) { endTurn(); return; }
-        if (legalMoves(p).isEmpty()) { pending.clear(); lastAction = p.nick + " ▸ 둘 수 없어 차례 넘김"; endTurn(); }
+        if (legalMoves(p).isEmpty()) { pending.clear(); note(p.nick + " ▸ 둘 수 없어 차례 넘김"); endTurn(); }
     }
 
     // ── 이동 ──
@@ -304,7 +307,7 @@ public class YutGame implements RoomGame {
             }
         }
         p.abilityUsed = true;
-        lastAction = p.nick + " ▸ [" + abilityName(p.ability) + "] 사용!";
+        note(p.nick + " ▸ [" + abilityName(p.ability) + "] 사용!");
         if (checkWin(p.team)) endGame(p.team);
     }
 
@@ -341,7 +344,7 @@ public class YutGame implements RoomGame {
                 }
             }
             p.abilityUsed = true;
-            lastAction = p.nick + " ▸ [" + abilityName(p.ability) + "] 사용!";
+            note(p.nick + " ▸ [" + abilityName(p.ability) + "] 사용!");
         } catch (Exception ignore) { }
     }
     private int firstNotDone(P p) { for (int i = 0; i < TOKENS; i++) if (!DONE.equals(p.tok[i])) return i; return -1; }
@@ -367,8 +370,8 @@ public class YutGame implements RoomGame {
         boolean caught = false;
         if (!finish) caught = resolveCatch(p.team, dest.cell());
         int cnt = group.size();
-        lastAction = p.nick + " ▸ " + nameOf(value) + (cnt > 1 ? " (" + cnt + "말 업기)" : "")
-                + (finish ? " · 도착!" : caught ? " · 잡았다! 한 번 더" : "");
+        note(p.nick + " ▸ " + nameOf(value) + (cnt > 1 ? " (" + cnt + "말 업기)" : "")
+                + (finish ? " · 도착!" : caught ? " · 잡았다! 한 번 더" : ""));
         if (caught) throwsOwed++;
         if (checkWin(p.team)) { endGame(p.team); return; }
         maybeAutoEnd(p);
@@ -407,7 +410,7 @@ public class YutGame implements RoomGame {
         List<String> names = new ArrayList<>();
         for (P q : players) if (!q.left && q.team == team) names.add(q.nick);
         winnerLabel = teamMode ? ("팀 " + String.join("·", names)) : (names.isEmpty() ? "" : names.get(0));
-        lastAction = winnerLabel + " 승리!";
+        note(winnerLabel + " 승리!");
     }
 
     private void endTurn() {
@@ -545,7 +548,7 @@ public class YutGame implements RoomGame {
                 lastAction, winnerTeam, winnerLabel,
                 abilities, mya == null ? null : mya.name(), mya == null ? null : abilityName(mya),
                 mya == null ? null : abilityDesc(mya), me != null && me.abilityUsed,
-                turnEndsAt, now());
+                new ArrayList<>(log), turnEndsAt, now());
     }
 
     // ── RoomGame ──

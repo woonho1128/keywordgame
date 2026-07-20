@@ -15,6 +15,7 @@ type State = {
   throwsOwed: number; pending: ThrowResult[]; moves: Move[];
   lastAction: string | null; winnerTeam: number; winnerLabel: string | null;
   abilitiesOn: boolean; myAbility: string | null; myAbilityName: string | null; myAbilityDesc: string | null; myAbilityUsed: boolean;
+  log: string[];
   deadline: number; serverNow: number;
 };
 type Room = { code: string; status: string; playerCount: number; host: string };
@@ -489,6 +490,17 @@ export default function YutPage() {
                 );
               })}
             </div>
+
+            {/* 이력 */}
+            <details className="rounded-xl border border-slate-200 dark:border-slate-700 p-2" open>
+              <summary className="text-xs font-bold text-slate-600 dark:text-slate-300 cursor-pointer select-none">📜 이력</summary>
+              <div className="mt-1 max-h-40 overflow-y-auto space-y-0.5">
+                {(ss.log ?? []).length === 0 ? <p className="text-[11px] text-slate-400">아직 없음</p> :
+                  [...ss.log].reverse().map((l, i) => (
+                    <p key={i} className={`text-[11px] ${i === 0 ? 'font-bold text-slate-700 dark:text-slate-200' : 'text-slate-500 dark:text-slate-400'}`}>{l}</p>
+                  ))}
+              </div>
+            </details>
           </div>
         </div>
       )}
