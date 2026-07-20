@@ -133,7 +133,8 @@ public class YutGame implements RoomGame {
     private final List<String> log = new ArrayList<>(); // 최근 이력
     private long turnEndsAt = 0, botAt = 0, lastActive = System.currentTimeMillis();
 
-    private void note(String s) { lastAction = s; log.add(s); if (log.size() > 40) log.remove(0); }
+    private void note(String s) { lastAction = s; log.add(s); if (log.size() > 40) log.remove(0); } // 이력 남김
+    private void flash(String s) { lastAction = s; } // 표시만(이력 X)
 
     public YutGame(String hostClientId, String nick, boolean teamMode, boolean backDo, boolean abilities) {
         this.hostClientId = hostClientId;
@@ -209,7 +210,7 @@ public class YutGame implements RoomGame {
         botAt = now() + BOT_DELAY_MS; turnEndsAt = now() + TURN_MS;
         if (ThreadLocalRandom.current().nextDouble() < nakChance(power)) { // 낙(확률적)
             throwsOwed--;
-            note(p.nick + " ▸ 낙! (헛던짐)");
+            flash(p.nick + " ▸ 낙! (헛던짐)");
             maybeAutoEnd(p);
             return;
         }
@@ -226,7 +227,7 @@ public class YutGame implements RoomGame {
         throwsOwed--;
         if (extra) throwsOwed++;
         pending.add(value);
-        note(p.nick + " ▸ " + nameOf(value) + (extra ? " (한 번 더!)" : ""));
+        flash(p.nick + " ▸ " + nameOf(value) + (extra ? " (한 번 더!)" : ""));
         maybeAutoEnd(p);
     }
 
@@ -243,7 +244,7 @@ public class YutGame implements RoomGame {
     private void maybeAutoEnd(P p) {
         if (throwsOwed > 0) return;
         if (pending.isEmpty()) { endTurn(); return; }
-        if (legalMoves(p).isEmpty()) { pending.clear(); note(p.nick + " ▸ 둘 수 없어 차례 넘김"); endTurn(); }
+        if (legalMoves(p).isEmpty()) { pending.clear(); flash(p.nick + " ▸ 둘 수 없어 차례 넘김"); endTurn(); }
     }
 
     // ── 이동 ──
@@ -370,8 +371,10 @@ public class YutGame implements RoomGame {
         boolean caught = false;
         if (!finish) caught = resolveCatch(p.team, dest.cell());
         int cnt = group.size();
-        note(p.nick + " ▸ " + nameOf(value) + (cnt > 1 ? " (" + cnt + "말 업기)" : "")
-                + (finish ? " · 도착!" : caught ? " · 잡았다! 한 번 더" : ""));
+        boolean fromWait = WAIT.equals(from);
+        note(p.nick + " ▸ " + nameOf(value) + " · " + (fromWait ? "새 말 출발" : "기존 말 이동")
+                + (cnt > 1 ? " (" + cnt + "업기)" : "")
+                + (finish ? " · 도착!" : caught ? " · 잡기! 한 번 더" : ""));
         if (caught) throwsOwed++;
         if (checkWin(p.team)) { endGame(p.team); return; }
         maybeAutoEnd(p);
