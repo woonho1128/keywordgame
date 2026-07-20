@@ -34,7 +34,7 @@ public class YutGame implements RoomGame {
     // ── 이동 그래프 ──
     static final Map<String, String> NXT = new HashMap<>();
     static {
-        NXT.put(WAIT, "o0");
+        NXT.put(WAIT, "o1"); // 진입: 도(1)→o1 (o0=출발 코너, 밟지 않고 시작)
         for (int i = 0; i < 19; i++) NXT.put("o" + i, "o" + (i + 1));
         NXT.put("o19", DONE);
         NXT.put("a1", "a2"); NXT.put("a2", "ct"); NXT.put("a3", "a4"); NXT.put("a4", "o15");
@@ -464,6 +464,11 @@ public class YutGame implements RoomGame {
     private static BusinessException bad(String m) { return new BusinessException(ErrorCode.INVALID_INPUT, m); }
 
     // 테스트 헬퍼
+    static List<String> forwardCellsForTest(String cell, int steps) {
+        List<String> out = new ArrayList<>();
+        for (Dst d : forwardDests(cell, "", steps)) out.add(d.cell);
+        return out;
+    }
     void speedUpBotsForTest() { botAt = 0; }
     List<Integer> pendingForTest() { return pending; }
     int throwsOwedForTest() { return throwsOwed; }

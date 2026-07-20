@@ -9,6 +9,18 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 class YutGameTest {
 
     @Test
+    void 진입_이동칸수가_정확하다_한칸밀림_없음() {
+        // 대기 말이 도(1)→o1, 개(2)→o2, 걸(3)→o3, 윷(4)→o4, 모(5)→o5
+        assertThat(YutGame.forwardCellsForTest("wait", 1)).contains("o1");
+        assertThat(YutGame.forwardCellsForTest("wait", 2)).contains("o2");
+        assertThat(YutGame.forwardCellsForTest("wait", 3)).contains("o3");
+        assertThat(YutGame.forwardCellsForTest("wait", 5)).contains("o5");
+        // 판 위 말도 정확히 N칸
+        assertThat(YutGame.forwardCellsForTest("o3", 2)).contains("o5");
+        assertThat(YutGame.forwardCellsForTest("o4", 1)).contains("o5");
+    }
+
+    @Test
     void 최소인원_미달_시작불가() {
         YutGame g = new YutGame("host", "방장", false, true);
         assertThatThrownBy(() -> g.start("host")).hasMessageContaining("최소 2명");
