@@ -31,7 +31,7 @@ export default function MarblePage() {
   const marblesRef = useRef<Marble[]>([]);
   const pegsRef = useRef<{ x: number; y: number; r: number }[]>([]);
   const bumpersRef = useRef<{ x: number; y: number; r: number; color: string }[]>([]);
-  const barsRef = useRef<{ body: Matter.Body; spin: number }[]>([]);
+  const barsRef = useRef<{ body: Matter.Body; spin: number; half: number; color: string }[]>([]);
   const finishRef = useRef<{ name: string; color: number }[]>([]);
   const startAtRef = useRef(0);
   const camRef = useRef(0);
@@ -60,7 +60,7 @@ export default function MarblePage() {
     const bodies: Matter.Body[] = [];
     const pegs: { x: number; y: number; r: number }[] = [];
     const bumpers: { x: number; y: number; r: number; color: string }[] = [];
-    const bars: { body: Matter.Body; spin: number }[] = [];
+    const bars: { body: Matter.Body; spin: number; half: number; color: string }[] = [];
     const rnd = (a: number, b: number) => a + Math.random() * (b - a);
     const chance = (p: number) => Math.random() < p;
     const pick = <T,>(arr: T[]): T => arr[Math.floor(Math.random() * arr.length)];
@@ -73,7 +73,8 @@ export default function MarblePage() {
     const peg = (x: number, y: number, r = 8) => { pegs.push({ x, y, r }); bodies.push(Bodies.circle(x, y, r, { isStatic: true, restitution: 0.75 })); };
     const bump = (x: number, y: number, r: number, color: string) => { bodies.push(Bodies.circle(x, y, r, { isStatic: true, restitution: 1.3 })); bumpers.push({ x, y, r, color }); };
     const ramp = (x: number, y: number, len: number, ang: number, rest = 0.2) => bodies.push(Bodies.rectangle(x, y, len, 20, { isStatic: true, angle: ang, restitution: rest, friction: 0.06, chamfer: { radius: 10 } }));
-    const spinner = (x: number, y: number, len: number) => { const b = Bodies.rectangle(x, y, len, 14, { isStatic: true, restitution: 0.7, chamfer: { radius: 7 } }); bodies.push(b); bars.push({ body: b, spin: (chance(0.5) ? 1 : -1) * rnd(0.02, 0.045) }); };
+    const NEON = ['#f9a8d4', '#a7f3d0', '#93c5fd', '#fca5a5', '#c4b5fd', '#fde68a'];
+    const spinner = (x: number, y: number, len: number) => { const b = Bodies.rectangle(x, y, len, 16, { isStatic: true, restitution: 0.6, chamfer: { radius: 8 } }); bodies.push(b); bars.push({ body: b, spin: (chance(0.5) ? 1 : -1) * rnd(0.028, 0.05), half: len / 2, color: pick(NEON) }); };
 
     // ── 매 판 랜덤 코스: 구간마다 다른 장애물 타입을 뽑아 다양하게 ──
     const END = FINISH_Y - 430;
@@ -97,10 +98,17 @@ export default function MarblePage() {
           row++;
         }
       } else if (type === 'spinner') {
-        // 중앙 회전 바람개비(실제로 튕겨냄) + 좌우 못
-        spinner(VW * rnd(0.4, 0.6), y + h * 0.42, VW * rnd(0.34, 0.46));
-        for (const px of [VW * 0.16, VW * 0.84]) { peg(px, y + 40, 9); peg(px, y + h * 0.72, 9); }
-        if (chance(0.6)) bump(VW * rnd(0.3, 0.7), y + h * 0.84, rnd(16, 22), pick(PAL));
+        // 회전 바람개비 — 마블을 실제로 퍼올려 튕김
+        if (chance(0.5)) {
+          // 큰 중앙 바 하나
+          spinner(VW * rnd(0.42, 0.58), y + h * 0.5, VW * rnd(0.42, 0.56));
+        } else {
+          // 좌우 엇갈린 바 두 개(레퍼런스 느낌)
+          spinner(VW * rnd(0.24, 0.34), y + h * rnd(0.32, 0.42), VW * rnd(0.34, 0.44));
+          spinner(VW * rnd(0.66, 0.76), y + h * rnd(0.6, 0.72), VW * rnd(0.34, 0.44));
+        }
+        for (const px of [VW * 0.12, VW * 0.88]) peg(px, y + h * 0.85, 9);
+        if (chance(0.5)) bump(VW * rnd(0.35, 0.65), y + h * 0.9, rnd(16, 20), pick(PAL));
       } else if (type === 'bumpers') {
         // 흩뿌린 바운시 범퍼 밭
         const n = Math.round(rnd(4, 7));
@@ -177,6 +185,20 @@ export default function MarblePage() {
     barsRef.current.forEach((b) => Matter.Body.rotate(b.body, b.spin));
     Matter.Engine.update(engine, 1000 / 60);
 
+    // 회전 바에 닿은 마블을 회전 방향으로 실어 올림(핀볼 패들처럼 퍼올림)
+    for (const b of barsRef.current) {
+      const bx = b.body.position.x, by = b.body.position.y;
+      for (const m of marblesRef.current) {
+        if (m.finished) continue;
+        const dx = m.body.position.x - bx, dy = m.body.position.y - by;
+        const d = Math.hypot(dx, dy);
+        if (d < 8 || d > b.half + 16) continue;
+        // 접선 속도 = 회전 방향으로 표면이 움직이는 방향(위로 올라오는 쪽은 위로)
+        const vx = -dy * b.spin * 2.6, vy = dx * b.spin * 2.6;
+        Matter.Body.setVelocity(m.body, { x: m.body.velocity.x * 0.35 + vx, y: m.body.velocity.y * 0.35 + vy });
+      }
+    }
+
     const now = performance.now();
     const timeout = now - startAtRef.current > 90000;
     let live = 0, leadY = 0;
@@ -232,14 +254,16 @@ export default function MarblePage() {
     // 못
     ctx.fillStyle = dark ? '#64748b' : '#94a3b8';
     pegsRef.current.forEach((p) => { if (inView(p.y)) { ctx.beginPath(); ctx.arc(p.x, p.y, p.r, 0, 7); ctx.fill(); } });
-    // 회전 바람개비(스피너) — 눈에 띄게
-    ctx.fillStyle = dark ? '#d97706' : '#f59e0b';
+    // 회전 바람개비(스피너) — 네온 글로우로 눈에 띄게
     barsRef.current.forEach((b) => {
-      if (!inView(b.body.position.y, 90)) return;
+      if (!inView(b.body.position.y, 120)) return;
       const v = b.body.vertices; if (v.length < 3) return;
+      ctx.save();
+      ctx.shadowColor = b.color; ctx.shadowBlur = 16;
+      ctx.fillStyle = b.color;
       ctx.beginPath(); ctx.moveTo(v[0].x, v[0].y); for (let i = 1; i < v.length; i++) ctx.lineTo(v[i].x, v[i].y); ctx.closePath(); ctx.fill();
-      ctx.beginPath(); ctx.arc(b.body.position.x, b.body.position.y, 5, 0, 7); ctx.fillStyle = dark ? '#78350f' : '#b45309'; ctx.fill();
-      ctx.fillStyle = dark ? '#d97706' : '#f59e0b';
+      ctx.restore();
+      ctx.beginPath(); ctx.arc(b.body.position.x, b.body.position.y, 5, 0, 7); ctx.fillStyle = dark ? '#1e293b' : '#475569'; ctx.fill();
     });
     // 핀볼 범퍼
     bumpersRef.current.forEach((b) => {
