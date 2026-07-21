@@ -42,6 +42,7 @@ const GAMES: Game[] = [
   { href: '/sixnimmt', title: '🐮 젝스님트', desc: '카드를 동시에 내어 6번째가 되면 벌점을 먹는 눈치 카드게임. 벌점 적게 먹기! 봇과 2~10인.', hover: 'hit', solo: true, soloLabel: '🤖 봇과 1인 가능' },
   { href: '/mojo', title: '🎴 모죠', desc: '카드를 내며 비교하고, 모죠타임에 뒷면 카드를 공개하는 눈치·도박 카드게임. 색상별 최고 숫자만 벌점! 봇과 2~8인.', hover: 'hit', solo: true, soloLabel: '🤖 봇과 1인 가능' },
   { href: '/yut', title: '🎋 윷놀이', desc: '윷을 던져 말 4개를 먼저 빼내는 한국 전통 보드게임. 잡기·업기·지름길·백도, 개인전·팀전(2:2). 봇과 2~4인.', hover: 'move', solo: true, soloLabel: '🤖 봇과 1인 가능' },
+  { href: '/marble', title: '🎱 마블 레이스', desc: '이름을 넣으면 귀여운 마블들이 물리 코스를 튕기며 내려가 순위를 정하는 랜덤 뽑기. 누가 살지·순서 정하기 (혼자 플레이).', hover: 'hit', solo: true, soloLabel: '🧩 1인 플레이' },
   { href: '/2048', title: '🔢 2048', desc: '같은 숫자 타일을 밀어 합쳐 2048을 만드는 중독성 퍼즐. 최고 점수 랭킹 (혼자 플레이).', hover: 'hit', solo: true, soloLabel: '🧩 1인 플레이' },
   { href: '/yacht', title: '🎲 야찌', desc: '주사위 5개를 굴려 족보를 채우는 다이스 게임. 친구·봇과 방에서 대결하고 최고 점수 랭킹 도전. 봇과 1인~8인.', hover: 'hit', solo: true, soloLabel: '🤖 봇과 1인 가능' },
   { href: '/gartic', title: '🎨 그림 텔레폰', desc: '문장을 그림으로, 그림을 문장으로 넘기며 엉뚱하게 변해가는 갈틱폰 (3~10인).', hover: 'hit', solo: false },
