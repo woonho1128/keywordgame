@@ -14,6 +14,8 @@ const COLORS = ['#ff8fab', '#8ec5ff', '#ffd97d', '#a0e8af', '#c8a2ff', '#ffb37d'
 
 type Marble = { body: Matter.Body; name: string; color: number; finished: boolean };
 
+const clampCam = (c: number) => Math.max(0, Math.min(TALL - VH, c));
+
 export default function MarblePage() {
   const [namesText, setNamesText] = useState('라미\n우노\n꿀벌\n폴짝');
   const [lastWins, setLastWins] = useState(false);
@@ -34,6 +36,11 @@ export default function MarblePage() {
   const startAtRef = useRef(0);
   const camRef = useRef(0);
   const lastWinsRef = useRef(lastWins); lastWinsRef.current = lastWins;
+  const runningRef = useRef(running); runningRef.current = running;
+  const draggingRef = useRef(false);
+  const dragStartYRef = useRef(0);
+  const camStartRef = useRef(0);
+  const drawRef = useRef<() => void>(() => {});
 
   const stop = useCallback(() => { if (rafRef.current) cancelAnimationFrame(rafRef.current); rafRef.current = null; }, []);
 
@@ -60,7 +67,7 @@ export default function MarblePage() {
     const peg = (x: number, y: number, r = 7) => { pegs.push({ x, y, r }); bodies.push(Bodies.circle(x, y, r, { isStatic: true, restitution: 0.75 })); };
 
     // 좁은 게이트 램프 + 촘촘한 지그재그 못밭(플린코) — 마블이 반드시 못에 부딪혀 섞이게
-    const END = FINISH_Y - 500;
+    const END = FINISH_Y - 430;
     const PS = 48;             // 못 가로 간격(마블 지름 22 대비 촘촘)
     let y = 170, k = 0;
     while (y < END - 120) {
@@ -80,20 +87,20 @@ export default function MarblePage() {
       y += SEG_H; k++;
     }
 
-    // ── 결승 핀볼 존: 깔때기 → 통통 튀는 범퍼 → 플리퍼 V로 결승 게이트에 모아줌(도움) ──
+    // ── 결승 핀볼 존(컴팩트): 깔때기 → 통통 범퍼 → 플리퍼 V ──
     const bumpers: { x: number; y: number; r: number; color: string }[] = [];
     const bump = (x: number, cy2: number, r: number, color: string) => { bodies.push(Bodies.circle(x, cy2, r, { isStatic: true, restitution: 1.35 })); bumpers.push({ x, y: cy2, r, color }); };
-    const zoneTop = FINISH_Y - 470;
-    // 깔때기(양쪽 벽 → 챔버로 모음)
-    bodies.push(Bodies.rectangle(VW * 0.15, zoneTop, VW * 0.44, 18, { isStatic: true, angle: 0.5, restitution: 0.4, chamfer: { radius: 9 } }));
-    bodies.push(Bodies.rectangle(VW * 0.85, zoneTop, VW * 0.44, 18, { isStatic: true, angle: -0.5, restitution: 0.4, chamfer: { radius: 9 } }));
-    // 핀볼 범퍼(통통)
-    bump(VW * 0.5, zoneTop + 100, 30, '#f97316');
-    bump(VW * 0.31, zoneTop + 195, 26, '#ec4899');
-    bump(VW * 0.69, zoneTop + 195, 26, '#8b5cf6');
+    const zoneTop = FINISH_Y - 300;
+    // 깔때기(양쪽 벽 → 챔버로 모음) — 좁고 짧게
+    bodies.push(Bodies.rectangle(VW * 0.19, zoneTop, VW * 0.5, 16, { isStatic: true, angle: 0.6, restitution: 0.4, chamfer: { radius: 8 } }));
+    bodies.push(Bodies.rectangle(VW * 0.81, zoneTop, VW * 0.5, 16, { isStatic: true, angle: -0.6, restitution: 0.4, chamfer: { radius: 8 } }));
+    // 핀볼 범퍼(통통) — 작고 촘촘
+    bump(VW * 0.5, zoneTop + 78, 22, '#f97316');
+    bump(VW * 0.33, zoneTop + 150, 18, '#ec4899');
+    bump(VW * 0.67, zoneTop + 150, 18, '#8b5cf6');
     // 플리퍼 V — 아래로 모아 결승 게이트로 안내(양옆은 막음, 중앙만 통과)
-    bodies.push(Bodies.rectangle(VW * 0.28, FINISH_Y - 95, VW * 0.36, 20, { isStatic: true, angle: 0.5, restitution: 0.85, chamfer: { radius: 10 } }));
-    bodies.push(Bodies.rectangle(VW * 0.72, FINISH_Y - 95, VW * 0.36, 20, { isStatic: true, angle: -0.5, restitution: 0.85, chamfer: { radius: 10 } }));
+    bodies.push(Bodies.rectangle(VW * 0.32, FINISH_Y - 72, VW * 0.28, 18, { isStatic: true, angle: 0.62, restitution: 0.85, chamfer: { radius: 9 } }));
+    bodies.push(Bodies.rectangle(VW * 0.68, FINISH_Y - 72, VW * 0.28, 18, { isStatic: true, angle: -0.62, restitution: 0.85, chamfer: { radius: 9 } }));
 
     Composite.add(world, bodies);
     pegsRef.current = pegs; barsRef.current = bars; bumpersRef.current = bumpers;
@@ -187,7 +194,7 @@ export default function MarblePage() {
 
     // 램프·막대(정적 사각형)
     ctx.fillStyle = dark ? '#334155' : '#cbd5e1';
-    Matter.Composite.allBodies(engineRef.current!.world).forEach((b) => {
+    if (engineRef.current) Matter.Composite.allBodies(engineRef.current.world).forEach((b) => {
       if (!b.isStatic || (b as any).circleRadius) return;
       if (!inView(b.position.y, 120)) return;
       const v = b.vertices; if (v.length < 3) return;
@@ -245,6 +252,35 @@ export default function MarblePage() {
     ctx.fillStyle = '#111827'; ctx.fillText(name, x, y - r - 4);
   };
 
+  drawRef.current = draw;
+
+  // 끝난 뒤 휠 스크롤로 맵 확인(경기 중 비활성)
+  useEffect(() => {
+    const c = canvasRef.current; if (!c) return;
+    const onWheel = (e: WheelEvent) => {
+      if (runningRef.current) return;
+      e.preventDefault();
+      camRef.current = clampCam(camRef.current + e.deltaY);
+      drawRef.current();
+    };
+    c.addEventListener('wheel', onWheel, { passive: false });
+    return () => c.removeEventListener('wheel', onWheel);
+  }, []);
+
+  const onDragStart = (e: React.PointerEvent) => {
+    if (running) return;
+    draggingRef.current = true; dragStartYRef.current = e.clientY; camStartRef.current = camRef.current;
+    (e.currentTarget as Element).setPointerCapture?.(e.pointerId);
+  };
+  const onDragMove = (e: React.PointerEvent) => {
+    if (running || !draggingRef.current) return;
+    const rect = canvasRef.current!.getBoundingClientRect();
+    const k = VH / rect.height; // 화면px → 논리px
+    camRef.current = clampCam(camStartRef.current - (e.clientY - dragStartYRef.current) * k);
+    drawRef.current();
+  };
+  const onDragEnd = () => { draggingRef.current = false; };
+
   useEffect(() => {
     const canvas = canvasRef.current; if (!canvas) return;
     canvas.width = VW * SCALE; canvas.height = VH * SCALE;
@@ -264,7 +300,9 @@ export default function MarblePage() {
 
       <div className="w-full flex flex-col lg:flex-row gap-4 justify-center items-start">
         <div ref={wrapRef} className={`rounded-2xl overflow-hidden border border-slate-200 dark:border-slate-700 shadow mx-auto ${fs ? 'flex items-center justify-center bg-black w-screen h-screen rounded-none border-0' : ''}`}>
-          <canvas ref={canvasRef} className="block" style={{ height: fs ? '100vh' : 'min(84vh, 940px)', aspectRatio: `${VW}/${VH}`, maxWidth: '100%' }} />
+          <canvas ref={canvasRef} onPointerDown={onDragStart} onPointerMove={onDragMove} onPointerUp={onDragEnd} onPointerLeave={onDragEnd}
+            className={`block ${running ? '' : 'cursor-grab active:cursor-grabbing'}`}
+            style={{ height: fs ? '100vh' : 'min(84vh, 940px)', aspectRatio: `${VW}/${VH}`, maxWidth: '100%', touchAction: running ? 'auto' : 'none' }} />
         </div>
 
         <div className="w-full lg:w-80 shrink-0 space-y-3">
@@ -300,6 +338,7 @@ export default function MarblePage() {
             </div>
           )}
           <p className="text-xs text-slate-400">긴 지그재그 코스를 카메라가 따라가며 보여줘요. 오른쪽 미니맵으로 전체 진행 확인. 먼저 결승선에 닿으면 1등!</p>
+          {!running && <p className="text-xs text-indigo-400">🖱️ 경기가 끝나면 화면을 <b>드래그·스크롤</b>해서 맵 전체를 살펴볼 수 있어요.</p>}
         </div>
       </div>
     </main>
