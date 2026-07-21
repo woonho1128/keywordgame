@@ -363,7 +363,7 @@ export default function YutPage() {
                     {onClk && <circle r={7} fill="transparent" />}
                     {ring && <circle r={4.8} fill="none" stroke={ring} strokeWidth={1.1} opacity={0.95} />}
                     <circle r={3.4} fill={PCOL[t.color]} stroke="rgba(0,0,0,.3)" strokeWidth={0.8} />
-                    {showBadge && <><circle cx={2.6} cy={-2.6} r={2.3} fill="rgba(20,14,8,.85)" /><text x={2.6} y={-1.4} textAnchor="middle" fill="#fff" fontSize={3.4} fontWeight={800}>{cellCount[t.cell]}</text></>}
+                    {showBadge && <><rect x={1.2} y={-4.6} width={5.6} height={3.6} rx={1.8} fill="rgba(20,14,8,.9)" /><text x={4} y={-2} textAnchor="middle" fill="#fff" fontSize={3} fontWeight={800}>×{cellCount[t.cell]}</text></>}
                   </g>
                 );
               })}
