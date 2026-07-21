@@ -7,7 +7,7 @@ import Matter from 'matter-js';
 // 뷰포트(화면에 보이는 창) + 월드(전체 긴 트랙)
 const VW = 720, VH = 760;    // 넓게(가로 활용)
 const SCALE = 2;             // 캔버스 백킹 해상도 배율(확대 시 선명)
-const TALL = 6000;           // 전체 코스 높이(길게)
+const TALL = 4600;           // 전체 코스 높이(약간 짧게)
 const FINISH_Y = TALL - 70;
 const GAP = 230, SEG_H = 360, DROP = 160; // 지그재그 램프 간격/경사
 const COLORS = ['#ff8fab', '#8ec5ff', '#ffd97d', '#a0e8af', '#c8a2ff', '#ffb37d', '#7fd8d8', '#ff9ecd', '#b3e05a', '#ff7d7d', '#9db4ff', '#ffc46b'];
@@ -28,6 +28,7 @@ export default function MarblePage() {
   const rafRef = useRef<number | null>(null);
   const marblesRef = useRef<Marble[]>([]);
   const pegsRef = useRef<{ x: number; y: number; r: number }[]>([]);
+  const bumpersRef = useRef<{ x: number; y: number; r: number; color: string }[]>([]);
   const barsRef = useRef<{ body: Matter.Body; spin: number }[]>([]);
   const finishRef = useRef<{ name: string; color: number }[]>([]);
   const startAtRef = useRef(0);
@@ -82,21 +83,23 @@ export default function MarblePage() {
       y += SEG_H; k++;
     }
 
-    // ── 결승 직전 "야무진" 관문: 깔때기 + 중앙 회전 풍차 + 촘촘한 못밭 ──
-    const gy = FINISH_Y - 300;
-    // 깔때기(양쪽에서 중앙 좁은 통로로 모음, 중앙 gap ~180)
-    bodies.push(Bodies.rectangle(VW * 0.2, gy - 150, VW * 0.5, 18, { isStatic: true, angle: 0.42, restitution: 0.3, chamfer: { radius: 9 } }));
-    bodies.push(Bodies.rectangle(VW * 0.8, gy - 150, VW * 0.5, 18, { isStatic: true, angle: -0.42, restitution: 0.3, chamfer: { radius: 9 } }));
-    // 못밭
-    for (let i = 0; i < 16; i++) peg(50 + Math.random() * (VW - 100), gy - 90 + Math.random() * 120);
-    // 중앙 회전 풍차(+자) — 통로를 휘저어 마지막에 순위를 뒤섞음
-    const cx = VW / 2, cyw = gy + 120, arm = VW * 0.42;
-    const pinA = Bodies.rectangle(cx, cyw, arm, 18, { isStatic: true, restitution: 0.7, chamfer: { radius: 9 } });
-    const pinB = Bodies.rectangle(cx, cyw, 18, arm, { isStatic: true, restitution: 0.7, chamfer: { radius: 9 } });
-    bodies.push(pinA, pinB); bars.push({ body: pinA, spin: 0.03 }, { body: pinB, spin: 0.03 });
+    // ── 결승 핀볼 존: 깔때기 → 통통 튀는 범퍼 → 플리퍼 V로 결승 게이트에 모아줌(도움) ──
+    const bumpers: { x: number; y: number; r: number; color: string }[] = [];
+    const bump = (x: number, cy2: number, r: number, color: string) => { bodies.push(Bodies.circle(x, cy2, r, { isStatic: true, restitution: 1.35 })); bumpers.push({ x, y: cy2, r, color }); };
+    const zoneTop = FINISH_Y - 470;
+    // 깔때기(양쪽 벽 → 챔버로 모음)
+    bodies.push(Bodies.rectangle(VW * 0.15, zoneTop, VW * 0.44, 18, { isStatic: true, angle: 0.5, restitution: 0.4, chamfer: { radius: 9 } }));
+    bodies.push(Bodies.rectangle(VW * 0.85, zoneTop, VW * 0.44, 18, { isStatic: true, angle: -0.5, restitution: 0.4, chamfer: { radius: 9 } }));
+    // 핀볼 범퍼(통통)
+    bump(VW * 0.5, zoneTop + 100, 30, '#f97316');
+    bump(VW * 0.31, zoneTop + 195, 26, '#ec4899');
+    bump(VW * 0.69, zoneTop + 195, 26, '#8b5cf6');
+    // 플리퍼 V — 아래로 모아 결승 게이트로 안내(양옆은 막음, 중앙만 통과)
+    bodies.push(Bodies.rectangle(VW * 0.28, FINISH_Y - 95, VW * 0.36, 20, { isStatic: true, angle: 0.5, restitution: 0.85, chamfer: { radius: 10 } }));
+    bodies.push(Bodies.rectangle(VW * 0.72, FINISH_Y - 95, VW * 0.36, 20, { isStatic: true, angle: -0.5, restitution: 0.85, chamfer: { radius: 10 } }));
 
     Composite.add(world, bodies);
-    pegsRef.current = pegs; barsRef.current = bars;
+    pegsRef.current = pegs; barsRef.current = bars; bumpersRef.current = bumpers;
   };
 
   const start = () => {
@@ -196,6 +199,13 @@ export default function MarblePage() {
     // 못
     ctx.fillStyle = dark ? '#64748b' : '#94a3b8';
     pegsRef.current.forEach((p) => { if (inView(p.y)) { ctx.beginPath(); ctx.arc(p.x, p.y, p.r, 0, 7); ctx.fill(); } });
+    // 핀볼 범퍼
+    bumpersRef.current.forEach((b) => {
+      if (!inView(b.y, 60)) return;
+      ctx.beginPath(); ctx.arc(b.x, b.y, b.r, 0, 7); ctx.fillStyle = b.color; ctx.fill();
+      ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(255,255,255,.85)'; ctx.stroke();
+      ctx.beginPath(); ctx.arc(b.x, b.y, b.r * 0.45, 0, 7); ctx.fillStyle = 'rgba(255,255,255,.6)'; ctx.fill();
+    });
 
     // 결승선
     if (inView(FINISH_Y, 40)) {
