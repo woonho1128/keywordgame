@@ -6,6 +6,7 @@ import Matter from 'matter-js';
 
 // 뷰포트(화면에 보이는 창) + 월드(전체 긴 트랙)
 const VW = 460, VH = 720;
+const SCALE = 2;             // 캔버스 백킹 해상도 배율(확대 시 선명)
 const TALL = 6000;           // 전체 코스 높이(길게)
 const FINISH_Y = TALL - 70;
 const GAP = 150, SEG_H = 360, DROP = 150; // 지그재그 램프 간격/경사
@@ -19,7 +20,9 @@ export default function MarblePage() {
   const [running, setRunning] = useState(false);
   const [ranking, setRanking] = useState<{ name: string; color: number }[]>([]);
   const [winner, setWinner] = useState<{ name: string; color: number } | null>(null);
+  const [fs, setFs] = useState(false);
 
+  const wrapRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const engineRef = useRef<Matter.Engine | null>(null);
   const rafRef = useRef<number | null>(null);
@@ -32,6 +35,17 @@ export default function MarblePage() {
   const lastWinsRef = useRef(lastWins); lastWinsRef.current = lastWins;
 
   const stop = useCallback(() => { if (rafRef.current) cancelAnimationFrame(rafRef.current); rafRef.current = null; }, []);
+
+  const toggleFullscreen = () => {
+    const el = wrapRef.current; if (!el) return;
+    if (document.fullscreenElement) document.exitFullscreen?.();
+    else el.requestFullscreen?.();
+  };
+  useEffect(() => {
+    const onFs = () => setFs(!!document.fullscreenElement);
+    document.addEventListener('fullscreenchange', onFs);
+    return () => document.removeEventListener('fullscreenchange', onFs);
+  }, []);
 
   const buildCourse = (world: Matter.World) => {
     const { Bodies, Composite } = Matter;
@@ -146,10 +160,9 @@ export default function MarblePage() {
   const draw = () => {
     const canvas = canvasRef.current; if (!canvas) return;
     const ctx = canvas.getContext('2d'); if (!ctx) return;
-    const dpr = Math.min(2, window.devicePixelRatio || 1);
     const root = document.documentElement;
     const dark = root.getAttribute('data-theme') === 'dark' || (root.getAttribute('data-theme') !== 'light' && window.matchMedia?.('(prefers-color-scheme: dark)').matches);
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.setTransform(SCALE, 0, 0, SCALE, 0, 0);
     ctx.fillStyle = dark ? '#0f172a' : '#eef2f7';
     ctx.fillRect(0, 0, VW, VH);
 
@@ -214,10 +227,9 @@ export default function MarblePage() {
 
   useEffect(() => {
     const canvas = canvasRef.current; if (!canvas) return;
-    const dpr = Math.min(2, window.devicePixelRatio || 1);
-    canvas.width = VW * dpr; canvas.height = VH * dpr;
+    canvas.width = VW * SCALE; canvas.height = VH * SCALE;
     const ctx = canvas.getContext('2d');
-    if (ctx) { ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.fillStyle = '#eef2f7'; ctx.fillRect(0, 0, VW, VH); }
+    if (ctx) { ctx.setTransform(SCALE, 0, 0, SCALE, 0, 0); ctx.fillStyle = '#eef2f7'; ctx.fillRect(0, 0, VW, VH); }
     return () => stop();
   }, [stop]);
 
@@ -226,15 +238,16 @@ export default function MarblePage() {
       <div className="w-full flex items-center gap-2 mb-3">
         <Link href="/" aria-label="홈으로" className="text-lg leading-none text-slate-500 hover:text-slate-800 dark:hover:text-slate-100">🏠</Link>
         <h1 className="text-xl sm:text-2xl font-extrabold">🎱 마블 레이스</h1>
-        <span className="text-xs text-slate-400">긴 코스를 굴러 내려가는 랜덤 뽑기</span>
+        <span className="hidden sm:inline text-xs text-slate-400">긴 코스를 굴러 내려가는 랜덤 뽑기</span>
+        <button onClick={toggleFullscreen} className="ml-auto text-sm px-3 py-1.5 rounded-lg border border-slate-300 dark:border-slate-600 font-bold hover:border-indigo-500">⛶ {fs ? '전체화면 종료' : '전체화면'}</button>
       </div>
 
-      <div className="w-full grid lg:grid-cols-[460px_minmax(0,1fr)] gap-4 items-start">
-        <div className="rounded-2xl overflow-hidden border border-slate-200 dark:border-slate-700 shadow mx-auto" style={{ width: '100%', maxWidth: 460 }}>
-          <canvas ref={canvasRef} className="block w-full h-auto" style={{ aspectRatio: `${VW}/${VH}` }} />
+      <div className="w-full flex flex-col lg:flex-row gap-4 justify-center items-start">
+        <div ref={wrapRef} className={`rounded-2xl overflow-hidden border border-slate-200 dark:border-slate-700 shadow mx-auto ${fs ? 'flex items-center justify-center bg-black w-screen h-screen rounded-none border-0' : ''}`}>
+          <canvas ref={canvasRef} className="block" style={{ height: fs ? '100vh' : 'min(84vh, 940px)', aspectRatio: `${VW}/${VH}`, maxWidth: '100%' }} />
         </div>
 
-        <div className="space-y-3">
+        <div className="w-full lg:w-80 shrink-0 space-y-3">
           {winner && (
             <div className="rounded-xl border-2 border-emerald-500 bg-emerald-50 dark:bg-emerald-500/10 p-3 text-center">
               <p className="text-lg font-extrabold">🎉 {lastWins ? '꼴찌' : '1등'}: <span style={{ color: COLORS[winner.color] }}>{winner.name}</span></p>
