@@ -9,7 +9,7 @@ const VW = 720, VH = 760;    // 넓게(가로 활용)
 const SCALE = 2;             // 캔버스 백킹 해상도 배율(확대 시 선명)
 const TALL = 4600;           // 전체 코스 높이(약간 짧게)
 const FINISH_Y = TALL - 70;
-const GAP = 130, SEG_H = 300, DROP = 190; // 좁은 게이트 + 촘촘한 구간
+const SEG_H = 300, DROP = 190; // 구간 높이 + 게이트 낙차
 const COLORS = ['#ff8fab', '#8ec5ff', '#ffd97d', '#a0e8af', '#c8a2ff', '#ffb37d', '#7fd8d8', '#ff9ecd', '#b3e05a', '#ff7d7d', '#9db4ff', '#ffc46b'];
 
 type Marble = { body: Matter.Body; name: string; color: number; finished: boolean };
@@ -59,48 +59,77 @@ export default function MarblePage() {
     const { Bodies, Composite } = Matter;
     const bodies: Matter.Body[] = [];
     const pegs: { x: number; y: number; r: number }[] = [];
+    const bumpers: { x: number; y: number; r: number; color: string }[] = [];
+    const bars: { body: Matter.Body; spin: number }[] = [];
+    const rnd = (a: number, b: number) => a + Math.random() * (b - a);
+    const chance = (p: number) => Math.random() < p;
+    const pick = <T,>(arr: T[]): T => arr[Math.floor(Math.random() * arr.length)];
+    const PAL = ['#f97316', '#ec4899', '#8b5cf6', '#0ea5e9', '#22c55e', '#eab308', '#ef4444', '#14b8a6'];
+
     // 옆벽
     bodies.push(Bodies.rectangle(-12, TALL / 2, 24, TALL * 1.2, { isStatic: true, restitution: 0.3 }));
     bodies.push(Bodies.rectangle(VW + 12, TALL / 2, 24, TALL * 1.2, { isStatic: true, restitution: 0.3 }));
 
-    const bars: { body: Matter.Body; spin: number }[] = [];
-    const peg = (x: number, y: number, r = 7) => { pegs.push({ x, y, r }); bodies.push(Bodies.circle(x, y, r, { isStatic: true, restitution: 0.75 })); };
+    const peg = (x: number, y: number, r = 8) => { pegs.push({ x, y, r }); bodies.push(Bodies.circle(x, y, r, { isStatic: true, restitution: 0.75 })); };
+    const bump = (x: number, y: number, r: number, color: string) => { bodies.push(Bodies.circle(x, y, r, { isStatic: true, restitution: 1.3 })); bumpers.push({ x, y, r, color }); };
+    const ramp = (x: number, y: number, len: number, ang: number, rest = 0.2) => bodies.push(Bodies.rectangle(x, y, len, 20, { isStatic: true, angle: ang, restitution: rest, friction: 0.06, chamfer: { radius: 10 } }));
+    const spinner = (x: number, y: number, len: number) => { const b = Bodies.rectangle(x, y, len, 14, { isStatic: true, restitution: 0.7, chamfer: { radius: 7 } }); bodies.push(b); bars.push({ body: b, spin: (chance(0.5) ? 1 : -1) * rnd(0.02, 0.045) }); };
 
-    // 좁은 게이트 램프 + 촘촘한 지그재그 못밭(플린코) — 마블이 반드시 못에 부딪혀 섞이게
+    // ── 매 판 랜덤 코스: 구간마다 다른 장애물 타입을 뽑아 다양하게 ──
     const END = FINISH_Y - 430;
-    const PS = 48;             // 못 가로 간격(마블 지름 22 대비 촘촘)
-    let y = 170, k = 0;
+    let y = 170, lastType = '';
     while (y < END - 120) {
-      const dir = k % 2 === 0 ? 1 : -1;
-      // 게이트 램프: 거의 전폭을 덮고 열린 쪽 끝에 좁은 gap → 병목·추월
-      const x1 = dir === 1 ? -6 : VW + 6, x2 = dir === 1 ? VW - GAP : GAP;
-      const midx = (x1 + x2) / 2, midy = (y + y + DROP) / 2;
-      bodies.push(Bodies.rectangle(midx, midy, Math.hypot(x2 - x1, DROP), 22, { isStatic: true, angle: Math.atan2(DROP, x2 - x1), restitution: 0.15, friction: 0.06, chamfer: { radius: 10 } }));
-      // 램프 아래 촘촘한 지그재그 못밭(각 행 offset → 마블이 매 행 못에 맞음)
-      const zTop = y + DROP + 34, zBot = y + SEG_H - 20;
-      let row = 0;
-      for (let ry = zTop; ry < zBot && ry < END; ry += 40) {
-        const off = (row % 2) * (PS / 2);
-        for (let px = 40 + off; px < VW - 30; px += PS) peg(px, ry, 8);
-        row++;
+      const h = rnd(SEG_H - 40, SEG_H + 50);
+      let type = pick(['pegs', 'pegs', 'gate', 'spinner', 'bumpers']);
+      if (type === lastType && chance(0.6)) type = pick(['pegs', 'gate', 'spinner', 'bumpers']);
+      lastType = type;
+
+      if (type === 'gate') {
+        // 한쪽만 열린 긴 램프 → 병목·추월
+        const dir = chance(0.5) ? 1 : -1;
+        const gap = rnd(110, 175);
+        const x1 = dir === 1 ? -6 : VW + 6, x2 = dir === 1 ? VW - gap : gap;
+        ramp((x1 + x2) / 2, y + DROP / 2 + 10, Math.hypot(x2 - x1, DROP), Math.atan2(DROP, x2 - x1), 0.15);
+        const ps = rnd(46, 58); let row = 0;
+        for (let ry = y + DROP + 40; ry < y + h - 20 && ry < END; ry += rnd(38, 46)) {
+          const off = (row % 2) * (ps / 2);
+          for (let px = 40 + off; px < VW - 30; px += ps) if (chance(0.9)) peg(px, ry, rnd(7, 9));
+          row++;
+        }
+      } else if (type === 'spinner') {
+        // 중앙 회전 바람개비(실제로 튕겨냄) + 좌우 못
+        spinner(VW * rnd(0.4, 0.6), y + h * 0.42, VW * rnd(0.34, 0.46));
+        for (const px of [VW * 0.16, VW * 0.84]) { peg(px, y + 40, 9); peg(px, y + h * 0.72, 9); }
+        if (chance(0.6)) bump(VW * rnd(0.3, 0.7), y + h * 0.84, rnd(16, 22), pick(PAL));
+      } else if (type === 'bumpers') {
+        // 흩뿌린 바운시 범퍼 밭
+        const n = Math.round(rnd(4, 7));
+        for (let i = 0; i < n; i++) bump(rnd(60, VW - 60), y + rnd(30, h - 30), rnd(14, 22), pick(PAL));
+        for (let px = 50; px < VW - 40; px += rnd(60, 80)) peg(px, y + h - 24, 8);
+      } else {
+        // 촘촘 플린코 못밭(간격 랜덤)
+        const ps = rnd(44, 56); let row = 0;
+        for (let ry = y + 30; ry < y + h - 16 && ry < END; ry += rnd(36, 46)) {
+          const off = (row % 2) * (ps / 2);
+          for (let px = 38 + off; px < VW - 28; px += ps) if (chance(0.92)) peg(px, ry, rnd(7, 9));
+          row++;
+        }
+        if (chance(0.4)) bump(VW * rnd(0.25, 0.75), y + h * rnd(0.4, 0.7), rnd(15, 20), pick(PAL));
       }
-      y += SEG_H; k++;
+      y += h;
     }
 
-    // ── 결승 핀볼 존(컴팩트): 깔때기 → 통통 범퍼 → 플리퍼 V ──
-    const bumpers: { x: number; y: number; r: number; color: string }[] = [];
-    const bump = (x: number, cy2: number, r: number, color: string) => { bodies.push(Bodies.circle(x, cy2, r, { isStatic: true, restitution: 1.35 })); bumpers.push({ x, y: cy2, r, color }); };
+    // ── 결승 핀볼 존: 깔때기 → 범퍼 → ★중앙 블로커(직진 마블을 튕겨 옆으로) ──
     const zoneTop = FINISH_Y - 300;
-    // 깔때기(양쪽 벽 → 챔버로 모음) — 좁고 짧게
-    bodies.push(Bodies.rectangle(VW * 0.19, zoneTop, VW * 0.5, 16, { isStatic: true, angle: 0.6, restitution: 0.4, chamfer: { radius: 8 } }));
-    bodies.push(Bodies.rectangle(VW * 0.81, zoneTop, VW * 0.5, 16, { isStatic: true, angle: -0.6, restitution: 0.4, chamfer: { radius: 8 } }));
-    // 핀볼 범퍼(통통) — 작고 촘촘
-    bump(VW * 0.5, zoneTop + 78, 22, '#f97316');
-    bump(VW * 0.33, zoneTop + 150, 18, '#ec4899');
-    bump(VW * 0.67, zoneTop + 150, 18, '#8b5cf6');
-    // 플리퍼 V — 아래로 모아 결승 게이트로 안내(양옆은 막음, 중앙만 통과)
-    bodies.push(Bodies.rectangle(VW * 0.32, FINISH_Y - 72, VW * 0.28, 18, { isStatic: true, angle: 0.62, restitution: 0.85, chamfer: { radius: 9 } }));
-    bodies.push(Bodies.rectangle(VW * 0.68, FINISH_Y - 72, VW * 0.28, 18, { isStatic: true, angle: -0.62, restitution: 0.85, chamfer: { radius: 9 } }));
+    ramp(VW * 0.19, zoneTop, VW * 0.5, 0.6, 0.4);
+    ramp(VW * 0.81, zoneTop, VW * 0.5, -0.6, 0.4);
+    bump(VW * 0.5, zoneTop + 82, 22, '#f97316');
+    bump(VW * 0.32, zoneTop + 158, 18, '#ec4899');
+    bump(VW * 0.68, zoneTop + 158, 18, '#8b5cf6');
+    // ★ 결승 직전 중앙 블로커 + 좌우 튕김 범퍼 — 그냥 못 지나가고 핀볼처럼 튕김
+    bump(VW * 0.5, FINISH_Y - 62, 30, '#ef4444');
+    bump(VW * 0.25, FINISH_Y - 26, 17, '#22c55e');
+    bump(VW * 0.75, FINISH_Y - 26, 17, '#0ea5e9');
 
     Composite.add(world, bodies);
     pegsRef.current = pegs; barsRef.current = bars; bumpersRef.current = bumpers;
@@ -203,6 +232,15 @@ export default function MarblePage() {
     // 못
     ctx.fillStyle = dark ? '#64748b' : '#94a3b8';
     pegsRef.current.forEach((p) => { if (inView(p.y)) { ctx.beginPath(); ctx.arc(p.x, p.y, p.r, 0, 7); ctx.fill(); } });
+    // 회전 바람개비(스피너) — 눈에 띄게
+    ctx.fillStyle = dark ? '#d97706' : '#f59e0b';
+    barsRef.current.forEach((b) => {
+      if (!inView(b.body.position.y, 90)) return;
+      const v = b.body.vertices; if (v.length < 3) return;
+      ctx.beginPath(); ctx.moveTo(v[0].x, v[0].y); for (let i = 1; i < v.length; i++) ctx.lineTo(v[i].x, v[i].y); ctx.closePath(); ctx.fill();
+      ctx.beginPath(); ctx.arc(b.body.position.x, b.body.position.y, 5, 0, 7); ctx.fillStyle = dark ? '#78350f' : '#b45309'; ctx.fill();
+      ctx.fillStyle = dark ? '#d97706' : '#f59e0b';
+    });
     // 핀볼 범퍼
     bumpersRef.current.forEach((b) => {
       if (!inView(b.y, 60)) return;
