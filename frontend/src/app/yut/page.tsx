@@ -63,6 +63,8 @@ export default function YutPage() {
   const [selToken, setSelToken] = useState<number | null>(null); // 도착 선택 대기 중인 말
   const [charging, setCharging] = useState(false);
   const [power, setPower] = useState(0);
+  const [sound, setSound] = useState(true);
+  const lastSpokenRef = useRef<string | null>(null);
   const roomRef = useRef<string | null>(null); roomRef.current = roomCode;
   const offsetRef = useRef(0);
   const chargingRef = useRef(false);
@@ -70,7 +72,39 @@ export default function YutPage() {
   const rafRef = useRef<number | null>(null);
   const CHARGE_MS = 1500; // 이 시간에 파워 120
 
-  useEffect(() => { id.current = cid(); try { setNick(localStorage.getItem('arcade_nick') || ''); } catch {} }, []);
+  useEffect(() => { id.current = cid(); try { setNick(localStorage.getItem('arcade_nick') || ''); setSound(localStorage.getItem('yut_sound') !== '0'); } catch {} }, []);
+
+  // 윷 결과·이벤트 음성(브라우저 TTS)
+  const speak = (text: string) => {
+    try {
+      const synth = window.speechSynthesis; if (!synth) return;
+      const u = new SpeechSynthesisUtterance(text);
+      u.lang = 'ko-KR'; u.rate = 1.05;
+      synth.cancel(); synth.speak(u);
+    } catch {}
+  };
+  const phraseFor = (la: string): string | null => {
+    if (la.includes('잡기')) return '잡았다!';
+    if (la.includes('도착')) return '도착!';
+    if (la.includes('이동') || la.includes('출발') || la.includes('사용') || la.includes('넘김')) return null;
+    if (la.includes('낙')) return '낙!';
+    if (la.includes('백도')) return '백도';
+    if (la.includes('모')) return '모';
+    if (la.includes('윷')) return '윷';
+    if (la.includes('걸')) return '걸';
+    if (la.includes('개')) return '개';
+    if (la.includes('도')) return '도';
+    return null;
+  };
+  useEffect(() => {
+    const la = ss?.lastAction;
+    if (!la || la === lastSpokenRef.current) return;
+    lastSpokenRef.current = la;
+    if (!sound || screen !== 'game') return;
+    const ph = phraseFor(la);
+    if (ph) speak(ph);
+  }, [ss?.lastAction, sound, screen]);
+  const toggleSound = () => setSound((v) => { const nv = !v; try { localStorage.setItem('yut_sound', nv ? '1' : '0'); } catch {} if (!nv) try { window.speechSynthesis?.cancel(); } catch {} return nv; });
 
   const loadRooms = useCallback(async () => { try { setRooms(await api(`/api/v1/yut/rooms`)); } catch {} }, []);
   useEffect(() => { if (screen === 'entry') { loadRooms(); const t = setInterval(loadRooms, 3000); return () => clearInterval(t); } }, [screen, loadRooms]);
@@ -240,7 +274,10 @@ export default function YutPage() {
     <main className="min-h-screen flex flex-col items-center p-3 sm:p-5 max-w-3xl mx-auto w-full text-slate-800 dark:text-slate-100">
       <div className="w-full flex items-center justify-between mb-3">
         <div className="flex items-center gap-2">{home}<h1 className="text-xl sm:text-2xl font-extrabold"><span className="text-blue-600">윷</span><span className="text-red-600">놀이</span></h1></div>
-        {roomCode && <button onClick={leave} className="text-xs px-2 py-1 rounded bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-100">나가기</button>}
+        <div className="flex items-center gap-2">
+          <button onClick={toggleSound} title="윷 결과 음성" className="text-lg leading-none">{sound ? '🔊' : '🔇'}</button>
+          {roomCode && <button onClick={leave} className="text-xs px-2 py-1 rounded bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-100">나가기</button>}
+        </div>
       </div>
 
       {/* ── 입장 ── */}
