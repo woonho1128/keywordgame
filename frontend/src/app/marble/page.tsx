@@ -9,7 +9,7 @@ const VW = 720, VH = 760;    // 넓게(가로 활용)
 const SCALE = 2;             // 캔버스 백킹 해상도 배율(확대 시 선명)
 const TALL = 4600;           // 전체 코스 높이(약간 짧게)
 const FINISH_Y = TALL - 70;
-const GAP = 230, SEG_H = 360, DROP = 160; // 지그재그 램프 간격/경사
+const GAP = 130, SEG_H = 300, DROP = 190; // 좁은 게이트 + 촘촘한 구간
 const COLORS = ['#ff8fab', '#8ec5ff', '#ffd97d', '#a0e8af', '#c8a2ff', '#ffb37d', '#7fd8d8', '#ff9ecd', '#b3e05a', '#ff7d7d', '#9db4ff', '#ffc46b'];
 
 type Marble = { body: Matter.Body; name: string; color: number; finished: boolean };
@@ -59,26 +59,23 @@ export default function MarblePage() {
     const bars: { body: Matter.Body; spin: number }[] = [];
     const peg = (x: number, y: number, r = 7) => { pegs.push({ x, y, r }); bodies.push(Bodies.circle(x, y, r, { isStatic: true, restitution: 0.75 })); };
 
-    // 지그재그 램프(스위치백) — 두껍게, 낙하 구역은 촘촘한 못밭으로 실제 순위가 섞이게
-    let y = 200, k = 0;
-    const END = FINISH_Y - 520; // 결승 관문 위까지만 램프
-    while (y + DROP < END) {
+    // 좁은 게이트 램프 + 촘촘한 지그재그 못밭(플린코) — 마블이 반드시 못에 부딪혀 섞이게
+    const END = FINISH_Y - 500;
+    const PS = 48;             // 못 가로 간격(마블 지름 22 대비 촘촘)
+    let y = 170, k = 0;
+    while (y < END - 120) {
       const dir = k % 2 === 0 ? 1 : -1;
-      const x1 = dir === 1 ? 0 : VW, x2 = dir === 1 ? VW - GAP : GAP;
+      // 게이트 램프: 거의 전폭을 덮고 열린 쪽 끝에 좁은 gap → 병목·추월
+      const x1 = dir === 1 ? -6 : VW + 6, x2 = dir === 1 ? VW - GAP : GAP;
       const midx = (x1 + x2) / 2, midy = (y + y + DROP) / 2;
-      const len = Math.hypot(x2 - x1, DROP);
-      const ang = Math.atan2(DROP, x2 - x1);
-      bodies.push(Bodies.rectangle(midx, midy, len, 20, { isStatic: true, angle: ang, restitution: 0.2, friction: 0.05, chamfer: { radius: 9 } }));
-      // 낙하 구역 못밭(촘촘) — 지그재그 격자
-      const zoneTop = y + DROP + 40, zoneBot = y + SEG_H - 40;
-      for (let ry = zoneTop; ry < zoneBot && ry < END; ry += 46) {
-        const off = ((ry / 46) % 2) * 40;
-        for (let px = 55 + off; px < VW - 40; px += 80) peg(px, ry);
-      }
-      // 회전 막대(길 가로지르게)
-      if (k % 2 === 1) {
-        const by = y + DROP + SEG_H * 0.5;
-        if (by < END) { const bar = Bodies.rectangle(VW / 2, by, 200, 16, { isStatic: true, restitution: 0.55, chamfer: { radius: 8 } }); bodies.push(bar); bars.push({ body: bar, spin: (k % 4 < 2 ? 1 : -1) * 0.022 }); }
+      bodies.push(Bodies.rectangle(midx, midy, Math.hypot(x2 - x1, DROP), 22, { isStatic: true, angle: Math.atan2(DROP, x2 - x1), restitution: 0.15, friction: 0.06, chamfer: { radius: 10 } }));
+      // 램프 아래 촘촘한 지그재그 못밭(각 행 offset → 마블이 매 행 못에 맞음)
+      const zTop = y + DROP + 34, zBot = y + SEG_H - 20;
+      let row = 0;
+      for (let ry = zTop; ry < zBot && ry < END; ry += 40) {
+        const off = (row % 2) * (PS / 2);
+        for (let px = 40 + off; px < VW - 30; px += PS) peg(px, ry, 8);
+        row++;
       }
       y += SEG_H; k++;
     }
@@ -117,7 +114,7 @@ export default function MarblePage() {
     setRanking([]); setWinner(null); finishRef.current = []; camRef.current = 0;
 
     const engine = Matter.Engine.create();
-    engine.gravity.y = 0.85;
+    engine.gravity.y = 0.72;
     engineRef.current = engine;
     buildCourse(engine.world);
 
@@ -128,7 +125,7 @@ export default function MarblePage() {
       const gap = VW / (rowCount + 1);
       const x = (col + 1) * gap + (Math.random() * 8 - 4);
       const yy = 40 + rowN * 30;
-      const body = Matter.Bodies.circle(x, yy, 11, { restitution: 0.3, friction: 0.02, frictionAir: 0.008, density: 0.02 });
+      const body = Matter.Bodies.circle(x, yy, 11, { restitution: 0.18, friction: 0.05, frictionAir: 0.012, density: 0.02 });
       Matter.Composite.add(engine.world, body);
       marbles.push({ body, name, color: i % COLORS.length, finished: false });
     });
