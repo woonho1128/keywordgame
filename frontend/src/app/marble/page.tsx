@@ -37,9 +37,6 @@ export default function MarblePage() {
   const camRef = useRef(0);
   const lastWinsRef = useRef(lastWins); lastWinsRef.current = lastWins;
   const runningRef = useRef(running); runningRef.current = running;
-  const draggingRef = useRef(false);
-  const dragStartYRef = useRef(0);
-  const camStartRef = useRef(0);
   const drawRef = useRef<() => void>(() => {});
 
   const stop = useCallback(() => { if (rafRef.current) cancelAnimationFrame(rafRef.current); rafRef.current = null; }, []);
@@ -94,7 +91,7 @@ export default function MarblePage() {
         const ps = rnd(46, 58); let row = 0;
         for (let ry = y + DROP + 40; ry < y + h - 20 && ry < END; ry += rnd(38, 46)) {
           const off = (row % 2) * (ps / 2);
-          for (let px = 40 + off; px < VW - 30; px += ps) if (chance(0.9)) peg(px, ry, rnd(7, 9));
+          for (let px = 24 + off; px < VW - 16; px += ps) if (chance(0.9)) peg(px, ry, rnd(7, 9));
           row++;
         }
       } else if (type === 'spinner') {
@@ -119,12 +116,18 @@ export default function MarblePage() {
         const ps = rnd(44, 56); let row = 0;
         for (let ry = y + 30; ry < y + h - 16 && ry < END; ry += rnd(36, 46)) {
           const off = (row % 2) * (ps / 2);
-          for (let px = 38 + off; px < VW - 28; px += ps) if (chance(0.92)) peg(px, ry, rnd(7, 9));
+          for (let px = 22 + off; px < VW - 14; px += ps) if (chance(0.92)) peg(px, ry, rnd(7, 9));
           row++;
         }
         if (chance(0.4)) bump(VW * rnd(0.25, 0.75), y + h * rnd(0.4, 0.7), rnd(15, 20), pick(PAL));
       }
       y += h;
+    }
+
+    // 좌우 벽 직행 방지: 양쪽 벽에 안쪽으로 튀어나온 엇갈린 돌기(벽 타고 직행하는 마블을 중앙으로)
+    for (let wy = 220; wy < END - 40; wy += rnd(120, 170)) {
+      peg(rnd(6, 15), wy, rnd(12, 16));
+      peg(VW - rnd(6, 15), wy + rnd(55, 90), rnd(12, 16));
     }
 
     // ── 결승 핀볼 존: 깔때기 → 범퍼 → ★중앙 블로커(직진 마블을 튕겨 옆으로) ──
@@ -330,18 +333,15 @@ export default function MarblePage() {
   }, []);
 
   const onDragStart = (e: React.PointerEvent) => {
-    if (running) return;
-    draggingRef.current = true; dragStartYRef.current = e.clientY; camStartRef.current = camRef.current;
-    (e.currentTarget as Element).setPointerCapture?.(e.pointerId);
-  };
-  const onDragMove = (e: React.PointerEvent) => {
-    if (running || !draggingRef.current) return;
+    if (runningRef.current) return;
     const rect = canvasRef.current!.getBoundingClientRect();
-    const k = VH / rect.height; // 화면px → 논리px
-    camRef.current = clampCam(camStartRef.current - (e.clientY - dragStartYRef.current) * k);
-    drawRef.current();
+    const k = VH / rect.height;               // 화면px → 논리px
+    const startY = e.clientY, startCam = camRef.current;
+    const move = (ev: PointerEvent) => { camRef.current = clampCam(startCam - (ev.clientY - startY) * k); drawRef.current(); };
+    const up = () => { window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', up); };
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', up);
   };
-  const onDragEnd = () => { draggingRef.current = false; };
 
   useEffect(() => {
     const canvas = canvasRef.current; if (!canvas) return;
@@ -362,7 +362,7 @@ export default function MarblePage() {
 
       <div className="w-full flex flex-col lg:flex-row gap-4 justify-center items-start">
         <div ref={wrapRef} className={`rounded-2xl overflow-hidden border border-slate-200 dark:border-slate-700 shadow mx-auto ${fs ? 'flex items-center justify-center bg-black w-screen h-screen rounded-none border-0' : ''}`}>
-          <canvas ref={canvasRef} onPointerDown={onDragStart} onPointerMove={onDragMove} onPointerUp={onDragEnd} onPointerLeave={onDragEnd}
+          <canvas ref={canvasRef} onPointerDown={onDragStart}
             className={`block ${running ? '' : 'cursor-grab active:cursor-grabbing'}`}
             style={{ height: fs ? '100vh' : 'min(84vh, 940px)', aspectRatio: `${VW}/${VH}`, maxWidth: '100%', touchAction: running ? 'auto' : 'none' }} />
         </div>
