@@ -12,7 +12,7 @@ const FINISH_Y = TALL - 70;
 const SEG_H = 300, DROP = 190; // 구간 높이 + 게이트 낙차
 const COLORS = ['#ff8fab', '#8ec5ff', '#ffd97d', '#a0e8af', '#c8a2ff', '#ffb37d', '#7fd8d8', '#ff9ecd', '#b3e05a', '#ff7d7d', '#9db4ff', '#ffc46b'];
 
-type Marble = { body: Matter.Body; name: string; color: number; finished: boolean };
+type Marble = { body: Matter.Body; name: string; color: number; finished: boolean; stuck: number };
 
 const clampCam = (c: number) => Math.max(0, Math.min(TALL - VH, c));
 
@@ -23,6 +23,8 @@ export default function MarblePage() {
   const [ranking, setRanking] = useState<{ name: string; color: number }[]>([]);
   const [winner, setWinner] = useState<{ name: string; color: number } | null>(null);
   const [fs, setFs] = useState(false);
+  const [entries, setEntries] = useState<{ name: string; color: number }[]>([]);
+  const [focusIdx, setFocusIdx] = useState<number | null>(null);
 
   const wrapRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -38,6 +40,7 @@ export default function MarblePage() {
   const lastWinsRef = useRef(lastWins); lastWinsRef.current = lastWins;
   const runningRef = useRef(running); runningRef.current = running;
   const drawRef = useRef<() => void>(() => {});
+  const focusRef = useRef<number | null>(null);
 
   const stop = useCallback(() => { if (rafRef.current) cancelAnimationFrame(rafRef.current); rafRef.current = null; }, []);
 
@@ -88,10 +91,10 @@ export default function MarblePage() {
         const gap = rnd(110, 175);
         const x1 = dir === 1 ? -6 : VW + 6, x2 = dir === 1 ? VW - gap : gap;
         ramp((x1 + x2) / 2, y + DROP / 2 + 10, Math.hypot(x2 - x1, DROP), Math.atan2(DROP, x2 - x1), 0.15);
-        const ps = rnd(46, 58); let row = 0;
-        for (let ry = y + DROP + 40; ry < y + h - 20 && ry < END; ry += rnd(38, 46)) {
+        const ps = rnd(54, 66); let row = 0;
+        for (let ry = y + DROP + 40; ry < y + h - 20 && ry < END; ry += rnd(44, 54)) {
           const off = (row % 2) * (ps / 2);
-          for (let px = 24 + off; px < VW - 16; px += ps) if (chance(0.9)) peg(px, ry, rnd(7, 9));
+          for (let px = 24 + off; px < VW - 16; px += ps) if (chance(0.85)) peg(px, ry, rnd(6, 8));
           row++;
         }
       } else if (type === 'spinner') {
@@ -113,10 +116,10 @@ export default function MarblePage() {
         for (let px = 50; px < VW - 40; px += rnd(60, 80)) peg(px, y + h - 24, 8);
       } else {
         // 촘촘 플린코 못밭(간격 랜덤)
-        const ps = rnd(44, 56); let row = 0;
-        for (let ry = y + 30; ry < y + h - 16 && ry < END; ry += rnd(36, 46)) {
+        const ps = rnd(52, 64); let row = 0;
+        for (let ry = y + 30; ry < y + h - 16 && ry < END; ry += rnd(42, 52)) {
           const off = (row % 2) * (ps / 2);
-          for (let px = 22 + off; px < VW - 14; px += ps) if (chance(0.92)) peg(px, ry, rnd(7, 9));
+          for (let px = 22 + off; px < VW - 14; px += ps) if (chance(0.88)) peg(px, ry, rnd(6, 8));
           row++;
         }
         if (chance(0.4)) bump(VW * rnd(0.25, 0.75), y + h * rnd(0.4, 0.7), rnd(15, 20), pick(PAL));
@@ -125,9 +128,9 @@ export default function MarblePage() {
     }
 
     // 좌우 벽 직행 방지: 양쪽 벽에 안쪽으로 튀어나온 엇갈린 돌기(벽 타고 직행하는 마블을 중앙으로)
-    for (let wy = 220; wy < END - 40; wy += rnd(120, 170)) {
-      peg(rnd(6, 15), wy, rnd(12, 16));
-      peg(VW - rnd(6, 15), wy + rnd(55, 90), rnd(12, 16));
+    for (let wy = 220; wy < END - 40; wy += rnd(150, 200)) {
+      peg(rnd(5, 12), wy, rnd(9, 12));
+      peg(VW - rnd(5, 12), wy + rnd(60, 100), rnd(9, 12));
     }
 
     // ── 결승 핀볼 존: 깔때기 → 범퍼 → ★중앙 블로커(직진 마블을 튕겨 옆으로) ──
@@ -159,6 +162,7 @@ export default function MarblePage() {
     if (list.length < 2) { alert('참가자를 2명 이상 입력하세요 (한 줄에 한 명, "이름 x3"으로 여러 개)'); return; }
     stop();
     setRanking([]); setWinner(null); finishRef.current = []; camRef.current = 0;
+    focusRef.current = null; setFocusIdx(null);
 
     const engine = Matter.Engine.create();
     engine.gravity.y = 0.72;
@@ -174,9 +178,10 @@ export default function MarblePage() {
       const yy = 40 + rowN * 30;
       const body = Matter.Bodies.circle(x, yy, 11, { restitution: 0.18, friction: 0.05, frictionAir: 0.012, density: 0.02 });
       Matter.Composite.add(engine.world, body);
-      marbles.push({ body, name, color: i % COLORS.length, finished: false });
+      marbles.push({ body, name, color: i % COLORS.length, finished: false, stuck: 0 });
     });
     marblesRef.current = marbles;
+    setEntries(marbles.map((m) => ({ name: m.name, color: m.color })));
     startAtRef.current = performance.now();
     setRunning(true);
     loop();
@@ -202,6 +207,20 @@ export default function MarblePage() {
       }
     }
 
+    // 끼임 방지: 거의 멈춘 마블은 잠깐 뒤 살짝 흔들어 내려보냄
+    for (const m of marblesRef.current) {
+      if (m.finished) continue;
+      const sp = Math.hypot(m.body.velocity.x, m.body.velocity.y);
+      if (sp < 0.4) {
+        m.stuck += 1000 / 60;
+        if (m.stuck > 420) {
+          Matter.Body.setVelocity(m.body, { x: (Math.random() * 2 - 1) * 3.5, y: 2.6 });
+          Matter.Body.setPosition(m.body, { x: m.body.position.x + (Math.random() * 2 - 1) * 3, y: m.body.position.y });
+          m.stuck = 0;
+        }
+      } else m.stuck = 0;
+    }
+
     const now = performance.now();
     const timeout = now - startAtRef.current > 90000;
     let live = 0, leadY = 0;
@@ -217,8 +236,11 @@ export default function MarblePage() {
         .forEach((m) => { m.finished = true; finishRef.current.push({ name: m.name, color: m.color }); Matter.Composite.remove(engine.world, m.body); });
       if (finishRef.current.length) setRanking([...finishRef.current]); live = 0;
     }
-    // 카메라: 선두를 화면 42% 지점에 두고 부드럽게 추적
-    const target = Math.max(0, Math.min(TALL - VH, leadY - VH * 0.42));
+    // 카메라: 선택 마블(있으면) 또는 선두를 화면 42% 지점에 두고 부드럽게 추적
+    const fi = focusRef.current;
+    const foc = fi != null ? marblesRef.current[fi] : null;
+    const followY = foc && !foc.finished ? foc.body.position.y : leadY;
+    const target = clampCam(followY - VH * 0.42);
     camRef.current += (target - camRef.current) * 0.12;
 
     draw();
@@ -285,6 +307,13 @@ export default function MarblePage() {
 
     // 마블
     marblesRef.current.forEach((m) => { if (!m.finished && inView(m.body.position.y)) drawMarble(ctx, m.body.position.x, m.body.position.y, 11, COLORS[m.color], m.name); });
+    // 선택 마블 강조 링
+    const fi = focusRef.current;
+    const foc = fi != null ? marblesRef.current[fi] : null;
+    if (foc && !foc.finished && inView(foc.body.position.y, 30)) {
+      ctx.beginPath(); ctx.arc(foc.body.position.x, foc.body.position.y, 17, 0, 7);
+      ctx.lineWidth = 3; ctx.strokeStyle = '#4f46e5'; ctx.setLineDash([4, 3]); ctx.stroke(); ctx.setLineDash([]);
+    }
     ctx.restore();
 
     // 미니맵(오른쪽)
@@ -343,6 +372,14 @@ export default function MarblePage() {
     window.addEventListener('pointerup', up);
   };
 
+  // 참가자 클릭 → 해당 마블로 카메라 이동/추적
+  const focusOn = (i: number) => {
+    if (focusRef.current === i) { focusRef.current = null; setFocusIdx(null); return; } // 다시 클릭 시 해제
+    focusRef.current = i; setFocusIdx(i);
+    const m = marblesRef.current[i];
+    if (m && !runningRef.current) { camRef.current = clampCam(m.body.position.y - VH * 0.42); drawRef.current(); }
+  };
+
   useEffect(() => {
     const canvas = canvasRef.current; if (!canvas) return;
     canvas.width = VW * SCALE; canvas.height = VH * SCALE;
@@ -350,6 +387,15 @@ export default function MarblePage() {
     if (ctx) { ctx.setTransform(SCALE, 0, 0, SCALE, 0, 0); ctx.fillStyle = '#eef2f7'; ctx.fillRect(0, 0, VW, VH); }
     return () => stop();
   }, [stop]);
+
+  // 참가자 라벨(같은 이름은 번호 붙임: 라미 1, 라미 2 …)
+  const seen: Record<string, number> = {};
+  const totals: Record<string, number> = {};
+  entries.forEach((e) => { totals[e.name] = (totals[e.name] || 0) + 1; });
+  const entryLabels = entries.map((e) => {
+    seen[e.name] = (seen[e.name] || 0) + 1;
+    return totals[e.name] > 1 ? `${e.name} ${seen[e.name]}` : e.name;
+  });
 
   return (
     <main className="min-h-screen flex flex-col items-center p-3 sm:p-5 max-w-6xl mx-auto w-full text-slate-800 dark:text-slate-100">
@@ -385,6 +431,25 @@ export default function MarblePage() {
               {running ? '굴러가는 중…' : '🎬 출발!'}
             </button>
           </div>
+          {entries.length > 0 && (
+            <div className="rounded-xl border border-slate-200 dark:border-slate-700 p-3">
+              <div className="flex items-center justify-between mb-2">
+                <p className="text-sm font-bold text-slate-600 dark:text-slate-300">👀 참가자 {entries.length} · 클릭해 따라가기</p>
+                {focusIdx != null && (
+                  <button onClick={() => { focusRef.current = null; setFocusIdx(null); }} className="text-xs font-bold text-indigo-500 hover:underline">선두 보기</button>
+                )}
+              </div>
+              <div className="grid grid-cols-2 gap-1 max-h-56 overflow-auto">
+                {entries.map((e, i) => (
+                  <button key={i} onClick={() => focusOn(i)}
+                    className={`flex items-center gap-1.5 text-sm px-2 py-1 rounded-lg border text-left ${focusIdx === i ? 'border-indigo-500 bg-indigo-50 dark:bg-indigo-500/10 font-bold' : 'border-transparent hover:bg-slate-100 dark:hover:bg-slate-800'}`}>
+                    <span className="w-3 h-3 rounded-full shrink-0" style={{ background: COLORS[e.color] }} />
+                    <span className="truncate">{entryLabels[i]}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
           {ranking.length > 0 && (
             <div className="rounded-xl border border-slate-200 dark:border-slate-700 p-3">
               <p className="text-sm font-bold text-slate-600 dark:text-slate-300 mb-2">🏆 도착 순위</p>
