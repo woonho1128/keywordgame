@@ -5,11 +5,11 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import Matter from 'matter-js';
 
 // 뷰포트(화면에 보이는 창) + 월드(전체 긴 트랙)
-const VW = 460, VH = 720;
+const VW = 720, VH = 760;    // 넓게(가로 활용)
 const SCALE = 2;             // 캔버스 백킹 해상도 배율(확대 시 선명)
 const TALL = 6000;           // 전체 코스 높이(길게)
 const FINISH_Y = TALL - 70;
-const GAP = 150, SEG_H = 360, DROP = 150; // 지그재그 램프 간격/경사
+const GAP = 230, SEG_H = 360, DROP = 160; // 지그재그 램프 간격/경사
 const COLORS = ['#ff8fab', '#8ec5ff', '#ffd97d', '#a0e8af', '#c8a2ff', '#ffb37d', '#7fd8d8', '#ff9ecd', '#b3e05a', '#ff7d7d', '#9db4ff', '#ffc46b'];
 
 type Marble = { body: Matter.Body; name: string; color: number; finished: boolean };
@@ -55,33 +55,46 @@ export default function MarblePage() {
     bodies.push(Bodies.rectangle(-12, TALL / 2, 24, TALL * 1.2, { isStatic: true, restitution: 0.3 }));
     bodies.push(Bodies.rectangle(VW + 12, TALL / 2, 24, TALL * 1.2, { isStatic: true, restitution: 0.3 }));
 
-    // 지그재그 램프(스위치백 슬라이드) — 왼→오, 오→왼 번갈아 열린 쪽으로 떨어짐
-    let y = 200, k = 0;
     const bars: { body: Matter.Body; spin: number }[] = [];
-    while (y + DROP < FINISH_Y - 120) {
+    const peg = (x: number, y: number, r = 7) => { pegs.push({ x, y, r }); bodies.push(Bodies.circle(x, y, r, { isStatic: true, restitution: 0.75 })); };
+
+    // 지그재그 램프(스위치백) — 두껍게, 낙하 구역은 촘촘한 못밭으로 실제 순위가 섞이게
+    let y = 200, k = 0;
+    const END = FINISH_Y - 520; // 결승 관문 위까지만 램프
+    while (y + DROP < END) {
       const dir = k % 2 === 0 ? 1 : -1;
       const x1 = dir === 1 ? 0 : VW, x2 = dir === 1 ? VW - GAP : GAP;
-      const ya = y, yb = y + DROP;
-      const midx = (x1 + x2) / 2, midy = (ya + yb) / 2;
-      const len = Math.hypot(x2 - x1, yb - ya);
-      const ang = Math.atan2(yb - ya, x2 - x1);
-      bodies.push(Bodies.rectangle(midx, midy, len, 14, { isStatic: true, angle: ang, restitution: 0.25, friction: 0.04, chamfer: { radius: 7 } }));
-      // 램프 아래 낙하 구역에 못 몇 개
-      for (let i = 0; i < 3; i++) {
-        const px = 50 + Math.random() * (VW - 100);
-        const py = y + DROP + 40 + Math.random() * (SEG_H - DROP - 90);
-        if (py < FINISH_Y - 80) { pegs.push({ x: px, y: py, r: 6 }); bodies.push(Bodies.circle(px, py, 6, { isStatic: true, restitution: 0.7 })); }
+      const midx = (x1 + x2) / 2, midy = (y + y + DROP) / 2;
+      const len = Math.hypot(x2 - x1, DROP);
+      const ang = Math.atan2(DROP, x2 - x1);
+      bodies.push(Bodies.rectangle(midx, midy, len, 20, { isStatic: true, angle: ang, restitution: 0.2, friction: 0.05, chamfer: { radius: 9 } }));
+      // 낙하 구역 못밭(촘촘) — 지그재그 격자
+      const zoneTop = y + DROP + 40, zoneBot = y + SEG_H - 40;
+      for (let ry = zoneTop; ry < zoneBot && ry < END; ry += 46) {
+        const off = ((ry / 46) % 2) * 40;
+        for (let px = 55 + off; px < VW - 40; px += 80) peg(px, ry);
       }
-      // 가끔 회전 막대
-      if (k % 3 === 1) {
-        const bx = VW / 2 + (Math.random() * 80 - 40), by = y + DROP + SEG_H * 0.45;
-        if (by < FINISH_Y - 100) {
-          const bar = Bodies.rectangle(bx, by, 130, 12, { isStatic: true, restitution: 0.5, chamfer: { radius: 6 } });
-          bodies.push(bar); bars.push({ body: bar, spin: (k % 2 ? 1 : -1) * 0.02 });
-        }
+      // 회전 막대(길 가로지르게)
+      if (k % 2 === 1) {
+        const by = y + DROP + SEG_H * 0.5;
+        if (by < END) { const bar = Bodies.rectangle(VW / 2, by, 200, 16, { isStatic: true, restitution: 0.55, chamfer: { radius: 8 } }); bodies.push(bar); bars.push({ body: bar, spin: (k % 4 < 2 ? 1 : -1) * 0.022 }); }
       }
       y += SEG_H; k++;
     }
+
+    // ── 결승 직전 "야무진" 관문: 깔때기 + 중앙 회전 풍차 + 촘촘한 못밭 ──
+    const gy = FINISH_Y - 300;
+    // 깔때기(양쪽에서 중앙 좁은 통로로 모음, 중앙 gap ~180)
+    bodies.push(Bodies.rectangle(VW * 0.2, gy - 150, VW * 0.5, 18, { isStatic: true, angle: 0.42, restitution: 0.3, chamfer: { radius: 9 } }));
+    bodies.push(Bodies.rectangle(VW * 0.8, gy - 150, VW * 0.5, 18, { isStatic: true, angle: -0.42, restitution: 0.3, chamfer: { radius: 9 } }));
+    // 못밭
+    for (let i = 0; i < 16; i++) peg(50 + Math.random() * (VW - 100), gy - 90 + Math.random() * 120);
+    // 중앙 회전 풍차(+자) — 통로를 휘저어 마지막에 순위를 뒤섞음
+    const cx = VW / 2, cyw = gy + 120, arm = VW * 0.42;
+    const pinA = Bodies.rectangle(cx, cyw, arm, 18, { isStatic: true, restitution: 0.7, chamfer: { radius: 9 } });
+    const pinB = Bodies.rectangle(cx, cyw, 18, arm, { isStatic: true, restitution: 0.7, chamfer: { radius: 9 } });
+    bodies.push(pinA, pinB); bars.push({ body: pinA, spin: 0.03 }, { body: pinB, spin: 0.03 });
+
     Composite.add(world, bodies);
     pegsRef.current = pegs; barsRef.current = bars;
   };
@@ -234,7 +247,7 @@ export default function MarblePage() {
   }, [stop]);
 
   return (
-    <main className="min-h-screen flex flex-col items-center p-3 sm:p-5 max-w-5xl mx-auto w-full text-slate-800 dark:text-slate-100">
+    <main className="min-h-screen flex flex-col items-center p-3 sm:p-5 max-w-6xl mx-auto w-full text-slate-800 dark:text-slate-100">
       <div className="w-full flex items-center gap-2 mb-3">
         <Link href="/" aria-label="홈으로" className="text-lg leading-none text-slate-500 hover:text-slate-800 dark:hover:text-slate-100">🏠</Link>
         <h1 className="text-xl sm:text-2xl font-extrabold">🎱 마블 레이스</h1>
