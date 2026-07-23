@@ -132,6 +132,7 @@ export default function MonopolyMockup() {
   const [mover, setMover] = useState<number | null>(null);
   const [wasDouble, setWasDouble] = useState(false);
   const [card, setCard] = useState<Card | null>(null);
+  const [cardOwner, setCardOwner] = useState<number | null>(null);
   const [log, setLog] = useState<string[]>(['🎲 목업 데모 — 버튼을 누르고 있다가 놓으면 굴러가요.']);
 
   // 차징 게이지
@@ -206,9 +207,11 @@ export default function MonopolyMockup() {
           setTurn((t) => (t + 1) % PLAYERS.length);
         }
         // 황금열쇠 칸이면 찬스 카드 뽑기(무인도行이면 생략)
+        // ※ 실제 멀티에선 뽑은 사람 화면에만 카드가 뜨고, 다른 사람에겐 아래 로그(내용 X)만 보임
         if (!toIsland && TILES[landed].type === 'GOLDKEY') {
           const c = CARDS[Math.floor(Math.random() * CARDS.length)];
-          setTimeout(() => setCard(c), 250);
+          addLog(`🔑 ${PLAYERS[me].name} 황금열쇠 카드를 뽑았다 (내용 비공개)`);
+          setTimeout(() => { setCardOwner(me); setCard(c); }, 300);
         }
       }
     }, 160);
@@ -352,7 +355,7 @@ export default function MonopolyMockup() {
               <button className="text-xs font-bold py-2 rounded-lg border border-slate-300 dark:border-slate-600 opacity-60">⏭️ 패스</button>
             </div>
             <p className="text-[11px] text-slate-400 text-center">누르고 있으면 게이지가 오르내려요 · 더블 나오면 한 번 더!</p>
-            <button onClick={() => setCard(CARDS[Math.floor(Math.random() * CARDS.length)])}
+            <button onClick={() => { setCardOwner(turn); setCard(CARDS[Math.floor(Math.random() * CARDS.length)]); }}
               className="w-full text-xs font-bold py-2 rounded-lg border border-amber-300 text-amber-600 dark:text-amber-300 hover:bg-amber-50 dark:hover:bg-amber-500/10">🔑 황금열쇠 카드 미리보기</button>
           </div>
 
@@ -394,13 +397,20 @@ export default function MonopolyMockup() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/55 p-4" onClick={() => setCard(null)}>
           <div className="mono-card w-64 rounded-2xl shadow-2xl overflow-hidden" onClick={(e) => e.stopPropagation()}>
             <div className="p-5 text-center text-white" style={{ background: card.color }}>
-              <div className="text-[11px] font-bold opacity-90 tracking-[0.3em]">🔑 황금열쇠</div>
+              <div className="text-[11px] font-bold opacity-90 tracking-[0.25em]">🔑 황금열쇠</div>
+              {cardOwner != null && (
+                <div className="text-[11px] font-bold mt-1 inline-flex items-center gap-1 bg-black/25 rounded-full px-2 py-0.5">
+                  <span className="w-2 h-2 rounded-full" style={{ background: PLAYERS[cardOwner].color }} />
+                  {PLAYERS[cardOwner].name}님만 보임
+                </div>
+              )}
               <div className="text-6xl my-3 drop-shadow">{card.icon}</div>
               <div className="text-2xl font-black">{card.title}</div>
             </div>
             <div className="p-4 bg-white dark:bg-slate-800 text-center">
               <p className="text-sm text-slate-600 dark:text-slate-300">{card.desc}</p>
-              <button onClick={() => setCard(null)} className="mt-3 w-full bg-indigo-600 text-white font-bold py-2 rounded-lg">확인</button>
+              <p className="text-[11px] text-slate-400 mt-1">다른 참가자에겐 내용이 보이지 않아요</p>
+              <button onClick={() => { setCard(null); setCardOwner(null); }} className="mt-3 w-full bg-indigo-600 text-white font-bold py-2 rounded-lg">확인</button>
             </div>
           </div>
           <style jsx>{`
