@@ -74,6 +74,7 @@ export default function CoupPage() {
   const [busy, setBusy] = useState(false);
   const roomRef = useRef<string | null>(null);
   const cidRef = useRef('');
+  if (typeof window !== 'undefined' && !cidRef.current) cidRef.current = getClientId(); // 동기 초기화(빈 clientId 전송 방지)
   const offsetRef = useRef(0);
   const deadlineRef = useRef(0);
 
@@ -85,7 +86,7 @@ export default function CoupPage() {
   const [exchSel, setExchSel] = useState<number[]>([]);
   const [showGuide, setShowGuide] = useState(false);
 
-  const cid = () => encodeURIComponent(clientId);
+  const cid = () => encodeURIComponent(cidRef.current || clientId);
   const rp = () => `roomCode=${roomCode}&clientId=${cid()}`;
 
   const changeRoom = useCallback((code: string | null) => {
@@ -209,7 +210,7 @@ export default function CoupPage() {
         )}
         {error && <p className="text-red-500 text-sm mt-4 text-center">{error}</p>}
         {guidePanel}
-        <RoomChat game="coup" roomCode="lobby" clientId={clientId} nick={nick} />
+        <RoomChat game="coup" roomCode="lobby" clientId={cidRef.current || clientId} nick={nick} />
       </main>
     );
   }
@@ -390,7 +391,7 @@ export default function CoupPage() {
 
       {error && <p className="text-red-500 text-sm mt-2 text-center">{error}</p>}
       {guidePanel}
-      <RoomChat game="coup" roomCode={roomCode} clientId={clientId} nick={nick} />
+      <RoomChat game="coup" roomCode={roomCode} clientId={cidRef.current || clientId} nick={nick} />
     </main>
   );
 }
