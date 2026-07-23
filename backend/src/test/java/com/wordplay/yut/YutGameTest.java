@@ -34,6 +34,18 @@ class YutGameTest {
     }
 
     @Test
+    void 팀전_각_뷰에서_팀당_말4개를_공유한다() {
+        YutGame g = new YutGame("host", "방장", true, true, false);
+        g.join("p2", "b"); g.join("p3", "c"); g.join("p4", "d");
+        g.start("host");
+        YutState st = g.me("host");
+        // 팀전: 같은 팀(seat 0·2 / 1·3)은 동일한 말 4개를 공유 표시
+        assertThat(st.players().get(0).tokens()).isEqualTo(st.players().get(2).tokens());
+        assertThat(st.players().get(1).tokens()).isEqualTo(st.players().get(3).tokens());
+        assertThat(st.players().get(0).tokens()).hasSize(4);
+    }
+
+    @Test
     void 시작하면_말4개_대기_첫차례_던지기() {
         YutGame g = new YutGame("host", "방장", false, true, false);
         g.join("p2", "친구");

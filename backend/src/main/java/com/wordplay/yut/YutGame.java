@@ -284,29 +284,33 @@ public class YutGame implements RoomGame {
                 if (v == 5) throwsOwed++;
             }
             case PLACE -> {
-                if (tokenIndex < 0 || tokenIndex >= TOKENS || DONE.equals(p.tok[tokenIndex])) throw bad("놓을 내 말을 선택하세요");
+                P mine = tokP(p);
+                if (tokenIndex < 0 || tokenIndex >= TOKENS || DONE.equals(mine.tok[tokenIndex])) throw bad("놓을 내 말을 선택하세요");
                 if (!isPlaceCell(cell)) throw bad("앞쪽 1~10칸 중 선택하세요");
-                p.tok[tokenIndex] = cell; p.tokPrev[tokenIndex] = "o0";
+                mine.tok[tokenIndex] = cell; mine.tokPrev[tokenIndex] = "o0";
                 resolveCatch(p.team, cell);
             }
             case SEND_HOME -> {
                 P q = seatPlayer(oppSeat);
                 if (q == null || q.team == p.team) throw bad("상대 말을 선택하세요");
-                if (oppToken < 0 || oppToken >= TOKENS || !onBoard(q.tok[oppToken])) throw bad("판 위 상대 말을 선택하세요");
-                q.tok[oppToken] = WAIT; q.tokPrev[oppToken] = null;
+                P qt = tokP(q);
+                if (oppToken < 0 || oppToken >= TOKENS || !onBoard(qt.tok[oppToken])) throw bad("판 위 상대 말을 선택하세요");
+                qt.tok[oppToken] = WAIT; qt.tokPrev[oppToken] = null;
             }
             case SWAP -> {
                 P q = seatPlayer(oppSeat);
                 if (q == null || q.team == p.team) throw bad("상대 말을 선택하세요");
-                if (tokenIndex < 0 || tokenIndex >= TOKENS || !onBoard(p.tok[tokenIndex])) throw bad("판 위 내 말을 선택하세요");
-                if (oppToken < 0 || oppToken >= TOKENS || !onBoard(q.tok[oppToken])) throw bad("판 위 상대 말을 선택하세요");
-                String tmp = p.tok[tokenIndex]; p.tok[tokenIndex] = q.tok[oppToken]; q.tok[oppToken] = tmp;
-                String tp = p.tokPrev[tokenIndex]; p.tokPrev[tokenIndex] = q.tokPrev[oppToken]; q.tokPrev[oppToken] = tp;
+                P mine = tokP(p), qt = tokP(q);
+                if (tokenIndex < 0 || tokenIndex >= TOKENS || !onBoard(mine.tok[tokenIndex])) throw bad("판 위 내 말을 선택하세요");
+                if (oppToken < 0 || oppToken >= TOKENS || !onBoard(qt.tok[oppToken])) throw bad("판 위 상대 말을 선택하세요");
+                String tmp = mine.tok[tokenIndex]; mine.tok[tokenIndex] = qt.tok[oppToken]; qt.tok[oppToken] = tmp;
+                String tpv = mine.tokPrev[tokenIndex]; mine.tokPrev[tokenIndex] = qt.tokPrev[oppToken]; qt.tokPrev[oppToken] = tpv;
             }
             case RALLY -> {
-                if (tokenIndex < 0 || tokenIndex >= TOKENS || DONE.equals(p.tok[tokenIndex])) throw bad("옮길 내 말을 선택하세요");
-                if (oppToken < 0 || oppToken >= TOKENS || !onBoard(p.tok[oppToken]) || oppToken == tokenIndex) throw bad("모을 대상(판 위 내 다른 말)을 선택하세요");
-                p.tok[tokenIndex] = p.tok[oppToken]; p.tokPrev[tokenIndex] = p.tokPrev[oppToken];
+                P mine = tokP(p);
+                if (tokenIndex < 0 || tokenIndex >= TOKENS || DONE.equals(mine.tok[tokenIndex])) throw bad("옮길 내 말을 선택하세요");
+                if (oppToken < 0 || oppToken >= TOKENS || !onBoard(mine.tok[oppToken]) || oppToken == tokenIndex) throw bad("모을 대상(판 위 내 다른 말)을 선택하세요");
+                mine.tok[tokenIndex] = mine.tok[oppToken]; mine.tokPrev[tokenIndex] = mine.tokPrev[oppToken];
             }
         }
         p.abilityUsed = true;
@@ -316,6 +320,9 @@ public class YutGame implements RoomGame {
 
     private P seatPlayer(int seat) { return seat >= 0 && seat < players.size() ? players.get(seat) : null; }
 
+    /** 팀전이면 팀 말 4개를 보유한 대표(팀 = seat 0/1), 개인전이면 본인. 팀원 둘이 이 4개를 함께 움직인다. */
+    private P tokP(P p) { return teamMode ? players.get(p.team) : p; }
+
     /** 봇: 능력을 상황에 맞게 1회 사용(불가하면 스킵). */
     private void botTryAbility(P p) {
         if (!abilities || p.ability == null || p.abilityUsed) return;
@@ -324,9 +331,10 @@ public class YutGame implements RoomGame {
                 case EXTRA -> throwsOwed++;
                 case MO_OR_DO -> { pending.add(5); throwsOwed++; }
                 case PLACE -> {
+                    P mine = tokP(p);
                     int ti = firstNotDone(p);
                     if (ti < 0) return;
-                    p.tok[ti] = "o10"; p.tokPrev[ti] = "o0"; resolveCatch(p.team, "o10");
+                    mine.tok[ti] = "o10"; mine.tokPrev[ti] = "o0"; resolveCatch(p.team, "o10");
                 }
                 case SEND_HOME -> {
                     int[] t = bestOppOnBoard(p.team);
@@ -334,24 +342,26 @@ public class YutGame implements RoomGame {
                     players.get(t[0]).tok[t[1]] = WAIT; players.get(t[0]).tokPrev[t[1]] = null;
                 }
                 case SWAP -> {
+                    P mine = tokP(p);
                     int myi = worstMyOnBoard(p); int[] opp = bestOppOnBoard(p.team);
                     if (myi < 0 || opp == null) return;
                     P q = players.get(opp[0]);
-                    String tmp = p.tok[myi]; p.tok[myi] = q.tok[opp[1]]; q.tok[opp[1]] = tmp;
+                    String tmp = mine.tok[myi]; mine.tok[myi] = q.tok[opp[1]]; q.tok[opp[1]] = tmp;
                 }
                 case RALLY -> {
+                    P mine = tokP(p);
                     int a = -1, b = -1;
-                    for (int i = 0; i < TOKENS; i++) if (onBoard(p.tok[i])) { if (a < 0) a = i; else b = i; }
+                    for (int i = 0; i < TOKENS; i++) if (onBoard(mine.tok[i])) { if (a < 0) a = i; else b = i; }
                     if (a < 0 || b < 0) return;
-                    p.tok[a] = p.tok[b]; p.tokPrev[a] = p.tokPrev[b];
+                    mine.tok[a] = mine.tok[b]; mine.tokPrev[a] = mine.tokPrev[b];
                 }
             }
             p.abilityUsed = true;
             note(p.nick + " ▸ [" + abilityName(p.ability) + "] 사용!");
         } catch (Exception ignore) { }
     }
-    private int firstNotDone(P p) { for (int i = 0; i < TOKENS; i++) if (!DONE.equals(p.tok[i])) return i; return -1; }
-    private int worstMyOnBoard(P p) { int best = -1, bd = -1; for (int i = 0; i < TOKENS; i++) if (onBoard(p.tok[i])) { int d = distToDone(p.tok[i]); if (d > bd) { bd = d; best = i; } } return best; }
+    private int firstNotDone(P p) { P tp = tokP(p); for (int i = 0; i < TOKENS; i++) if (!DONE.equals(tp.tok[i])) return i; return -1; }
+    private int worstMyOnBoard(P p) { P tp = tokP(p); int best = -1, bd = -1; for (int i = 0; i < TOKENS; i++) if (onBoard(tp.tok[i])) { int d = distToDone(tp.tok[i]); if (d > bd) { bd = d; best = i; } } return best; }
     private int[] bestOppOnBoard(int team) {
         int bs = -1, bt = -1, bd = Integer.MAX_VALUE;
         for (int s = 0; s < players.size(); s++) { P q = players.get(s); if (q.team == team || q.left) continue;
@@ -361,9 +371,10 @@ public class YutGame implements RoomGame {
 
     private void applyMove(P p, int value, int tokenIndex, Dest dest) {
         pending.remove(Integer.valueOf(value));
-        String from = p.tok[tokenIndex];
-        // 대기 말이 진입할 땐 그 말 하나만, 판 위 말은 같은 팀 그룹(업기)이 함께 이동
-        List<int[]> group = WAIT.equals(from) ? List.of(new int[]{turnSeat, tokenIndex}) : groupAt(p.team, from);
+        P tp = tokP(p);
+        String from = tp.tok[tokenIndex];
+        // 대기 말이 진입할 땐 그 말 하나만(팀 대표 소유), 판 위 말은 같은 팀 그룹(업기)이 함께 이동
+        List<int[]> group = WAIT.equals(from) ? List.of(new int[]{seatOf(tp), tokenIndex}) : groupAt(p.team, from);
         boolean finish = DONE.equals(dest.cell());
         for (int[] g : group) {
             P owner = players.get(g[0]);
@@ -407,6 +418,7 @@ public class YutGame implements RoomGame {
     private String backPrev(String cell) { return PREV.get(cell); }
 
     private boolean checkWin(int team) {
+        if (teamMode) return players.get(team).done >= TOKENS; // 팀 공유 말 4개
         for (P q : players) if (!q.left && q.team == team && q.done < TOKENS) return false;
         return true;
     }
@@ -430,23 +442,24 @@ public class YutGame implements RoomGame {
     // ── 합법 이동 목록 ──
     private List<Move> legalMoves(P p) {
         List<Move> out = new ArrayList<>();
+        P tp = tokP(p);
         // 값 종류별 1개씩만(같은 값 여러 개 있어도 표시는 1)
         List<Integer> vals = new ArrayList<>();
         for (int v : pending) if (!vals.contains(v)) vals.add(v);
         for (int v : vals) {
             for (int t = 0; t < TOKENS; t++) {
-                String cell = p.tok[t];
+                String cell = tp.tok[t];
                 if (DONE.equals(cell)) continue;
                 List<Dest> dests = new ArrayList<>();
                 if (v < 0) { // 백도
                     if (WAIT.equals(cell)) continue;
                     String bp = backPrev(cell);
-                    String pv = p.tokPrev[t];
+                    String pv = tp.tokPrev[t];
                     String target = bp != null ? bp : (pv != null && !WAIT.equals(pv) ? pv : null);
                     if (target == null) continue;
                     dests.add(new Dest(target, cellLabel(target), wouldCatch(p.team, target), false));
                 } else {
-                    String prev = WAIT.equals(cell) ? null : p.tokPrev[t];
+                    String prev = WAIT.equals(cell) ? null : tp.tokPrev[t];
                     for (Dst d : forwardDests(cell, prev == null ? "" : prev, v)) {
                         boolean fin = DONE.equals(d.cell);
                         dests.add(new Dest(d.cell, fin ? "도착" : cellLabel(d.cell), !fin && wouldCatch(p.team, d.cell), fin));
@@ -463,8 +476,9 @@ public class YutGame implements RoomGame {
     private List<Move> dedupeByCell(P p, List<Move> moves) {
         List<Move> out = new ArrayList<>();
         java.util.Set<String> seen = new java.util.HashSet<>();
+        P tp = tokP(p);
         for (Move m : moves) {
-            String key = m.value() + "@" + p.tok[m.tokenIndex()];
+            String key = m.value() + "@" + tp.tok[m.tokenIndex()];
             if (seen.add(key)) out.add(m);
         }
         return out;
@@ -539,9 +553,10 @@ public class YutGame implements RoomGame {
         for (int i = 0; i < players.size(); i++) {
             P p = players.get(i);
             if (p.left && phase == Phase.LOBBY) continue;
+            P tp = tokP(p); // 팀전이면 팀 공유 말 4개를 양쪽 팀원 모두에게 동일 표시
             List<String> toks = new ArrayList<>();
-            for (int t = 0; t < TOKENS; t++) toks.add(p.tok[t]);
-            pv.add(new PlayerView(i, p.nick, p.bot, p.host, p == me, p.team, p.color, toks, p.done, p.left,
+            for (int t = 0; t < TOKENS; t++) toks.add(tp.tok[t]);
+            pv.add(new PlayerView(i, p.nick, p.bot, p.host, p == me, p.team, p.color, toks, tp.done, p.left,
                     abilities && p.ability != null && !p.abilityUsed));
         }
         List<ThrowResult> pend = new ArrayList<>();

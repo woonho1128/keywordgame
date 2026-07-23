@@ -260,10 +260,15 @@ export default function YutPage() {
 
   // 판 위 말(개별 정체성 → 이동 애니메이션 유지)
   const boardTokens: { seat: number; ti: number; color: number; cell: string }[] = [];
-  players.forEach((p) => p.tokens.forEach((c, ti) => {
-    if (c === 'wait' || c === 'done') return;
-    boardTokens.push({ seat: p.seat, ti, color: p.color, cell: c });
-  }));
+  players.forEach((p) => {
+    // 팀전: 팀 말 4개는 대표(seat===team)만 렌더(양쪽 팀원이 동일 표시 → 중복 방지), 색은 팀 색
+    if (ss?.teamMode && p.seat !== p.team) return;
+    const col = ss?.teamMode ? p.team : p.color;
+    p.tokens.forEach((c, ti) => {
+      if (c === 'wait' || c === 'done') return;
+      boardTokens.push({ seat: p.seat, ti, color: col, cell: c });
+    });
+  });
   const cellCount: Record<string, number> = {};
   boardTokens.forEach((t) => { cellCount[t.cell] = (cellCount[t.cell] || 0) + 1; });
   const badgeAt: Record<string, string> = {};
@@ -385,7 +390,7 @@ export default function YutPage() {
               {boardTokens.map((t) => {
                 const [x, y] = COORD[t.cell];
                 const idKey = `${t.seat}-${t.ti}`;
-                const isMine = t.seat === ss.mySeat;
+                const isMine = ss.teamMode ? teamOf(t.seat) === ss.myTeam : t.seat === ss.mySeat;
                 let onClk: (() => void) | undefined;
                 let ring: string | null = null;
                 if (abilityMode) {
@@ -531,8 +536,9 @@ export default function YutPage() {
                         const clickable = cMove || cAbil;
                         return <button key={ti} onClick={cMove ? () => tapToken(ti) : cAbil ? () => abilityClickToken(ss.mySeat, ti) : undefined} disabled={!clickable}
                           className={`w-4 h-4 rounded-full ${clickable ? `ring-2 ring-offset-1 ${cAbil ? 'ring-fuchsia-500' : 'ring-slate-800 dark:ring-white'}` : ''}`}
-                          style={{ background: PCOL[p.color], opacity: clickable ? 1 : 0.55 }} />;
+                          style={{ background: PCOL[ss.teamMode ? p.team : p.color], opacity: clickable ? 1 : 0.55 }} />;
                       })}
+                      {ss.teamMode && p.seat !== p.team && <span className="text-[10px] text-slate-400">팀 공유 말</span>}
                       {waitCount === 0 && p.doneCount < 4 && <span className="text-[10px] text-slate-400">전원 출발</span>}
                     </div>
                   </div>
