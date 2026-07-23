@@ -81,6 +81,21 @@ const PLAYERS = [
   { name: '폴짝', color: '#eab308' },
 ];
 
+// 황금열쇠(찬스) 카드
+type Card = { icon: string; title: string; desc: string; color: string };
+const CARDS: Card[] = [
+  { icon: '🎁', title: '보너스!', desc: '은행에서 100만원을 받습니다.', color: '#f59e0b' },
+  { icon: '💸', title: '세금 고지서', desc: '세금 50만원을 납부합니다.', color: '#ef4444' },
+  { icon: '✈️', title: '출발지로!', desc: '출발 칸으로 이동하고 월급을 받습니다.', color: '#3b82f6' },
+  { icon: '🏝️', title: '무인도행', desc: '무인도로 끌려갑니다.', color: '#0ea5e9' },
+  { icon: '🎲', title: '한 번 더!', desc: '주사위를 한 번 더 굴립니다.', color: '#8b5cf6' },
+  { icon: '🚀', title: '우주여행', desc: '원하는 칸으로 순간이동합니다.', color: '#6366f1' },
+  { icon: '💰', title: '우대권', desc: '다음 통행료를 한 번 면제받습니다.', color: '#22c55e' },
+  { icon: '🎉', title: '생일 파티', desc: '모두에게 30만원씩 받습니다.', color: '#ec4899' },
+  { icon: '🚓', title: '벌금 딱지', desc: '벌금 30만원을 납부합니다.', color: '#64748b' },
+  { icon: '🏗️', title: '무료 건설권', desc: '내 도시 한 곳에 건물을 무료로 올립니다.', color: '#14b8a6' },
+];
+
 // 9×9 그리드의 테두리 칸 좌표(1-index)
 function gridPos(i: number): { r: number; c: number } {
   if (i <= 8) return { r: 9, c: 9 - i };          // 아래줄 →왼쪽
@@ -116,6 +131,7 @@ export default function MonopolyMockup() {
   const [rolling, setRolling] = useState(false);
   const [mover, setMover] = useState<number | null>(null);
   const [wasDouble, setWasDouble] = useState(false);
+  const [card, setCard] = useState<Card | null>(null);
   const [log, setLog] = useState<string[]>(['🎲 목업 데모 — 버튼을 누르고 있다가 놓으면 굴러가요.']);
 
   // 차징 게이지
@@ -163,6 +179,7 @@ export default function MonopolyMockup() {
     const dbl = d1 === d2; setWasDouble(dbl);
     const me = turn; setMover(me);
     const steps = d1 + d2;
+    const landed = (pos[me] + steps) % TILES.length;
     addLog(`${PLAYERS[me].name} 🎲 ${d1}+${d2}=${steps}${dbl ? ' ✨더블' : ''}`);
     setMoving(true);
     let n = 0;
@@ -172,11 +189,12 @@ export default function MonopolyMockup() {
       if (n >= steps) {
         clearInterval(id);
         setMoving(false); setMover(null);
-        setPos((p) => { addLog(`${PLAYERS[me].name} → ${TILES[p[me]].name} 도착`); return p; });
+        addLog(`${PLAYERS[me].name} → ${TILES[landed].name} 도착`);
+        let toIsland = false;
         if (dbl) {
           doublesRef.current++;
           if (doublesRef.current >= 3) {
-            doublesRef.current = 0;
+            doublesRef.current = 0; toIsland = true;
             setPos((p) => { const q = [...p]; q[me] = 8; return q; });
             addLog(`${PLAYERS[me].name} 더블 3연속 → 🏝️ 무인도로!`);
             setTurn((t) => (t + 1) % PLAYERS.length);
@@ -186,6 +204,11 @@ export default function MonopolyMockup() {
         } else {
           doublesRef.current = 0;
           setTurn((t) => (t + 1) % PLAYERS.length);
+        }
+        // 황금열쇠 칸이면 찬스 카드 뽑기(무인도行이면 생략)
+        if (!toIsland && TILES[landed].type === 'GOLDKEY') {
+          const c = CARDS[Math.floor(Math.random() * CARDS.length)];
+          setTimeout(() => setCard(c), 250);
         }
       }
     }, 160);
@@ -329,6 +352,8 @@ export default function MonopolyMockup() {
               <button className="text-xs font-bold py-2 rounded-lg border border-slate-300 dark:border-slate-600 opacity-60">⏭️ 패스</button>
             </div>
             <p className="text-[11px] text-slate-400 text-center">누르고 있으면 게이지가 오르내려요 · 더블 나오면 한 번 더!</p>
+            <button onClick={() => setCard(CARDS[Math.floor(Math.random() * CARDS.length)])}
+              className="w-full text-xs font-bold py-2 rounded-lg border border-amber-300 text-amber-600 dark:text-amber-300 hover:bg-amber-50 dark:hover:bg-amber-500/10">🔑 황금열쇠 카드 미리보기</button>
           </div>
 
           <div className="rounded-xl border border-slate-200 dark:border-slate-700 p-3">
@@ -363,6 +388,31 @@ export default function MonopolyMockup() {
           </div>
         </div>
       </div>
+
+      {/* 황금열쇠(찬스) 카드 모달 */}
+      {card && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/55 p-4" onClick={() => setCard(null)}>
+          <div className="mono-card w-64 rounded-2xl shadow-2xl overflow-hidden" onClick={(e) => e.stopPropagation()}>
+            <div className="p-5 text-center text-white" style={{ background: card.color }}>
+              <div className="text-[11px] font-bold opacity-90 tracking-[0.3em]">🔑 황금열쇠</div>
+              <div className="text-6xl my-3 drop-shadow">{card.icon}</div>
+              <div className="text-2xl font-black">{card.title}</div>
+            </div>
+            <div className="p-4 bg-white dark:bg-slate-800 text-center">
+              <p className="text-sm text-slate-600 dark:text-slate-300">{card.desc}</p>
+              <button onClick={() => setCard(null)} className="mt-3 w-full bg-indigo-600 text-white font-bold py-2 rounded-lg">확인</button>
+            </div>
+          </div>
+          <style jsx>{`
+            .mono-card { animation: monoFlip .5s cubic-bezier(.2,.8,.2,1); transform-origin: center; }
+            @keyframes monoFlip {
+              0% { transform: perspective(700px) rotateY(90deg) scale(.85); opacity: 0; }
+              60% { transform: perspective(700px) rotateY(-12deg) scale(1.02); opacity: 1; }
+              100% { transform: perspective(700px) rotateY(0) scale(1); opacity: 1; }
+            }
+          `}</style>
+        </div>
+      )}
     </main>
   );
 }
