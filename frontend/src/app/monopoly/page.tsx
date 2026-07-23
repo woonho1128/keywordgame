@@ -137,7 +137,7 @@ export default function MonopolyPage() {
         });
         return changed ? nx : cur;
       });
-    }, 140);
+    }, 260);
     return () => clearInterval(t);
   }, []);
   useEffect(() => { if (ss && disp.length !== ss.players.length) setDisp(ss.players.map((p) => p.pos)); }, [ss?.players.length]);

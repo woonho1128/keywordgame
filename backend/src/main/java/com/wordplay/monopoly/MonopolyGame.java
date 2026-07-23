@@ -27,7 +27,7 @@ public class MonopolyGame implements RoomGame {
     public enum Step { ROLL, DECIDE }
 
     static final int MAX_PLAYERS = 4;
-    static final long TURN_MS = 40_000, BOT_DELAY_MS = 800;
+    static final long TURN_MS = 45_000, BOT_DELAY_MS = 2000; // 봇 한 동작 간 간격(느긋하게)
     static final long START_CASH = 1500, SALARY = 300;
     static final int ISLAND = 8, TRAVEL = 24, OLYMPIC = 16, START_TILE = 0;
     static final int MAX_ISLAND_TURNS = 3;
