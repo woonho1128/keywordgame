@@ -9,7 +9,7 @@ import {
   TetrisEngine, attackLines, COLS, VIS_ROWS, HIDDEN, ROWS, LockResult,
 } from '../tetris/engine';
 
-const CELL = 26;
+const CELL = 30;   // 솔로 테트리스와 동일
 const LOCK_DELAY = 500, MAX_RESETS = 15, DAS = 133, ARR = 25, SOFT_MS = 28;
 const COLORS: Record<PieceType | 'G', string> = {
   I: '#22d3ee', O: '#facc15', T: '#c084fc', S: '#4ade80', Z: '#f87171', J: '#60a5fa', L: '#fb923c', G: '#64748b',
@@ -409,12 +409,12 @@ export default function TetrisBattlePage() {
             </div>
             {/* 보드 */}
             <div className="relative">
-              <canvas ref={canvasRef} className="rounded-lg border-2 border-slate-700 bg-slate-900 touch-none block w-auto h-auto max-w-[70vw] max-h-[62vh] sm:max-w-[300px] sm:max-h-[74vh]" />
+              <canvas ref={canvasRef} className="rounded-lg border-2 border-slate-700 bg-slate-900 touch-none block w-auto h-auto max-w-[86vw] max-h-[58vh] sm:max-w-[360px] sm:max-h-[82vh]" />
               {incoming > 0 && <div className="sm:hidden absolute -left-3 top-0 bottom-0 w-2 rounded bg-red-500/70" style={{ height: `${Math.min(100, (incoming / 20) * 100)}%` }} />}
               {dead && !ended && <div className="absolute inset-0 flex items-center justify-center bg-slate-900/80 rounded-lg"><span className="font-bold text-red-400">💀 탈락 · 관전 중</span></div>}
             </div>
-            {/* NEXT + 상대(오른쪽 열에 배치해 세로 공간 절약) */}
-            <div className="flex flex-col gap-2 items-center">
+            {/* NEXT + 상대 (데스크톱: 오른쪽 열) */}
+            <div className="hidden sm:flex flex-col gap-2 items-center">
               <span className="text-[11px] text-slate-500 dark:text-slate-400 font-bold">NEXT</span>
               <div className="p-1 rounded-lg bg-slate-800/70 border border-slate-700 flex flex-col gap-0.5">
                 {nextQ.slice(0, 3).map((t, i) => <MiniPiece key={i} type={t} />)}
@@ -422,12 +422,35 @@ export default function TetrisBattlePage() {
               {(ss?.opponents?.length ?? 0) > 0 && (
                 <>
                   <span className="text-[11px] text-slate-500 dark:text-slate-400 font-bold mt-1">상대</span>
-                  <div className="flex flex-col gap-1.5 items-center overflow-y-auto max-h-[36vh] sm:max-h-[46vh]">
+                  <div className="flex flex-col gap-1.5 items-center overflow-y-auto max-h-[46vh]">
                     {(ss?.opponents || []).map((o, i) => <OppBoard key={i} o={o} />)}
                   </div>
                 </>
               )}
             </div>
+          </div>
+
+          {/* 모바일: HOLD·NEXT·받을공격·상대를 보드 아래 가로 스트립으로 */}
+          <div className="sm:hidden w-full mt-2 flex items-stretch gap-2 overflow-x-auto px-1 pb-1">
+            <div className="flex flex-col items-center shrink-0">
+              <span className="text-[10px] text-slate-400 font-bold">HOLD</span>
+              <div className="p-1 rounded bg-slate-800/70 border border-slate-700"><MiniPiece type={hold} /></div>
+            </div>
+            <div className="flex flex-col items-center shrink-0">
+              <span className="text-[10px] text-slate-400 font-bold">NEXT</span>
+              <div className="flex gap-1">{nextQ.slice(0, 3).map((t, i) => <MiniPiece key={i} type={t} />)}</div>
+            </div>
+            <div className="flex flex-col items-center shrink-0">
+              <span className="text-[10px] text-red-400 font-bold">받을 공격 {incoming > 0 ? incoming : ''}</span>
+              <div className="w-16 h-4 rounded bg-slate-800 border border-slate-700 overflow-hidden mt-auto mb-1">
+                <div className="h-full rounded bg-red-500 transition-all" style={{ width: `${Math.min(100, (incoming / 20) * 100)}%` }} />
+              </div>
+            </div>
+            {(ss?.opponents?.length ?? 0) > 0 && (
+              <div className="flex gap-1.5 shrink-0">
+                {(ss?.opponents || []).map((o, i) => <OppBoard key={i} o={o} />)}
+              </div>
+            )}
           </div>
           <p className="text-xs text-slate-500 dark:text-slate-400 mt-2 text-center px-2">생존 {ss?.aliveCount ?? '-'}명 · 줄을 지워 상대에게 공격! 받은 공격은 되받아치면 상쇄돼요.</p>
 
