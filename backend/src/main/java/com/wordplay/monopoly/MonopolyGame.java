@@ -122,6 +122,8 @@ public class MonopolyGame implements RoomGame {
     private int pendCardOwner = -1;
     private Chance pendCard = null;
     private List<Integer> travelOptions = null;
+    private long pendOwed = 0;      // 정산 필요 금액(통행료)
+    private int pendCreditor = -1;  // 통행료 받을 상대 seat(-1=기금)
 
     private int winnerSeat = -1;
     private String winnerLabel = null, lastAction = null;
@@ -177,7 +179,7 @@ public class MonopolyGame implements RoomGame {
         clearPending();
         turnEndsAt = now() + TURN_MS; botAt = now() + BOT_DELAY_MS;
     }
-    private void clearPending() { pendType = "NONE"; pendTile = -1; pendCard = null; pendCardOwner = -1; travelOptions = null; }
+    private void clearPending() { pendType = "NONE"; pendTile = -1; pendCard = null; pendCardOwner = -1; travelOptions = null; pendOwed = 0; pendCreditor = -1; }
 
     // ── 주사위 ──
     // power 0~120: 세기는 낙 개념 없이 단순히 눈 두 개를 굴린다(연출용). 더블이면 한 번 더.
@@ -321,10 +323,10 @@ public class MonopolyGame implements RoomGame {
                 afterResolve(p);
             }
             case "TOLL" -> {
-                if ("takeover".equals(action) && canTakeover(p, pendTile)) doTakeover(p, pendTile);
-                else doPayToll(p, pendTile);
-                afterResolve(p);
+                if ("takeover".equals(action) && canTakeover(p, pendTile)) { doTakeover(p, pendTile); afterResolve(p); }
+                else if (!payTollOrSettle(p, pendTile)) afterResolve(p); // 정산(매각/파산) 대기면 afterResolve 보류
             }
+            case "SETTLE" -> applySettle(p, action, arg);
             case "TRAVEL" -> {
                 int dest = arg;
                 if (dest < 0 || dest >= N || dest == p.pos) dest = START_TILE;
@@ -351,13 +353,47 @@ public class MonopolyGame implements RoomGame {
         if (tier[i] >= 4 || p.cash < cost) return;
         p.cash -= cost; tier[i]++; note(p.nick + " " + BOARD[i].name() + " " + tierName(tier[i]) + " 건설(-" + cost + "만)");
     }
-    private void doPayToll(P p, int i) {
-        if (p.tollImmunity) { p.tollImmunity = false; note(p.nick + " 우대권으로 통행료 면제 🎟️"); return; }
+    /** 통행료 지불. 현금이 모자라면 정산(매각/파산) 대기로 전환하고 true 반환. */
+    private boolean payTollOrSettle(P p, int i) {
+        if (p.tollImmunity) { p.tollImmunity = false; note(p.nick + " 우대권으로 통행료 면제 🎟️"); return false; }
         long toll = tollOf(i); P owr = players.get(owner[i]);
-        long pay = Math.min(p.cash, toll);
-        p.cash -= pay; owr.cash += pay;
-        note(p.nick + " → " + owr.nick + " 통행료 " + pay + "만 지불");
-        checkBankrupt(p);
+        if (p.cash >= toll) { p.cash -= toll; owr.cash += toll; note(p.nick + " → " + owr.nick + " 통행료 " + toll + "만 지불"); return false; }
+        beginSettle(p, toll, owner[i]);
+        return true;
+    }
+    private void beginSettle(P p, long owed, int creditorSeat) {
+        pendType = "SETTLE"; pendOwed = owed; pendCreditor = creditorSeat; pendTile = -1;
+        travelOptions = sellableTiles(p); step = Step.DECIDE;
+        note(p.nick + " 통행료 " + owed + "만 부족! 땅을 팔거나 파산 선택");
+    }
+    private List<Integer> sellableTiles(P p) { List<Integer> l = new ArrayList<>(); for (int i = 0; i < N; i++) if (owner[i] == p.seat) l.add(i); return l; }
+    private long sellValue(int i) { return BOARD[i].price() + tierInvested(i); } // 산 값 + 건설비 전액 환급
+
+    /** 매각/파산 정산 처리. */
+    private void applySettle(P p, String action, int arg) {
+        if ("sell".equals(action) && arg >= 0 && arg < N && owner[arg] == p.seat) {
+            long v = sellValue(arg); p.cash += v; owner[arg] = -1; tier[arg] = 0;
+            note(p.nick + " " + BOARD[arg].name() + " 매각(+" + v + "만)");
+            if (p.cash >= pendOwed) { settlePay(p); afterResolve(p); }
+            else { travelOptions = sellableTiles(p); if (travelOptions.isEmpty()) { goBankrupt(p); afterResolve(p); } }
+            // 아직 팔 땅이 남았고 부족하면 SETTLE 유지
+        } else if ("bankrupt".equals(action)) {
+            goBankrupt(p); afterResolve(p);
+        }
+    }
+    private void settlePay(P p) {
+        long pay = Math.min(p.cash, pendOwed); p.cash -= pay;
+        if (pendCreditor >= 0) players.get(pendCreditor).cash += pay; else pot += pay;
+        note(p.nick + " 통행료 " + pay + "만 지불(매각으로 마련)");
+    }
+    private void goBankrupt(P p) {
+        // 남은 땅 전부 청산 → 채권자에게 통행료 전액(가능한 만큼) 지급
+        for (int i = 0; i < N; i++) if (owner[i] == p.seat) { p.cash += sellValue(i); owner[i] = -1; tier[i] = 0; }
+        long pay = Math.min(p.cash, pendOwed); p.cash -= pay;
+        if (pendCreditor >= 0) players.get(pendCreditor).cash += pay; else pot += pay;
+        p.alive = false; p.cash = 0;
+        note("💥 " + p.nick + " 파산! 탈락 (통행료 " + pay + "만 지급)");
+        checkWin();
     }
     private boolean canTakeover(P p, int i) {
         if (owner[i] == -1 || owner[i] == p.seat) return false;
@@ -476,6 +512,11 @@ public class MonopolyGame implements RoomGame {
             }
             case "TRAVEL" -> decideInternal(p, "travel", botTravelPick(p));
             case "OLYMPIC" -> decideInternal(p, "olympic", botOlympicPick(p));
+            case "SETTLE" -> {
+                long net = p.cash; for (int i = 0; i < N; i++) if (owner[i] == p.seat) net += sellValue(i);
+                if (net < pendOwed) decideInternal(p, "bankrupt", 0);
+                else { int cheap = -1; long cv = Long.MAX_VALUE; for (int i = 0; i < N; i++) if (owner[i] == p.seat && sellValue(i) < cv) { cv = sellValue(i); cheap = i; } decideInternal(p, "sell", cheap); }
+            }
             case "CARD" -> decideInternal(p, "ack", 0);
             default -> afterResolve(p);
         }
@@ -486,7 +527,8 @@ public class MonopolyGame implements RoomGame {
         switch (pendType) {
             case "BUY" -> { if ("buy".equals(action)) doBuy(p, pendTile); else note(p.nick + " 구매 안 함"); afterResolve(p); }
             case "UPGRADE" -> { if ("build".equals(action)) doBuild(p, pendTile); else note(p.nick + " 건설 안 함"); afterResolve(p); }
-            case "TOLL" -> { if ("takeover".equals(action) && canTakeover(p, pendTile)) doTakeover(p, pendTile); else doPayToll(p, pendTile); afterResolve(p); }
+            case "TOLL" -> { if ("takeover".equals(action) && canTakeover(p, pendTile)) { doTakeover(p, pendTile); afterResolve(p); } else if (!payTollOrSettle(p, pendTile)) afterResolve(p); }
+            case "SETTLE" -> applySettle(p, action, arg);
             case "TRAVEL" -> { int d = (arg < 0 || arg >= N || arg == p.pos) ? START_TILE : arg; p.pos = d; note(p.nick + " → " + BOARD[d].name() + " 순간이동"); clearPending(); resolveLanding(p); }
             case "OLYMPIC" -> { if (arg >= 0 && arg < N && owner[arg] == p.seat) { festivalTile = arg; note(p.nick + " " + BOARD[arg].name() + " 축제 개최! 통행료 2배 🏅"); } afterResolve(p); }
             case "CARD" -> { clearPending(); afterResolve(p); }
@@ -528,7 +570,7 @@ public class MonopolyGame implements RoomGame {
 
         Pending pend = null;
         if (phase == Phase.PLAYING && step == Step.DECIDE && !"NONE".equals(pendType)) {
-            long toll = "TOLL".equals(pendType) ? tollOf(pendTile) : 0;
+            long toll = "TOLL".equals(pendType) ? tollOf(pendTile) : "SETTLE".equals(pendType) ? pendOwed : 0;
             int buyPrice = "BUY".equals(pendType) ? BOARD[pendTile].price() : 0;
             int upCost = "UPGRADE".equals(pendType) ? buildCost(pendTile) : 0;
             int takeCost = "TOLL".equals(pendType) ? takeoverCost(pendTile) : 0;
@@ -537,7 +579,7 @@ public class MonopolyGame implements RoomGame {
             Card cardView = null;
             if ("CARD".equals(pendType) && pendCard != null && meSeat == pendCardOwner)
                 cardView = new Card(pendCard.icon(), pendCard.title(), pendCard.desc());
-            List<Integer> topts = ("TRAVEL".equals(pendType) || "OLYMPIC".equals(pendType)) ? travelOptions : null;
+            List<Integer> topts = ("TRAVEL".equals(pendType) || "OLYMPIC".equals(pendType) || "SETTLE".equals(pendType)) ? travelOptions : null;
             pend = new Pending(pendType, pendTile, toll, buyPrice, upCost, takeCost, canBuild, topts, cardView);
         }
 

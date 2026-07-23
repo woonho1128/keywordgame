@@ -324,14 +324,15 @@ export default function MonopolyPage() {
                 const here = disp.map((d, seat) => (d === i ? seat : -1)).filter((x) => x >= 0);
                 const travelPick = ss.myTurn && p?.type === 'TRAVEL' && turnArrived;
                 const olympicPick = ss.myTurn && p?.type === 'OLYMPIC' && turnArrived && !!p?.travelOptions?.includes(i);
+                const sellPick = ss.myTurn && p?.type === 'SETTLE' && turnArrived && !!p?.travelOptions?.includes(i);
                 const isTurnTile = ss.turnSeat >= 0 && ss.players[ss.turnSeat] && disp[ss.turnSeat] === i;
                 const ownCol = t.ownerSeat >= 0 ? PCOL[t.ownerSeat % 4] : null;
                 return (
-                  <div key={i} onClick={() => { if (travelPick) decide('travel', i); else if (olympicPick) decide('olympic', i); }}
+                  <div key={i} onClick={() => { if (travelPick) decide('travel', i); else if (olympicPick) decide('olympic', i); else if (sellPick) decide('sell', i); }}
                     style={{ gridRow: r, gridColumn: c, ...bStyle, ...(ownCol ? { backgroundColor: ownCol } : {}), ...(isTurnTile ? { boxShadow: `0 0 0 3px ${PCOL[ss.turnSeat % 4]}` } : {}) }}
                     className={`relative rounded-md flex flex-col items-center justify-center text-center overflow-hidden px-0.5 py-0.5 transition-all
                       ${isCorner ? 'bg-indigo-50 dark:bg-slate-700/70' : ownCol ? '' : 'bg-white dark:bg-slate-800'} border border-slate-200 dark:border-slate-700
-                      ${travelPick ? 'cursor-pointer ring-1 ring-sky-400 hover:ring-2' : ''} ${olympicPick ? 'cursor-pointer ring-2 ring-amber-400 hover:ring-4' : ''} ${t.festival ? 'ring-2 ring-amber-400' : ''}`}>
+                      ${travelPick ? 'cursor-pointer ring-1 ring-sky-400 hover:ring-2' : ''} ${olympicPick ? 'cursor-pointer ring-2 ring-amber-400 hover:ring-4' : ''} ${sellPick ? 'cursor-pointer ring-2 ring-rose-500 hover:ring-4' : ''} ${t.festival ? 'ring-2 ring-amber-400' : ''}`}>
                     {ownCol && (
                       <span className="absolute top-0.5 right-0.5 w-3.5 h-3.5 rounded-full bg-white/90 ring-1 ring-black/10 flex items-center justify-center text-[7px] font-black leading-none" style={{ color: ownCol }}>{ss.players[t.ownerSeat]?.name?.[0] ?? ''}</span>
                     )}
@@ -422,6 +423,10 @@ export default function MonopolyPage() {
                   </>)}
                   {p.type === 'TRAVEL' && <p className="text-sm font-bold text-center text-sky-600 dark:text-sky-300 py-2">✈️ 이동할 칸을 보드에서 클릭!</p>}
                   {p.type === 'OLYMPIC' && <p className="text-sm font-bold text-center text-amber-600 dark:text-amber-300 py-2">🏅 축제(통행료 2배) 개최할 <b>내 도시</b>를 클릭!</p>}
+                  {p.type === 'SETTLE' && (<>
+                    <p className="text-sm font-bold text-center text-rose-600 dark:text-rose-300">💸 통행료 {won(p.toll)} 부족!<br /><span className="text-[11px] font-normal text-slate-500">보유 현금 {won(me?.cash ?? 0)} · 팔 땅(빨강 테두리)을 클릭해 마련</span></p>
+                    <button onClick={() => decide('bankrupt')} className="w-full border-2 border-rose-500 text-rose-600 dark:text-rose-300 font-bold py-2.5 rounded-lg">🏳️ 파산 선언 (탈락)</button>
+                  </>)}
                   {p.type === 'CARD' && !p.card && <p className="text-sm text-center text-slate-400 py-2">카드 확인 중…</p>}
                 </div>
               ) : null}
