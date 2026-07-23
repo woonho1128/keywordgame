@@ -87,6 +87,9 @@ export default function MonopolyPage() {
   const roomRef = useRef<string | null>(null); roomRef.current = roomCode;
   const offsetRef = useRef(0);
   const ssRef = useRef<State | null>(null); ssRef.current = ss;
+  const dispRef = useRef<number[]>([]); dispRef.current = disp;
+  const rollingRef = useRef(false); rollingRef.current = rolling;
+  const lastPosRef = useRef<Record<number, number>>({});
   const gaugeRef = useRef(0); const dirRef = useRef(1); const chargeIdRef = useRef<number | null>(null);
 
   useEffect(() => { id.current = cid(); try { setNick(localStorage.getItem('arcade_nick') || ''); } catch {} }, []);
@@ -125,6 +128,7 @@ export default function MonopolyPage() {
   useEffect(() => {
     const t = setInterval(() => {
       const s = ssRef.current; if (!s) return;
+      if (rollingRef.current) return; // 주사위 굴러가는 동안엔 말 이동 대기
       setDisp((cur) => {
         if (cur.length !== s.players.length) return s.players.map((p) => p.pos);
         let changed = false;
@@ -179,15 +183,26 @@ export default function MonopolyPage() {
   const rollApi = async (power: number) => { try { setSs(await api(`/api/v1/monopoly/roll?roomCode=${roomCode}&clientId=${id.current}&power=${Math.round(power)}`, { method: 'POST', body: '{}' })); } catch (e: any) { alert(e?.message); } };
   const decide = async (action: string, arg = -1) => { try { setSs(await api(`/api/v1/monopoly/decide?roomCode=${roomCode}&clientId=${id.current}&action=${action}&arg=${arg}`, { method: 'POST', body: '{}' })); } catch (e: any) { alert(e?.message); } };
 
-  // 주사위 텀블 후 굴리기
-  const doRoll = (power: number) => {
-    setRolling(true);
-    let ticks = 0;
-    const tId = setInterval(() => {
-      setTumble([1 + Math.floor(Math.random() * 6), 1 + Math.floor(Math.random() * 6)]);
-      if (++ticks >= 7) { clearInterval(tId); setRolling(false); rollApi(power); }
-    }, 70);
-  };
+  // 새 주사위 이동 감지 → 주사위 텀블(560ms) 먼저 재생하고, 그동안 말 이동은 대기시킴
+  useEffect(() => {
+    if (!ss || ss.turnSeat < 0) return;
+    const seat = ss.turnSeat;
+    const pos = ss.players[seat]?.pos ?? 0;
+    const prev = lastPosRef.current[seat];
+    lastPosRef.current[seat] = pos;
+    if (prev === undefined || prev === pos) return;
+    const fwd = (pos - prev + N) % N;
+    if (fwd === ss.dice[0] + ss.dice[1]) { // 주사위 눈금 합과 일치 = 굴려서 이동(순간이동/카드 아님)
+      setRolling(true);
+      window.setTimeout(() => setRolling(false), 560);
+    }
+  }, [ss]);
+  // 굴러가는 동안 주사위 눈 빠르게 바뀌는 텀블 효과
+  useEffect(() => {
+    if (!rolling) return;
+    const t = setInterval(() => setTumble([1 + Math.floor(Math.random() * 6), 1 + Math.floor(Math.random() * 6)]), 70);
+    return () => clearInterval(t);
+  }, [rolling]);
   // 차징 게이지
   const startCharge = () => {
     if (rolling || charging || !ss?.myTurn || ss.step !== 'ROLL') return;
@@ -202,12 +217,15 @@ export default function MonopolyPage() {
     if (!charging) return;
     setCharging(false);
     if (chargeIdRef.current) { clearInterval(chargeIdRef.current); chargeIdRef.current = null; }
-    doRoll(gaugeRef.current * 1.2);
+    rollApi(gaugeRef.current * 1.2);
   };
 
   const me = ss?.players.find((p) => p.me);
   const p = ss?.pending;
   const displayDice: [number, number] = rolling ? tumble : (ss?.dice ?? [1, 1]);
+  // 현재 차례 말이 애니메이션상 목적지에 도착했는지(도착 전엔 액션/카드 숨김)
+  const turnArrived = !!ss && ss.turnSeat >= 0 && disp.length === ss.players.length
+    ? disp[ss.turnSeat] === ss.players[ss.turnSeat]?.pos : true;
 
   // ── 렌더 ──
   return (
@@ -304,8 +322,8 @@ export default function MonopolyPage() {
                       : side === 'left' ? { borderLeft: `5px solid ${band}` } : { borderRight: `5px solid ${band}` }
                   : {};
                 const here = disp.map((d, seat) => (d === i ? seat : -1)).filter((x) => x >= 0);
-                const travelPick = ss.myTurn && p?.type === 'TRAVEL';
-                const olympicPick = ss.myTurn && p?.type === 'OLYMPIC' && !!p?.travelOptions?.includes(i);
+                const travelPick = ss.myTurn && p?.type === 'TRAVEL' && turnArrived;
+                const olympicPick = ss.myTurn && p?.type === 'OLYMPIC' && turnArrived && !!p?.travelOptions?.includes(i);
                 const isTurnTile = ss.turnSeat >= 0 && ss.players[ss.turnSeat] && disp[ss.turnSeat] === i;
                 const ownCol = t.ownerSeat >= 0 ? PCOL[t.ownerSeat % 4] : null;
                 return (
@@ -349,7 +367,7 @@ export default function MonopolyPage() {
                   {ss.phase === 'ENDED' ? (ss.winnerLabel ?? '종료') : `${ss.turnName ?? ''} 차례${remaining > 0 ? ` · ${remaining}s` : ''}`}
                 </div>
                 <div className="text-[11px] text-slate-500 dark:text-slate-400">기금 {won(ss.pot)}</div>
-                {ss.lastAction && <div className="text-[10px] text-slate-400 text-center max-w-[90%] truncate">{ss.lastAction}</div>}
+                {ss.lastAction && turnArrived && <div className="text-[10px] text-slate-400 text-center max-w-[90%] truncate">{ss.lastAction}</div>}
               </div>
             </div>
           </div>
@@ -379,6 +397,8 @@ export default function MonopolyPage() {
                   </button>
                   {me?.inIsland && <p className="text-[11px] text-slate-400 text-center">더블이 나오면 탈출해요</p>}
                 </>
+              ) : p && !turnArrived ? (
+                <p className="text-center text-sm text-slate-500 py-3">🚶 말 이동 중…</p>
               ) : p ? (
                 <div className="space-y-2">
                   {p.type === 'BUY' && (<>
@@ -436,7 +456,7 @@ export default function MonopolyPage() {
       )}
 
       {/* 황금열쇠 카드 모달(뽑은 본인만) */}
-      {ss?.pending?.type === 'CARD' && ss.pending.card && !cardSeen && (
+      {ss?.pending?.type === 'CARD' && ss.pending.card && !cardSeen && turnArrived && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/55 p-4">
           <div className="w-64 rounded-2xl shadow-2xl overflow-hidden" style={{ animation: 'monoFlip .5s cubic-bezier(.2,.8,.2,1)' }}>
             <div className="p-5 text-center text-white bg-amber-500">
