@@ -113,6 +113,7 @@ export default function MonopolyMockup() {
   const [turn, setTurn] = useState(0);
   const [dice, setDice] = useState<[number, number]>([3, 4]);
   const [moving, setMoving] = useState(false);
+  const [rolling, setRolling] = useState(false);
   const [mover, setMover] = useState<number | null>(null);
   const [wasDouble, setWasDouble] = useState(false);
   const [log, setLog] = useState<string[]>(['🎲 목업 데모 — 버튼을 누르고 있다가 놓으면 굴러가요.']);
@@ -128,7 +129,7 @@ export default function MonopolyMockup() {
   const addLog = (s: string) => setLog((L) => [s, ...L].slice(0, 9));
 
   const startCharge = () => {
-    if (moving || charging) return;
+    if (moving || charging || rolling) return;
     setCharging(true); gaugeRef.current = 0; dirRef.current = 1; setGauge(0);
     chargeIdRef.current = window.setInterval(() => {
       let ng = gaugeRef.current + dirRef.current * 3.4;
@@ -146,7 +147,17 @@ export default function MonopolyMockup() {
   };
 
   const roll = () => {
-    if (moving) return;
+    if (moving || rolling) return;
+    setWasDouble(false); setRolling(true);
+    // 주사위 텀블 이펙트: 눈이 빠르게 바뀌다가 멈춤
+    let ticks = 0;
+    const tId = setInterval(() => {
+      setDice([1 + Math.floor(Math.random() * 6), 1 + Math.floor(Math.random() * 6)]);
+      if (++ticks >= 8) { clearInterval(tId); setRolling(false); doMove(); }
+    }, 70);
+  };
+
+  const doMove = () => {
     const d1 = 1 + Math.floor(Math.random() * 6), d2 = 1 + Math.floor(Math.random() * 6);
     setDice([d1, d2]);
     const dbl = d1 === d2; setWasDouble(dbl);
@@ -181,6 +192,19 @@ export default function MonopolyMockup() {
   };
 
   const cur = TILES[pos[turn]];
+  const curInfo = (() => {
+    if (cur.type === 'CITY') {
+      const b = TIER_NAME[cur.tier || 0] || '땅';
+      if (cur.owner === undefined) return { icon: '🏙️', line: `가격 ${cur.price}만 · 구매 가능` };
+      if (cur.owner === turn) return { icon: '🏙️', line: `내 도시 · ${b}` };
+      return { icon: '🏙️', line: `${PLAYERS[cur.owner].name} 소유 · ${b} · 통행료!` };
+    }
+    const desc: Record<string, string> = {
+      START: '월급을 받아요', ISLAND: '무인도에 갇혀요', TRAVEL: '원하는 칸으로 이동',
+      FESTIVAL: '축제! 통행료 2배', FUND: '모인 기금을 받아요', TAX: '세금을 내요', GOLDKEY: '찬스 카드를 뽑아요',
+    };
+    return { icon: SPECIAL[cur.type]?.emoji, line: desc[cur.type] || SPECIAL[cur.type]?.sub };
+  })();
 
   return (
     <main className="min-h-screen flex flex-col items-center p-3 sm:p-5 max-w-6xl mx-auto w-full text-slate-800 dark:text-slate-100">
@@ -207,14 +231,16 @@ export default function MonopolyMockup() {
                 : {};
               const here = pos.map((p, pi) => (p === i ? pi : -1)).filter((x) => x >= 0);
               const isStep = moving && mover != null && pos[mover] === i;
+              const isMyTile = !moving && pos[turn] === i;
+              const ringCls = isStep ? 'ring-4 ring-amber-400 z-20 scale-110'
+                : isMyTile ? 'ring-4 z-10' : 'border border-slate-200 dark:border-slate-700';
               const sp = SPECIAL[t.type];
               return (
                 <div
                   key={i}
-                  style={{ gridRow: r, gridColumn: c, ...bStyle }}
+                  style={{ gridRow: r, gridColumn: c, ...bStyle, ...(isMyTile && !isStep ? { boxShadow: `0 0 0 4px ${PLAYERS[turn].color}` } : {}) }}
                   className={`relative rounded-md flex flex-col items-center justify-center text-center overflow-hidden px-0.5 py-0.5 transition-all
-                    ${isCorner ? 'bg-indigo-50 dark:bg-slate-700/70' : 'bg-white dark:bg-slate-800'}
-                    ${isStep ? 'ring-2 ring-amber-400 z-10 scale-105' : 'border border-slate-200 dark:border-slate-700'}`}
+                    ${isCorner ? 'bg-indigo-50 dark:bg-slate-700/70' : 'bg-white dark:bg-slate-800'} ${ringCls}`}
                 >
                   {t.owner !== undefined && (
                     <span className="absolute top-0.5 right-0.5 w-2 h-2 rounded-full ring-1 ring-white dark:ring-slate-900" style={{ background: PLAYERS[t.owner].color }} />
@@ -239,13 +265,15 @@ export default function MonopolyMockup() {
                       <span className="text-[7px] sm:text-[9px] font-semibold text-slate-500 leading-tight">{t.name}</span>
                     </>
                   )}
-                  {/* 말(플레이어) */}
+                  {/* 말(플레이어) — 크고 이름 첫 글자 표시 */}
                   {here.length > 0 && (
-                    <div className="absolute bottom-0.5 left-0.5 flex flex-wrap gap-0.5 max-w-[85%]">
+                    <div className="absolute inset-x-0 bottom-0 flex flex-wrap justify-center gap-0.5 pb-0.5">
                       {here.map((pi) => (
                         <span key={pi}
-                          className={`w-2.5 h-2.5 sm:w-3 sm:h-3 rounded-full ring-2 ring-white dark:ring-slate-900 shadow transition-transform ${moving && mover === pi ? 'scale-150' : ''}`}
-                          style={{ background: PLAYERS[pi].color }} />
+                          className={`w-4 h-4 sm:w-5 sm:h-5 rounded-full ring-2 ring-white dark:ring-slate-900 shadow-md flex items-center justify-center text-[8px] sm:text-[10px] font-black text-white leading-none ${moving && mover === pi ? 'animate-bounce scale-110' : ''}`}
+                          style={{ background: PLAYERS[pi].color }}>
+                          {PLAYERS[pi].name[0]}
+                        </span>
                       ))}
                     </div>
                   )}
@@ -256,15 +284,23 @@ export default function MonopolyMockup() {
             {/* 중앙 패널 */}
             <div style={{ gridRow: '2 / 9', gridColumn: '2 / 9' }} className="flex flex-col items-center justify-center gap-2 rounded-xl bg-white/70 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 m-1">
               <div className="text-2xl sm:text-4xl font-black tracking-tight text-indigo-600 dark:text-indigo-300 -rotate-6">부루마블</div>
-              <div className="flex items-center gap-2">
-                <DiceFace n={dice[0]} rolling={moving} />
-                <DiceFace n={dice[1]} rolling={moving} />
-                <span className="text-lg font-extrabold">= {dice[0] + dice[1]}</span>
+              <div className={`flex items-center gap-2 ${rolling ? 'animate-pulse' : ''}`}>
+                <DiceFace n={dice[0]} rolling={rolling} />
+                <DiceFace n={dice[1]} rolling={rolling} />
+                {!rolling && <span className="text-lg font-extrabold">= {dice[0] + dice[1]}</span>}
               </div>
               {wasDouble && <div className="text-sm font-black text-pink-500 animate-pulse">✨ 더블!</div>}
               <div className="text-xs sm:text-sm font-bold flex items-center gap-1.5">
                 <span className="w-3 h-3 rounded-full" style={{ background: PLAYERS[turn].color }} />
-                {PLAYERS[turn].name} 차례 · {cur.name}
+                {PLAYERS[turn].name} 차례
+              </div>
+              {/* 지금 밟은 칸 정보 */}
+              <div className="px-3 py-1.5 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-center max-w-[92%] shadow-sm">
+                <div className="text-sm sm:text-base font-extrabold flex items-center justify-center gap-1">
+                  <span>{curInfo.icon}</span>
+                  <span>{cur.name === '파주' ? '👑파주' : cur.name}</span>
+                </div>
+                <div className="text-[11px] sm:text-xs text-slate-500 dark:text-slate-400">{curInfo.line}</div>
               </div>
             </div>
           </div>
@@ -283,9 +319,9 @@ export default function MonopolyMockup() {
             </div>
             <button
               onPointerDown={startCharge} onPointerUp={releaseCharge} onPointerLeave={releaseCharge}
-              disabled={moving}
+              disabled={moving || rolling}
               className="w-full bg-indigo-600 text-white font-extrabold py-3 rounded-lg disabled:opacity-50 text-lg select-none touch-none active:scale-[0.98]">
-              {moving ? '이동 중…' : charging ? '⚡ 차징 중…' : `🎲 ${PLAYERS[turn].name} 굴리기 (누르기)`}
+              {rolling ? '🎲 굴리는 중…' : moving ? '이동 중…' : charging ? '⚡ 차징 중…' : `🎲 ${PLAYERS[turn].name} 굴리기 (누르기)`}
             </button>
             <div className="grid grid-cols-3 gap-1.5">
               <button className="text-xs font-bold py-2 rounded-lg border border-slate-300 dark:border-slate-600 opacity-60">💰 구매</button>
