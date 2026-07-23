@@ -9,15 +9,35 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 class MonopolyGameTest {
 
     private MonopolyGame twoPlayers() {
-        MonopolyGame g = new MonopolyGame("host", "방장");
+        MonopolyGame g = new MonopolyGame("host", "방장", false);
         g.join("p2", "친구");
         return g;
     }
 
     @Test
     void 최소인원_미달_시작불가() {
-        MonopolyGame g = new MonopolyGame("host", "방장");
+        MonopolyGame g = new MonopolyGame("host", "방장", false);
         assertThatThrownBy(() -> g.start("host")).hasMessageContaining("최소 2명");
+    }
+
+    @Test
+    void 팀전은_4명_필요() {
+        MonopolyGame g = new MonopolyGame("host", "방장", true);
+        g.join("p2", "친구");
+        assertThatThrownBy(() -> g.start("host")).hasMessageContaining("팀전은 4명");
+    }
+
+    @Test
+    void 팀전_4명이면_시작되고_2팀으로_나뉜다() {
+        MonopolyGame g = new MonopolyGame("host", "방장", true);
+        g.join("p2", "b"); g.join("p3", "c"); g.join("p4", "d");
+        g.start("host");
+        MonopolyState s = g.me("host");
+        assertThat(s.teamMode()).isTrue();
+        assertThat(s.players().get(0).team()).isEqualTo(0);
+        assertThat(s.players().get(1).team()).isEqualTo(1);
+        assertThat(s.players().get(2).team()).isEqualTo(0);
+        assertThat(s.players().get(3).team()).isEqualTo(1);
     }
 
     @Test
@@ -64,7 +84,7 @@ class MonopolyGameTest {
 
     @Test
     void 봇_추가하고_시작_가능() {
-        MonopolyGame g = new MonopolyGame("host", "방장");
+        MonopolyGame g = new MonopolyGame("host", "방장", false);
         g.addBot("host", "NORMAL");
         g.start("host");
         assertThat(g.me("host").phase()).isEqualTo("PLAYING");

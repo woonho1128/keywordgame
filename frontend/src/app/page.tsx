@@ -9,10 +9,10 @@ const GAME_SLUG: Record<string, string> = {
   mafia: 'mafia', 'mafia-jobs': 'jobmafia', avalon: 'avalon', codenames: 'codenames',
   rummikub: 'rummikub', halligalli: 'halligalli', lexio: 'lexio', bingo: 'bingo',
   gartic: 'gartic', othello: 'othello', coup: 'coup', omok: 'omok', horserace: 'horserace',
-  sixnimmt: 'sixnimmt', 'tetris-battle': 'tetris-battle', yacht: 'yacht', mojo: 'mojo', yut: 'yut',
+  sixnimmt: 'sixnimmt', 'tetris-battle': 'tetris-battle', yacht: 'yacht', mojo: 'mojo', yut: 'yut', monopoly: 'monopoly',
 };
 // 엔트리형(방을 localStorage로 복원하지 않는) 게임 → ?join=CODE 쿼리로 자동 참가
-const ENTRY_GAMES = new Set(['sixnimmt', 'tetris-battle', 'yacht', 'mojo', 'yut']);
+const ENTRY_GAMES = new Set(['sixnimmt', 'tetris-battle', 'yacht', 'mojo', 'yut', 'monopoly']);
 
 type Game = {
   href: string;
@@ -49,7 +49,7 @@ const GAMES: Game[] = [
   { href: '/bingo', title: '🔢 빙고', desc: '3×3~5×5 판을 채우고, 뽑히는 숫자로 먼저 빙고 줄을 완성하면 승리 (2~8인).', hover: 'hit', solo: false },
   { href: '/snake', title: '🐍 지렁이', desc: '먹이를 먹고 커지며 봇과 경쟁하는 지렁이 게임. 랭킹 등록 (혼자 플레이).', hover: 'hit', solo: true, soloLabel: '🤖 봇과 1인 가능' },
   { href: '/territory', title: '🗺️ 땅따먹기', desc: '영역을 그려 땅을 넓히고 봇과 경쟁하는 게임. 랭킹 등록 (혼자 플레이).', hover: 'hit', solo: true, soloLabel: '🤖 봇과 1인 가능' },
-  { href: '/monopoly', title: '🏙️ 부루마블', desc: '도시를 사고 건물을 올려 통행료로 상대를 파산시키는 보드게임. 독점 라인·랜드마크·인수·황금열쇠. 봇과 2~4인. (개발 중 · 목업)', hover: 'move', solo: true, soloLabel: '🛠️ 개발 중' },
+  { href: '/monopoly', title: '🏙️ 부루마블', desc: '도시를 사고 건물을 올려 통행료로 상대를 파산시키는 보드게임. 독점 라인·랜드마크·인수·황금열쇠, 개인전/팀전(2:2). 봇과 2~4인.', hover: 'move', solo: true, soloLabel: '🤖 봇과 1인 가능' },
 ];
 
 export default function HomePage() {

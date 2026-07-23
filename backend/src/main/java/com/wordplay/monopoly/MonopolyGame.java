@@ -77,7 +77,7 @@ public class MonopolyGame implements RoomGame {
     static final class P {
         String clientId, nick, botLevel;
         boolean bot, host, left;
-        int color, seat;
+        int color, seat, team;
         long cash = START_CASH;
         int pos = 0;
         boolean alive = true, inIsland = false;
@@ -102,6 +102,7 @@ public class MonopolyGame implements RoomGame {
     };
 
     private final String hostClientId;
+    private final boolean teamMode;
     private Phase phase = Phase.LOBBY;
     private Step step = Step.ROLL;
     private final List<P> players = new ArrayList<>();
@@ -127,8 +128,9 @@ public class MonopolyGame implements RoomGame {
     private final List<String> log = new ArrayList<>();
     private long turnEndsAt = 0, botAt = 0, lastActive = System.currentTimeMillis();
 
-    public MonopolyGame(String hostClientId, String nick) {
+    public MonopolyGame(String hostClientId, String nick, boolean teamMode) {
         this.hostClientId = hostClientId;
+        this.teamMode = teamMode;
         for (int i = 0; i < N; i++) { owner[i] = -1; tier[i] = 0; }
         P host = new P(); host.clientId = hostClientId; host.nick = clean(nick); host.host = true; host.lastSeen = now();
         players.add(host);
@@ -157,9 +159,11 @@ public class MonopolyGame implements RoomGame {
         touch(); requireHost(clientId);
         if (phase != Phase.LOBBY) throw bad("이미 시작되었습니다");
         if (activeCount() < 2) throw bad("최소 2명(봇 포함)이 필요합니다");
+        if (teamMode && activeCount() != 4) throw bad("팀전은 4명이 필요합니다");
         for (int i = 0; i < players.size(); i++) {
             P p = players.get(i);
-            p.seat = i; p.color = i; p.cash = START_CASH; p.pos = 0;
+            p.seat = i; p.color = i; p.team = teamMode ? (i % 2) : i;
+            p.cash = START_CASH; p.pos = 0;
             p.alive = true; p.inIsland = false; p.islandTurns = 0; p.tollImmunity = false;
         }
         phase = Phase.PLAYING;
@@ -254,6 +258,10 @@ public class MonopolyGame implements RoomGame {
         } else if (owner[i] == p.seat) {
             if (tier[i] < 4 && p.cash >= buildCost(i)) { pendType = "UPGRADE"; pendTile = i; step = Step.DECIDE; note(p.nick + " 내 도시 " + t.name() + " · 건설 가능(" + buildCost(i) + "만)"); }
             else { note(p.nick + " 내 도시 " + t.name() + " 도착"); afterResolve(p); }
+        } else if (teamMode && players.get(owner[i]).team == p.team) {
+            // 팀원 도시: 통행료 면제
+            note(p.nick + " 팀원(" + players.get(owner[i]).nick + ") 도시 " + t.name() + " 도착 · 통행료 면제");
+            afterResolve(p);
         } else {
             // 남의 도시: 통행료 or 인수
             long toll = tollOf(i);
@@ -343,7 +351,11 @@ public class MonopolyGame implements RoomGame {
         note(p.nick + " → " + owr.nick + " 통행료 " + pay + "만 지불");
         checkBankrupt(p);
     }
-    private boolean canTakeover(P p, int i) { return owner[i] != -1 && owner[i] != p.seat && p.cash >= takeoverCost(i); }
+    private boolean canTakeover(P p, int i) {
+        if (owner[i] == -1 || owner[i] == p.seat) return false;
+        if (teamMode && players.get(owner[i]).team == p.team) return false;
+        return p.cash >= takeoverCost(i);
+    }
     private void doTakeover(P p, int i) {
         long cost = takeoverCost(i); P owr = players.get(owner[i]);
         p.cash -= cost; owr.cash += cost; owner[i] = p.seat;
@@ -369,12 +381,25 @@ public class MonopolyGame implements RoomGame {
     }
 
     private void checkWin() {
-        int alive = 0, last = -1;
-        for (P p : players) if (p.alive && !p.left) { alive++; last = p.seat; }
-        if (alive <= 1 && phase == Phase.PLAYING) {
+        if (phase != Phase.PLAYING) return;
+        // 생존 팀 수 계산(개인전은 팀=seat이라 각자 다른 팀)
+        int aliveTeam = -1, teams = 0, last = -1;
+        boolean[] seen = new boolean[players.size() + 1];
+        for (P p : players) if (p.alive && !p.left) {
+            last = p.seat;
+            if (!seen[p.team]) { seen[p.team] = true; teams++; aliveTeam = p.team; }
+        }
+        if (teams <= 1) {
             phase = Phase.ENDED;
             winnerSeat = last;
-            winnerLabel = last >= 0 ? players.get(last).nick + " 우승! 🏆" : "무승부";
+            if (aliveTeam < 0) { winnerLabel = "무승부"; }
+            else if (teamMode) {
+                StringBuilder names = new StringBuilder();
+                for (P p : players) if (p.team == aliveTeam) { if (names.length() > 0) names.append("·"); names.append(p.nick); }
+                winnerLabel = names + " 팀 우승! 🏆";
+            } else {
+                winnerLabel = players.get(last).nick + " 우승! 🏆";
+            }
             note("게임 종료 · " + winnerLabel);
         }
     }
@@ -479,7 +504,7 @@ public class MonopolyGame implements RoomGame {
             P p = players.get(i);
             if (p.left && phase == Phase.LOBBY) continue;
             int props = 0; for (int k = 0; k < N; k++) if (owner[k] == p.seat) props++;
-            pv.add(new PlayerView(p.seat, p.nick, p.bot, p.host, p == me, p.color, p.cash, p.pos, p.alive, p.inIsland, p.left, props));
+            pv.add(new PlayerView(p.seat, p.nick, p.bot, p.host, p == me, p.color, p.team, p.cash, p.pos, p.alive, p.inIsland, p.left, props));
         }
         List<TileView> tv = new ArrayList<>();
         for (int i = 0; i < N; i++) {
@@ -506,6 +531,7 @@ public class MonopolyGame implements RoomGame {
 
         return new MonopolyState(
                 phase.name(),
+                teamMode,
                 clientId != null && clientId.equals(hostClientId),
                 me != null,
                 pv, tv, turnSeat, turnName, myTurn, meSeat,

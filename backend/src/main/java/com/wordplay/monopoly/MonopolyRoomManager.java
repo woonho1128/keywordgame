@@ -16,7 +16,7 @@ public class MonopolyRoomManager {
     private final RoomRegistry<MonopolyGame> reg = new RoomRegistry<>("monopoly");
 
     public String create(String clientId, NewMonopolyRequest req) {
-        MonopolyGame game = new MonopolyGame(clientId, req.nick());
+        MonopolyGame game = new MonopolyGame(clientId, req.nick(), req.teamMode());
         try {
             return reg.add(game);
         } catch (IllegalStateException e) {
