@@ -537,7 +537,7 @@ public class MonopolyGame implements RoomGame {
             Card cardView = null;
             if ("CARD".equals(pendType) && pendCard != null && meSeat == pendCardOwner)
                 cardView = new Card(pendCard.icon(), pendCard.title(), pendCard.desc());
-            List<Integer> topts = "TRAVEL".equals(pendType) ? travelOptions : null;
+            List<Integer> topts = ("TRAVEL".equals(pendType) || "OLYMPIC".equals(pendType)) ? travelOptions : null;
             pend = new Pending(pendType, pendTile, toll, buyPrice, upCost, takeCost, canBuild, topts, cardView);
         }
 
