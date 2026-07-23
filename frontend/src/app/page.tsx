@@ -49,6 +49,7 @@ const GAMES: Game[] = [
   { href: '/bingo', title: '🔢 빙고', desc: '3×3~5×5 판을 채우고, 뽑히는 숫자로 먼저 빙고 줄을 완성하면 승리 (2~8인).', hover: 'hit', solo: false },
   { href: '/snake', title: '🐍 지렁이', desc: '먹이를 먹고 커지며 봇과 경쟁하는 지렁이 게임. 랭킹 등록 (혼자 플레이).', hover: 'hit', solo: true, soloLabel: '🤖 봇과 1인 가능' },
   { href: '/territory', title: '🗺️ 땅따먹기', desc: '영역을 그려 땅을 넓히고 봇과 경쟁하는 게임. 랭킹 등록 (혼자 플레이).', hover: 'hit', solo: true, soloLabel: '🤖 봇과 1인 가능' },
+  { href: '/monopoly', title: '🏙️ 부루마블', desc: '도시를 사고 건물을 올려 통행료로 상대를 파산시키는 보드게임. 독점 라인·랜드마크·인수·황금열쇠. 봇과 2~4인. (개발 중 · 목업)', hover: 'move', solo: true, soloLabel: '🛠️ 개발 중' },
 ];
 
 export default function HomePage() {
