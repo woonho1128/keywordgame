@@ -234,7 +234,7 @@ public class MonopolyGame implements RoomGame {
             case "ISLAND" -> { note(p.nick + " 무인도 도착 🏝️"); sendToIsland(p); endTurn(); }
             case "TAX" -> { long tax = Math.min(p.cash, Math.max(50, p.cash / 10)); p.cash -= tax; pot += tax; note(p.nick + " 국세청 · 세금 -" + tax + "만(기금 적립)"); afterResolve(p); }
             case "FUND" -> { long g = pot; pot = 0; p.cash += g; note(p.nick + " 사회복지기금 +" + g + "만 수령 🎁"); afterResolve(p); }
-            case "FESTIVAL" -> { openFestival(p); afterResolve(p); }
+            case "FESTIVAL" -> beginOlympic(p);
             case "TRAVEL" -> beginTravel(p);
             case "GOLDKEY" -> drawCard(p);
             case "CITY" -> resolveCity(p);
@@ -242,12 +242,13 @@ public class MonopolyGame implements RoomGame {
         }
     }
 
-    private void openFestival(P p) {
-        // 올림픽: 내가 가진 도시 중 가장 비싼 곳을 축제 도시로(통행료 2배). 없으면 효과 없음.
-        int best = -1, bestPrice = -1;
-        for (int i = 0; i < N; i++) if (owner[i] == p.seat && BOARD[i].price() > bestPrice) { bestPrice = BOARD[i].price(); best = i; }
-        if (best >= 0) { festivalTile = best; note(p.nick + " 올림픽 개최! " + BOARD[best].name() + " 통행료 2배 🏅"); }
-        else note(p.nick + " 올림픽 도착(개최할 도시 없음)");
+    private void beginOlympic(P p) {
+        // 올림픽: 내가 가진 도시 중 하나를 골라 축제 개최(통행료 2배). 없으면 효과 없음.
+        List<Integer> mine = new ArrayList<>();
+        for (int i = 0; i < N; i++) if (owner[i] == p.seat) mine.add(i);
+        if (mine.isEmpty()) { note(p.nick + " 올림픽 도착(개최할 도시 없음)"); afterResolve(p); return; }
+        travelOptions = mine; pendType = "OLYMPIC"; pendTile = -1; step = Step.DECIDE;
+        note(p.nick + " 올림픽 🏅 · 축제 개최할 내 도시 선택(통행료 2배)");
     }
 
     private void resolveCity(P p) {
@@ -279,11 +280,14 @@ public class MonopolyGame implements RoomGame {
 
     private void drawCard(P p) {
         Chance c = CARDS[ThreadLocalRandom.current().nextInt(CARDS.length)];
-        note(p.nick + " 🔑 황금열쇠 카드를 뽑았다(내용 비공개)");
+        // 우대권(다음 통행료 면제)만 비공개 — 상대가 모르게. 그 외(즉발·전체지급)는 로그에 내용 공개.
+        boolean secret = isSecret(c);
+        if (secret) note(p.nick + " 🔑 황금열쇠 카드를 뽑았다(비공개)");
+        else note(p.nick + " 🔑 황금열쇠 · " + c.title + " — " + c.desc);
         applyCard(p, c);
-        // 카드 내용은 소유자에게만 표시(잠깐). 이동을 유발하는 카드는 applyCard가 처리.
         pendType = "CARD"; pendTile = -1; pendCard = c; pendCardOwner = p.seat; step = Step.DECIDE;
     }
+    private static boolean isSecret(Chance c) { return "IMMUNITY".equals(c.kind()); }
 
     private void applyCard(P p, Chance c) {
         switch (c.kind()) {
@@ -327,6 +331,10 @@ public class MonopolyGame implements RoomGame {
                 p.pos = dest; note(p.nick + " → " + BOARD[dest].name() + " 순간이동");
                 clearPending();
                 resolveLanding(p); // 도착 칸 효과 적용
+            }
+            case "OLYMPIC" -> {
+                if (arg >= 0 && arg < N && owner[arg] == p.seat) { festivalTile = arg; note(p.nick + " " + BOARD[arg].name() + " 축제 개최! 통행료 2배 🏅"); }
+                afterResolve(p);
             }
             case "CARD" -> { clearPending(); afterResolve(p); }
             default -> afterResolve(p);
@@ -466,10 +474,8 @@ public class MonopolyGame implements RoomGame {
                 boolean take = "HARD".equals(p.botLevel) && canTakeover(p, pendTile) && BOARD[pendTile].price() >= 200;
                 decideInternal(p, take ? "takeover" : "pay", 0);
             }
-            case "TRAVEL" -> {
-                int dest = botTravelPick(p);
-                decideInternal(p, "travel", dest);
-            }
+            case "TRAVEL" -> decideInternal(p, "travel", botTravelPick(p));
+            case "OLYMPIC" -> decideInternal(p, "olympic", botOlympicPick(p));
             case "CARD" -> decideInternal(p, "ack", 0);
             default -> afterResolve(p);
         }
@@ -482,9 +488,15 @@ public class MonopolyGame implements RoomGame {
             case "UPGRADE" -> { if ("build".equals(action)) doBuild(p, pendTile); else note(p.nick + " 건설 안 함"); afterResolve(p); }
             case "TOLL" -> { if ("takeover".equals(action) && canTakeover(p, pendTile)) doTakeover(p, pendTile); else doPayToll(p, pendTile); afterResolve(p); }
             case "TRAVEL" -> { int d = (arg < 0 || arg >= N || arg == p.pos) ? START_TILE : arg; p.pos = d; note(p.nick + " → " + BOARD[d].name() + " 순간이동"); clearPending(); resolveLanding(p); }
+            case "OLYMPIC" -> { if (arg >= 0 && arg < N && owner[arg] == p.seat) { festivalTile = arg; note(p.nick + " " + BOARD[arg].name() + " 축제 개최! 통행료 2배 🏅"); } afterResolve(p); }
             case "CARD" -> { clearPending(); afterResolve(p); }
             default -> afterResolve(p);
         }
+    }
+    private int botOlympicPick(P p) {
+        int best = -1, bp = -1;
+        for (int i = 0; i < N; i++) if (owner[i] == p.seat && BOARD[i].price() > bp) { bp = BOARD[i].price(); best = i; }
+        return best;
     }
     private int botTravelPick(P p) {
         // 빈 도시 중 가장 비싼 곳(사서 라인 노림), 없으면 출발

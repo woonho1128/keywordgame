@@ -305,14 +305,21 @@ export default function MonopolyPage() {
                   : {};
                 const here = disp.map((d, seat) => (d === i ? seat : -1)).filter((x) => x >= 0);
                 const travelPick = ss.myTurn && p?.type === 'TRAVEL';
+                const olympicPick = ss.myTurn && p?.type === 'OLYMPIC' && !!p?.travelOptions?.includes(i);
                 const isTurnTile = ss.turnSeat >= 0 && ss.players[ss.turnSeat] && disp[ss.turnSeat] === i;
+                const ownCol = t.ownerSeat >= 0 ? PCOL[t.ownerSeat % 4] : null;
                 return (
-                  <div key={i} onClick={() => { if (travelPick) decide('travel', i); }}
-                    style={{ gridRow: r, gridColumn: c, ...bStyle, ...(isTurnTile ? { boxShadow: `0 0 0 3px ${PCOL[ss.turnSeat % 4]}` } : {}) }}
+                  <div key={i} onClick={() => { if (travelPick) decide('travel', i); else if (olympicPick) decide('olympic', i); }}
+                    style={{ gridRow: r, gridColumn: c, ...bStyle, ...(ownCol ? { backgroundColor: ownCol + '2e' } : {}), ...(isTurnTile ? { boxShadow: `0 0 0 3px ${PCOL[ss.turnSeat % 4]}` } : {}) }}
                     className={`relative rounded-md flex flex-col items-center justify-center text-center overflow-hidden px-0.5 py-0.5 transition-all
                       ${isCorner ? 'bg-indigo-50 dark:bg-slate-700/70' : 'bg-white dark:bg-slate-800'} border border-slate-200 dark:border-slate-700
-                      ${travelPick ? 'cursor-pointer ring-1 ring-sky-400 hover:ring-2' : ''} ${t.festival ? 'ring-2 ring-amber-400' : ''}`}>
-                    {t.ownerSeat >= 0 && <span className="absolute top-0.5 right-0.5 w-2 h-2 rounded-full ring-1 ring-white dark:ring-slate-900" style={{ background: PCOL[t.ownerSeat % 4] }} />}
+                      ${travelPick ? 'cursor-pointer ring-1 ring-sky-400 hover:ring-2' : ''} ${olympicPick ? 'cursor-pointer ring-2 ring-amber-400 hover:ring-4' : ''} ${t.festival ? 'ring-2 ring-amber-400' : ''}`}>
+                    {ownCol && (
+                      <>
+                        <span className="absolute top-0.5 right-0.5 w-3.5 h-3.5 rounded-full ring-1 ring-white dark:ring-slate-900 flex items-center justify-center text-[7px] font-black text-white leading-none" style={{ background: ownCol }}>{ss.players[t.ownerSeat]?.name?.[0] ?? ''}</span>
+                        <span className="absolute inset-x-0 bottom-0 h-1" style={{ background: ownCol }} />
+                      </>
+                    )}
                     {isCorner ? (
                       <><span className="text-base sm:text-xl leading-none">{SPECIAL[t.type]?.emoji}</span><span className="text-[8px] sm:text-[10px] font-bold leading-tight mt-0.5">{t.name}</span></>
                     ) : t.type === 'CITY' ? (
@@ -397,6 +404,7 @@ export default function MonopolyPage() {
                     )}
                   </>)}
                   {p.type === 'TRAVEL' && <p className="text-sm font-bold text-center text-sky-600 dark:text-sky-300 py-2">✈️ 이동할 칸을 보드에서 클릭!</p>}
+                  {p.type === 'OLYMPIC' && <p className="text-sm font-bold text-center text-amber-600 dark:text-amber-300 py-2">🏅 축제(통행료 2배) 개최할 <b>내 도시</b>를 클릭!</p>}
                   {p.type === 'CARD' && !p.card && <p className="text-sm text-center text-slate-400 py-2">카드 확인 중…</p>}
                 </div>
               ) : null}
