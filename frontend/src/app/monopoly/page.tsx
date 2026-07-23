@@ -310,21 +310,18 @@ export default function MonopolyPage() {
                 const ownCol = t.ownerSeat >= 0 ? PCOL[t.ownerSeat % 4] : null;
                 return (
                   <div key={i} onClick={() => { if (travelPick) decide('travel', i); else if (olympicPick) decide('olympic', i); }}
-                    style={{ gridRow: r, gridColumn: c, ...bStyle, ...(ownCol ? { backgroundColor: ownCol + '2e' } : {}), ...(isTurnTile ? { boxShadow: `0 0 0 3px ${PCOL[ss.turnSeat % 4]}` } : {}) }}
+                    style={{ gridRow: r, gridColumn: c, ...bStyle, ...(ownCol ? { backgroundColor: ownCol } : {}), ...(isTurnTile ? { boxShadow: `0 0 0 3px ${PCOL[ss.turnSeat % 4]}` } : {}) }}
                     className={`relative rounded-md flex flex-col items-center justify-center text-center overflow-hidden px-0.5 py-0.5 transition-all
-                      ${isCorner ? 'bg-indigo-50 dark:bg-slate-700/70' : 'bg-white dark:bg-slate-800'} border border-slate-200 dark:border-slate-700
+                      ${isCorner ? 'bg-indigo-50 dark:bg-slate-700/70' : ownCol ? '' : 'bg-white dark:bg-slate-800'} border border-slate-200 dark:border-slate-700
                       ${travelPick ? 'cursor-pointer ring-1 ring-sky-400 hover:ring-2' : ''} ${olympicPick ? 'cursor-pointer ring-2 ring-amber-400 hover:ring-4' : ''} ${t.festival ? 'ring-2 ring-amber-400' : ''}`}>
                     {ownCol && (
-                      <>
-                        <span className="absolute top-0.5 right-0.5 w-3.5 h-3.5 rounded-full ring-1 ring-white dark:ring-slate-900 flex items-center justify-center text-[7px] font-black text-white leading-none" style={{ background: ownCol }}>{ss.players[t.ownerSeat]?.name?.[0] ?? ''}</span>
-                        <span className="absolute inset-x-0 bottom-0 h-1" style={{ background: ownCol }} />
-                      </>
+                      <span className="absolute top-0.5 right-0.5 w-3.5 h-3.5 rounded-full bg-white/90 ring-1 ring-black/10 flex items-center justify-center text-[7px] font-black leading-none" style={{ color: ownCol }}>{ss.players[t.ownerSeat]?.name?.[0] ?? ''}</span>
                     )}
                     {isCorner ? (
                       <><span className="text-base sm:text-xl leading-none">{SPECIAL[t.type]?.emoji}</span><span className="text-[8px] sm:text-[10px] font-bold leading-tight mt-0.5">{t.name}</span></>
                     ) : t.type === 'CITY' ? (
-                      <><span className="text-[8px] sm:text-[11px] font-bold leading-tight">{t.name === '파주' ? '👑파주' : t.name}</span>
-                        {t.tier ? <span className="text-[9px] sm:text-xs leading-none">{TIER[t.tier]}</span> : <span className="text-[7px] sm:text-[9px] text-slate-400 leading-none">{t.price}만</span>}</>
+                      <><span className={`text-[8px] sm:text-[11px] font-bold leading-tight ${ownCol ? 'text-white' : ''}`} style={ownCol ? { textShadow: '0 1px 2px rgba(0,0,0,.55)' } : undefined}>{t.name === '파주' ? '👑파주' : t.name}</span>
+                        {t.tier ? <span className="text-[10px] sm:text-sm leading-none drop-shadow">{TIER[t.tier]}</span> : ownCol ? null : <span className="text-[7px] sm:text-[9px] text-slate-400 leading-none">{t.price}만</span>}</>
                     ) : (
                       <><span className="text-sm sm:text-lg leading-none">{SPECIAL[t.type]?.emoji}</span><span className="text-[7px] sm:text-[9px] font-semibold text-slate-500 leading-tight">{t.name}</span></>
                     )}
