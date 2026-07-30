@@ -45,6 +45,8 @@ export default function SherlockPage() {
   const [mode, setMode] = useState<'all' | 'one' | 'accuse' | null>(null);
   const [target, setTarget] = useState<number | null>(null);
   const [notes, setNotes] = useState<Record<number, 'x' | 'star'>>({});
+  const [cellNotes, setCellNotes] = useState<Record<string, 'o' | 'x'>>({});
+  const cycleCell = (charId: number, item: number) => setCellNotes((m) => { const k = `${charId}:${item}`; const cur = m[k]; const nn = { ...m }; if (cur === 'o') nn[k] = 'x'; else if (cur === 'x') delete nn[k]; else nn[k] = 'o'; return nn; });
 
   const roomRef = useRef<string | null>(null); roomRef.current = roomCode;
   const offsetRef = useRef(0);
@@ -225,27 +227,43 @@ export default function SherlockPage() {
               </div>
             </div>
 
-            {/* 추리판: 캐릭터 목록(메모 토글) */}
-            <div className="rounded-xl border border-slate-200 dark:border-slate-700 p-3">
-              <p className="text-sm font-bold text-slate-600 dark:text-slate-300 mb-2">용의자 {ss.deck.length}명 · 탭하면 ✗제외 / ⭐의심 메모</p>
-              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-1.5">
-                {ss.deck.map((c) => {
-                  const mine = ss.myCards.includes(c.id);
-                  const nt = notes[c.id];
-                  return (
-                    <button key={c.id} onClick={() => cycleNote(c.id)}
-                      className={`relative text-left rounded-lg border px-2 py-1.5 ${nt === 'x' ? 'opacity-45 border-slate-300 dark:border-slate-700' : nt === 'star' ? 'border-amber-400 bg-amber-50 dark:bg-amber-500/10' : 'border-slate-200 dark:border-slate-700'}`}>
-                      <div className="flex items-center gap-1">
-                        <span className="text-[13px] font-bold truncate">{c.name}</span>
-                        {mine && <span className="text-[9px] text-emerald-500 shrink-0">내카드</span>}
-                        {nt === 'x' && <span className="ml-auto text-rose-500 font-black">✗</span>}
-                        {nt === 'star' && <span className="ml-auto">⭐</span>}
-                      </div>
-                      <div className="text-sm leading-tight">{c.items.map((i) => emo(ss.items[i])).join('')}</div>
-                    </button>
-                  );
-                })}
+            {/* 추리 격자판: 행=인물 / 열=아이템, 칸 탭 ⭕→❌→해제, 이름 탭 제외/의심 */}
+            <div className="rounded-xl border border-slate-200 dark:border-slate-700 p-2">
+              <p className="text-sm font-bold text-slate-600 dark:text-slate-300 mb-1 px-1">추리판 · 칸 탭 ⭕/❌ · 이름 탭 제외(✗)/의심(⭐)</p>
+              <div className="overflow-x-auto">
+                <table className="border-collapse text-center select-none">
+                  <thead>
+                    <tr>
+                      <th className="sticky left-0 z-10 bg-white dark:bg-slate-900 px-1 py-1 text-[10px] text-slate-400 text-left">용의자</th>
+                      {ss.items.map((it, i) => <th key={i} className="w-7 sm:w-8 py-1 text-base" title={it}>{emo(it)}</th>)}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {ss.deck.map((c) => {
+                      const nt = notes[c.id]; const mine = ss.myCards.includes(c.id);
+                      return (
+                        <tr key={c.id} className={nt === 'x' ? 'opacity-40' : ''}>
+                          <td onClick={() => cycleNote(c.id)}
+                            className={`sticky left-0 z-10 bg-white dark:bg-slate-900 text-left text-[11px] font-bold px-1 py-0.5 whitespace-nowrap cursor-pointer max-w-[92px] truncate ${nt === 'star' ? 'text-amber-500' : ''}`}>
+                            {nt === 'star' ? '⭐' : nt === 'x' ? '✗' : mine ? '🟢' : ''}{c.name}
+                          </td>
+                          {ss.items.map((_, i) => {
+                            const has = c.items.includes(i);
+                            const cn = cellNotes[`${c.id}:${i}`];
+                            return (
+                              <td key={i} onClick={() => cycleCell(c.id, i)}
+                                className={`w-7 h-7 sm:w-8 sm:h-8 border border-slate-200 dark:border-slate-700 cursor-pointer text-sm ${has ? 'bg-slate-100 dark:bg-slate-700/40' : ''}`}>
+                                {cn === 'o' ? '⭕' : cn === 'x' ? '❌' : has ? <span className="opacity-40 text-[11px]">{emo(ss.items[i])}</span> : ''}
+                              </td>
+                            );
+                          })}
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
               </div>
+              <p className="text-[11px] text-slate-400 mt-1 px-1">🟢=내 카드 · 옅은 칸=그 인물이 실제로 가진 아이템(참조)</p>
             </div>
           </div>
 
