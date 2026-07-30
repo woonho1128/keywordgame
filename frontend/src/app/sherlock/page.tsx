@@ -46,8 +46,8 @@ export default function SherlockPage() {
   const [mode, setMode] = useState<'all' | 'one' | 'accuse' | null>(null);
   const [target, setTarget] = useState<number | null>(null);
   const [notes, setNotes] = useState<Record<number, 'x' | 'star'>>({});
-  const [cellNotes, setCellNotes] = useState<Record<string, 'o' | 'x'>>({});
-  const cycleCell = (charId: number, item: number) => setCellNotes((m) => { const k = `${charId}:${item}`; const cur = m[k]; const nn = { ...m }; if (cur === 'o') nn[k] = 'x'; else if (cur === 'x') delete nn[k]; else nn[k] = 'o'; return nn; });
+  const [cellNotes, setCellNotes] = useState<Record<string, 'o' | 'tri' | 'x'>>({});
+  const cycleCell = (charId: number, item: number) => setCellNotes((m) => { const k = `${charId}:${item}`; const cur = m[k]; const nn = { ...m }; if (cur === 'o') nn[k] = 'tri'; else if (cur === 'tri') nn[k] = 'x'; else if (cur === 'x') delete nn[k]; else nn[k] = 'o'; return nn; });
 
   const roomRef = useRef<string | null>(null); roomRef.current = roomCode;
   const offsetRef = useRef(0);
@@ -231,7 +231,7 @@ export default function SherlockPage() {
 
             {/* 추리 격자판: 행=인물 / 열=아이템, 칸 탭 ⭕→❌→해제, 이름 탭 제외/의심 */}
             <div className="rounded-xl border border-slate-200 dark:border-slate-700 p-2">
-              <p className="text-sm font-bold text-slate-600 dark:text-slate-300 mb-1 px-1">추리판 · 칸 탭 ⭕/❌ · 이름 탭 제외(✗)/의심(⭐)</p>
+              <p className="text-sm font-bold text-slate-600 dark:text-slate-300 mb-1 px-1">추리판 · 칸 탭 ⭕→🔺→❌ · 이름 탭 제외(✗)/의심(⭐)</p>
               <div className="overflow-x-auto">
                 <table className="border-collapse text-center select-none">
                   <thead>
@@ -255,7 +255,7 @@ export default function SherlockPage() {
                             return (
                               <td key={i} onClick={() => cycleCell(c.id, i)}
                                 className={`w-7 h-7 sm:w-8 sm:h-8 border border-slate-200 dark:border-slate-700 cursor-pointer text-sm ${has ? 'bg-slate-100 dark:bg-slate-700/40' : ''}`}>
-                                {cn === 'o' ? '⭕' : cn === 'x' ? '❌' : has ? <span className="opacity-40 text-[11px]">{emo(ss.items[i])}</span> : ''}
+                                {cn === 'o' ? '⭕' : cn === 'tri' ? '🔺' : cn === 'x' ? '❌' : has ? <span className="opacity-40 text-[11px]">{emo(ss.items[i])}</span> : ''}
                               </td>
                             );
                           })}
@@ -380,7 +380,7 @@ export default function SherlockPage() {
             <div>
               <p className="font-bold text-indigo-600 dark:text-indigo-300">📝 추리판 사용법</p>
               <ul className="list-disc pl-5 text-slate-600 dark:text-slate-300 space-y-0.5">
-                <li>격자 <b>칸 탭</b> → ⭕ → ❌ → 해제 (인물이 그 아이템을 갖는지 내 메모)</li>
+                <li>격자 <b>칸 탭</b> → ⭕(있음) → 🔺(애매) → ❌(없음) → 해제</li>
                 <li><b>이름 탭</b> → 제외(✗) / 의심(⭐) 표시</li>
                 <li>옅은 칸 = 그 인물이 실제로 가진 아이템(참조), 🟢 = 내 카드(범인 아님)</li>
               </ul>
