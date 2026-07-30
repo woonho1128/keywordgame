@@ -207,15 +207,20 @@ export default function MarblePage() {
       }
     }
 
-    // 끼임 방지: 거의 멈춘 마블은 잠깐 뒤 살짝 흔들어 내려보냄
+    // 끼임 방지: 거의 멈춘 마블은 안쪽(중앙)으로 밀고 아래로 내려보냄. 오래 낄수록 세게(에스컬레이션).
     for (const m of marblesRef.current) {
       if (m.finished) continue;
       const sp = Math.hypot(m.body.velocity.x, m.body.velocity.y);
-      if (sp < 0.4) {
+      if (sp < 0.7) {
         m.stuck += 1000 / 60;
-        if (m.stuck > 420) {
-          Matter.Body.setVelocity(m.body, { x: (Math.random() * 2 - 1) * 3.5, y: 2.6 });
-          Matter.Body.setPosition(m.body, { x: m.body.position.x + (Math.random() * 2 - 1) * 3, y: m.body.position.y });
+        if (m.stuck > 300) {
+          const px = m.body.position.x;
+          const inward = px < VW * 0.5 ? 1 : -1;            // 벽에 낀 경우 중앙으로
+          const nearWall = px < 60 || px > VW - 60;
+          const power = 3 + Math.min(9, (m.stuck - 300) / 120); // 오래 낄수록 강하게
+          const vx = nearWall ? inward * (3 + power) : (Math.random() * 2 - 1) * power;
+          Matter.Body.setVelocity(m.body, { x: vx, y: 3 + Math.random() * 2.5 });
+          Matter.Body.setPosition(m.body, { x: Math.max(18, Math.min(VW - 18, px + inward * 6)), y: m.body.position.y + 2 });
           m.stuck = 0;
         }
       } else m.stuck = 0;
