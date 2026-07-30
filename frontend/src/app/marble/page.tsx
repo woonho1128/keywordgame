@@ -25,6 +25,12 @@ export default function MarblePage() {
   const [fs, setFs] = useState(false);
   const [entries, setEntries] = useState<{ name: string; color: number }[]>([]);
   const [focusIdx, setFocusIdx] = useState<number | null>(null);
+  const [standings, setStandings] = useState<{ name: string; color: number; fin: boolean }[]>([]);
+  const [videoUrl, setVideoUrl] = useState<string | null>(null);
+  const [videoExt, setVideoExt] = useState('webm');
+  const recRef = useRef<MediaRecorder | null>(null);
+  const chunksRef = useRef<Blob[]>([]);
+  const standTickRef = useRef(0);
 
   const wrapRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -154,6 +160,26 @@ export default function MarblePage() {
     pegsRef.current = pegs; barsRef.current = bars; bumpersRef.current = bumpers;
   };
 
+  // ── 게임 화면(캔버스) 녹화 → 동영상 다운로드 ──
+  const startRecording = (canvas: HTMLCanvasElement) => {
+    try {
+      const capture = (canvas as unknown as { captureStream?: (fps?: number) => MediaStream }).captureStream;
+      if (typeof capture !== 'function' || typeof MediaRecorder === 'undefined') return;
+      const stream = capture.call(canvas, 30);
+      const cands = ['video/webm;codecs=vp9', 'video/webm;codecs=vp8', 'video/webm', 'video/mp4'];
+      const mime = cands.find((t) => MediaRecorder.isTypeSupported?.(t)) || '';
+      setVideoExt(mime.includes('mp4') ? 'mp4' : 'webm');
+      const rec = new MediaRecorder(stream, mime ? { mimeType: mime, videoBitsPerSecond: 6_000_000 } : undefined);
+      chunksRef.current = [];
+      rec.ondataavailable = (e) => { if (e.data && e.data.size) chunksRef.current.push(e.data); };
+      rec.onstop = () => { const blob = new Blob(chunksRef.current, { type: chunksRef.current[0]?.type || 'video/webm' }); setVideoUrl(URL.createObjectURL(blob)); };
+      rec.start();
+      recRef.current = rec;
+    } catch { recRef.current = null; }
+  };
+  const stopRecording = () => { try { recRef.current?.stop(); } catch {} recRef.current = null; };
+  const discardRecording = () => { const r = recRef.current; if (r) { try { r.onstop = null; r.stop(); } catch {} } recRef.current = null; };
+
   const start = () => {
     const names: string[] = [];
     for (const raw of namesText.split('\n')) {
@@ -166,8 +192,10 @@ export default function MarblePage() {
     const list = names.slice(0, 50);
     if (list.length < 2) { alert('참가자를 2명 이상 입력하세요 (한 줄에 한 명, "이름 x3"으로 여러 개)'); return; }
     stop();
-    setRanking([]); setWinner(null); finishRef.current = []; camRef.current = 0;
+    discardRecording();
+    setRanking([]); setWinner(null); finishRef.current = []; camRef.current = 0; setStandings([]);
     focusRef.current = null; setFocusIdx(null);
+    if (videoUrl) { URL.revokeObjectURL(videoUrl); setVideoUrl(null); }
 
     const engine = Matter.Engine.create();
     engine.gravity.y = 0.72;
@@ -188,7 +216,9 @@ export default function MarblePage() {
     marblesRef.current = marbles;
     setEntries(marbles.map((m) => ({ name: m.name, color: m.color })));
     startAtRef.current = performance.now();
+    standTickRef.current = 0;
     setRunning(true);
+    const cv = canvasRef.current; if (cv) startRecording(cv);
     loop();
   };
 
@@ -261,10 +291,20 @@ export default function MarblePage() {
 
     draw();
 
+    // 실시간 순위(완주 도착순 + 남은 마블 진행순), ~4회/초로 갱신
+    if (++standTickRef.current % 15 === 0) {
+      const fin = finishRef.current.map((f) => ({ ...f, fin: true }));
+      const liveList = marblesRef.current.filter((m) => !m.finished)
+        .sort((a, b) => b.body.position.y - a.body.position.y)
+        .map((m) => ({ name: m.name, color: m.color, fin: false }));
+      setStandings([...fin, ...liveList]);
+    }
+
     if (live === 0) {
       const fin = finishRef.current;
       setWinner((lastWinsRef.current ? fin[fin.length - 1] : fin[0]) ?? null);
-      setRunning(false); stop(); return;
+      setStandings(fin.map((f) => ({ ...f, fin: true })));
+      setRunning(false); stopRecording(); stop(); return;
     }
     rafRef.current = requestAnimationFrame(loop);
   };
@@ -466,15 +506,20 @@ export default function MarblePage() {
               </div>
             </div>
           )}
-          {ranking.length > 0 && (
+          {videoUrl && (
+            <a href={videoUrl} download={`마블레이스.${videoExt}`}
+              className="block text-center w-full bg-rose-600 text-white font-bold py-2.5 rounded-lg">🎬 경기 영상 다운로드</a>
+          )}
+          {(standings.length > 0 || ranking.length > 0) && (
             <div className="rounded-xl border border-slate-200 dark:border-slate-700 p-3">
-              <p className="text-sm font-bold text-slate-600 dark:text-slate-300 mb-2">🏆 도착 순위</p>
-              <div className="space-y-0.5">
-                {ranking.map((r, i) => (
-                  <div key={i} className="flex items-center gap-2 text-sm">
-                    <span className="w-5 text-right font-bold text-slate-400">{i + 1}</span>
-                    <span className="w-3.5 h-3.5 rounded-full" style={{ background: COLORS[r.color] }} />
-                    <span className="font-bold">{r.name}</span>
+              <p className="text-sm font-bold text-slate-600 dark:text-slate-300 mb-2">{running ? '📊 현재 순위' : '🏆 최종 순위'}</p>
+              <div className="space-y-0.5 max-h-72 overflow-auto">
+                {(standings.length ? standings : ranking.map((r) => ({ ...r, fin: true }))).map((r, i) => (
+                  <div key={i} className={`flex items-center gap-2 text-sm ${!r.fin ? 'opacity-70' : ''}`}>
+                    <span className={`w-5 text-right font-bold ${i === 0 ? 'text-amber-500' : i === 1 ? 'text-slate-400' : i === 2 ? 'text-orange-400' : 'text-slate-400'}`}>{i + 1}</span>
+                    <span className="w-3.5 h-3.5 rounded-full shrink-0" style={{ background: COLORS[r.color] }} />
+                    <span className="font-bold truncate">{r.name}</span>
+                    {r.fin && <span className="ml-auto text-[11px] text-emerald-500">🏁</span>}
                   </div>
                 ))}
               </div>
