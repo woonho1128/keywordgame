@@ -16,7 +16,7 @@ public class SherlockRoomManager {
     private final RoomRegistry<SherlockGame> reg = new RoomRegistry<>("sherlock");
 
     public String create(String clientId, NewSherlockRequest req) {
-        SherlockGame game = new SherlockGame(clientId, req.nick());
+        SherlockGame game = new SherlockGame(clientId, req.nick(), req.turnSec());
         try {
             return reg.add(game);
         } catch (IllegalStateException e) {

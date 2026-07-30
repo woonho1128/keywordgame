@@ -5,6 +5,7 @@ import java.util.List;
 /** 셜록13 상태 응답. 내 손패(myCards)는 본인에게만 채워 보낸다. */
 public record SherlockState(
         String phase,                 // LOBBY / PLAYING / ENDED
+        int turnSec,                  // 턴 제한시간(초)
         boolean isHost,
         boolean joined,
         List<PlayerView> players,
@@ -32,7 +33,7 @@ public record SherlockState(
     public record SeatCount(int seat, int count) {}
 
     public static SherlockState notFound(long now) {
-        return new SherlockState("NONE", false, false, List.of(), List.of(), List.of(), List.of(),
+        return new SherlockState("NONE", 60, false, false, List.of(), List.of(), List.of(), List.of(),
                 -1, null, false, -1, List.of(), null, List.of(), -1, null, 0, now);
     }
 }

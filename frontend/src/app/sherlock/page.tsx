@@ -10,7 +10,7 @@ type CharView = { id: number; name: string; items: number[] };
 type SeatCount = { seat: number; count: number };
 type Clue = { askerSeat: number; askerName: string; target: number; item: number; results: SeatCount[] };
 type State = {
-  phase: string; isHost: boolean; joined: boolean;
+  phase: string; turnSec: number; isHost: boolean; joined: boolean;
   players: PlayerView[]; deck: CharView[]; myCards: number[]; items: string[];
   turnSeat: number; turnName: string | null; myTurn: boolean; mySeat: number;
   clues: Clue[]; lastAction: string | null; log: string[];
@@ -40,6 +40,7 @@ export default function SherlockPage() {
   const [rooms, setRooms] = useState<Room[]>([]);
   const [ss, setSs] = useState<State | null>(null);
   const [botLevel, setBotLevel] = useState('NORMAL');
+  const [turnSec, setTurnSec] = useState(60);
   const [remaining, setRemaining] = useState(0);
   const [mode, setMode] = useState<'all' | 'one' | 'accuse' | null>(null);
   const [target, setTarget] = useState<number | null>(null);
@@ -84,7 +85,7 @@ export default function SherlockPage() {
   const saveNick = (n: string) => { try { localStorage.setItem('arcade_nick', n); } catch {} };
   const create = async () => {
     const n = nick.trim(); if (!n) return; saveNick(n);
-    try { const res = await api<{ roomCode: string; state: State }>(`/api/v1/sherlock/new?clientId=${cid()}`, { method: 'POST', body: JSON.stringify({ nick: n }) }); setRoomCode(res.roomCode); setSs(res.state); setScreen('lobby'); }
+    try { const res = await api<{ roomCode: string; state: State }>(`/api/v1/sherlock/new?clientId=${cid()}`, { method: 'POST', body: JSON.stringify({ nick: n, turnSec }) }); setRoomCode(res.roomCode); setSs(res.state); setScreen('lobby'); }
     catch (e: any) { alert(e?.message || '방 생성 실패'); }
   };
   const join = async (code: string, nickOverride?: string) => {
@@ -130,6 +131,12 @@ export default function SherlockPage() {
           <div className="rounded-2xl border border-slate-200 dark:border-slate-700 p-4 space-y-3">
             <input value={nick} onChange={(e) => setNick(e.target.value)} maxLength={16} placeholder="닉네임"
               className="w-full border border-slate-300 dark:border-slate-600 bg-transparent rounded-lg px-3 py-2" />
+            <label className="flex items-center justify-between gap-2 text-sm">
+              <span className="font-bold text-slate-600 dark:text-slate-300">턴 제한시간</span>
+              <select value={turnSec} onChange={(e) => setTurnSec(Number(e.target.value))} className="border border-slate-300 dark:border-slate-600 bg-transparent rounded-lg px-3 py-1.5">
+                {[20, 30, 45, 60, 90, 120].map((s) => <option key={s} value={s}>{s}초</option>)}
+              </select>
+            </label>
             <button onClick={create} disabled={!nick.trim()} className="w-full bg-indigo-600 text-white font-bold py-3 rounded-lg disabled:opacity-50">방 만들기 (2~10인)</button>
           </div>
           <div className="rounded-2xl border border-slate-200 dark:border-slate-700 p-4 space-y-2">
@@ -165,7 +172,7 @@ export default function SherlockPage() {
                 </div>
               ))}
             </div>
-            <p className="text-[11px] text-slate-400 mt-2">인원에 맞춰 캐릭터 {ss.players.length >= 2 ? 3 * ss.players.length + 1 : '?'}명(범인 1명)으로 시작해요</p>
+            <p className="text-[11px] text-slate-400 mt-2">인원에 맞춰 캐릭터 {ss.players.length >= 2 ? 3 * ss.players.length + 1 : '?'}명(범인 1명) · 턴 제한 {ss.turnSec}초</p>
           </div>
           {ss.isHost ? (
             <div className="rounded-2xl border border-slate-200 dark:border-slate-700 p-4 space-y-2">

@@ -9,14 +9,14 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 class SherlockGameTest {
 
     private SherlockGame withPlayers(int n) {
-        SherlockGame g = new SherlockGame("host", "방장");
+        SherlockGame g = new SherlockGame("host", "방장", 60);
         for (int i = 1; i < n; i++) g.join("p" + i, "친구" + i);
         return g;
     }
 
     @Test
     void 최소인원_미달_시작불가() {
-        SherlockGame g = new SherlockGame("host", "방장");
+        SherlockGame g = new SherlockGame("host", "방장", 60);
         assertThatThrownBy(() -> g.start("host")).hasMessageContaining("최소 2명");
     }
 
@@ -38,7 +38,7 @@ class SherlockGameTest {
 
     @Test
     void 최대인원_초과_시작불가() {
-        SherlockGame g = new SherlockGame("host", "방장");
+        SherlockGame g = new SherlockGame("host", "방장", 60);
         for (int i = 1; i < 10; i++) g.addBot("host", "NORMAL"); // 10명
         g.start("host"); // 10명 OK
         assertThat(g.me("host").deck()).hasSize(31);

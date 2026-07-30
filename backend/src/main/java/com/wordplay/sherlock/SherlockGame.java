@@ -27,7 +27,8 @@ public class SherlockGame implements RoomGame {
     public enum Phase { LOBBY, PLAYING, ENDED }
 
     static final int MAX_PLAYERS = 10, HAND = 3;
-    static final long TURN_MS = 60_000, BOT_DELAY_MS = 1600;
+    static final long BOT_DELAY_MS = 1600;
+    static final int DEFAULT_TURN_SEC = 60, MIN_TURN_SEC = 15, MAX_TURN_SEC = 180;
 
     // 8개 아이템(이모지 포함)
     static final String[] ITEMS = {"🔍 돋보기", "🚬 파이프", "👊 주먹", "💀 해골", "🕯️ 등불", "✉️ 편지", "💎 보석", "🔫 권총"};
@@ -64,6 +65,7 @@ public class SherlockGame implements RoomGame {
     }
 
     private final String hostClientId;
+    private final int turnSec;
     private Phase phase = Phase.LOBBY;
     private final List<P> players = new ArrayList<>();
     private final List<Integer> inPlay = new ArrayList<>(); // 이번 판 캐릭터(마스터 idx), 정렬
@@ -76,8 +78,10 @@ public class SherlockGame implements RoomGame {
     private String winnerLabel = null;
     private long turnEndsAt = 0, botAt = 0, lastActive = System.currentTimeMillis();
 
-    public SherlockGame(String hostClientId, String nick) {
+    public SherlockGame(String hostClientId, String nick, Integer turnSecOpt) {
         this.hostClientId = hostClientId;
+        int ts = turnSecOpt == null ? DEFAULT_TURN_SEC : turnSecOpt;
+        this.turnSec = Math.max(MIN_TURN_SEC, Math.min(MAX_TURN_SEC, ts));
         P host = new P(); host.clientId = hostClientId; host.nick = clean(nick); host.host = true; host.lastSeen = now();
         players.add(host);
     }
@@ -148,7 +152,7 @@ public class SherlockGame implements RoomGame {
             default -> deckSize + ThreadLocalRandom.current().nextInt(deckSize);
         };
     }
-    private void beginTurn() { turnEndsAt = now() + TURN_MS; botAt = now() + BOT_DELAY_MS; }
+    private void beginTurn() { turnEndsAt = now() + turnSec * 1000L; botAt = now() + BOT_DELAY_MS; }
 
     // ── 행동 ──
     public synchronized void askAll(String clientId, int item) {
@@ -277,6 +281,7 @@ public class SherlockGame implements RoomGame {
 
         return new SherlockState(
                 phase.name(),
+                turnSec,
                 clientId != null && clientId.equals(hostClientId),
                 me != null,
                 pv, deck, myCards, List.of(ITEMS),
