@@ -264,8 +264,10 @@ export default function SherlockPage() {
                             const clickable = has && !rowX; // 그 인물이 가진 아이템 칸만 메모 가능(빈칸은 클릭 불가)
                             return (
                               <td key={i} onClick={clickable ? () => cycleCell(c.id, i) : undefined}
-                                className={`w-7 h-7 sm:w-8 sm:h-8 border text-sm ${clickable ? 'cursor-pointer' : ''} ${rowX ? 'bg-rose-100 dark:bg-rose-500/25 border-rose-300 dark:border-rose-500/40 text-rose-600 dark:text-rose-300 font-black' : has ? 'border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-700/40' : 'border-slate-200 dark:border-slate-700 bg-slate-50/40 dark:bg-slate-900/30'}`}>
-                                {rowX ? '✗' : cn === 'o' ? '⭕' : cn === 'tri' ? '🔺' : cn === 'x' ? '❌' : has ? <span className="opacity-40 text-[11px]">{emo(ss.items[i])}</span> : ''}
+                                className={`relative w-7 h-7 sm:w-8 sm:h-8 border text-sm ${clickable ? 'cursor-pointer' : ''} ${rowX ? 'bg-rose-100/70 dark:bg-rose-500/15 border-rose-200 dark:border-rose-500/30' : has ? 'border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-700/40' : 'border-slate-200 dark:border-slate-700 bg-slate-50/40 dark:bg-slate-900/30'}`}>
+                                {rowX
+                                  ? (has ? <span className="opacity-45 text-[11px]">{emo(ss.items[i])}</span> : '')
+                                  : cn === 'o' ? '⭕' : cn === 'tri' ? '🔺' : cn === 'x' ? '❌' : has ? <span className="opacity-40 text-[11px]">{emo(ss.items[i])}</span> : ''}
                               </td>
                             );
                           })}
