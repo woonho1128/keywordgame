@@ -349,4 +349,5 @@ public class SixNimmtGame implements RoomGame {
     void forceDealForTest() { for (P p : players) p.penalty = 0; handIndex = 0; dealHand(); }
     List<P> playersForTest() { return players; }
     void speedUpBotsForTest() { botAt = 0; } // 봇 지연 제거(테스트에서 실시간 대기 회피)
+    void beginResolveForTest() { beginResolve(); } // 선택(selected) 세팅 후 해소 실행
 }
