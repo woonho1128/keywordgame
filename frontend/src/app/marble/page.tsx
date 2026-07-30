@@ -133,17 +133,22 @@ export default function MarblePage() {
       peg(VW - rnd(5, 12), wy + rnd(60, 100), rnd(9, 12));
     }
 
-    // ── 결승 핀볼 존: 깔때기 → 범퍼 → ★중앙 블로커(직진 마블을 튕겨 옆으로) ──
+    // ── 결승 핀볼 존: 깔때기 → 범퍼 → ★회전판(+자 날개, 회전으로 튕겨 날림) ──
     const zoneTop = FINISH_Y - 300;
     ramp(VW * 0.19, zoneTop, VW * 0.5, 0.6, 0.4);
     ramp(VW * 0.81, zoneTop, VW * 0.5, -0.6, 0.4);
-    bump(VW * 0.5, zoneTop + 82, 22, '#f97316');
-    bump(VW * 0.32, zoneTop + 158, 18, '#ec4899');
-    bump(VW * 0.68, zoneTop + 158, 18, '#8b5cf6');
-    // ★ 결승 직전 중앙 블로커 + 좌우 튕김 범퍼 — 그냥 못 지나가고 핀볼처럼 튕김
-    bump(VW * 0.5, FINISH_Y - 62, 30, '#ef4444');
-    bump(VW * 0.25, FINISH_Y - 26, 17, '#22c55e');
-    bump(VW * 0.75, FINISH_Y - 26, 17, '#0ea5e9');
+    bump(VW * 0.5, zoneTop + 72, 20, '#f97316');
+    // ★ 결승 회전판: 같은 축에 +자로 도는 두 날개 → 회전으로 마블을 튕겨 날림
+    {
+      const wcx = VW * 0.5, wcy = FINISH_Y - 150, wlen = VW * 0.34, wspin = 0.05;
+      for (const ang of [0, Math.PI / 2]) {
+        const b = Bodies.rectangle(wcx, wcy, wlen, 16, { isStatic: true, restitution: 0.8, chamfer: { radius: 8 }, angle: ang });
+        bodies.push(b); bars.push({ body: b, spin: wspin, half: wlen / 2, color: '#f43f5e' });
+      }
+    }
+    // 결승 직전 좌우 튕김 범퍼
+    bump(VW * 0.22, FINISH_Y - 30, 16, '#22c55e');
+    bump(VW * 0.78, FINISH_Y - 30, 16, '#0ea5e9');
 
     Composite.add(world, bodies);
     pegsRef.current = pegs; barsRef.current = bars; bumpersRef.current = bumpers;
