@@ -42,6 +42,7 @@ export default function SherlockPage() {
   const [botLevel, setBotLevel] = useState('NORMAL');
   const [turnSec, setTurnSec] = useState(60);
   const [remaining, setRemaining] = useState(0);
+  const [showGuide, setShowGuide] = useState(false);
   const [mode, setMode] = useState<'all' | 'one' | 'accuse' | null>(null);
   const [target, setTarget] = useState<number | null>(null);
   const [notes, setNotes] = useState<Record<number, 'x' | 'star'>>({});
@@ -125,6 +126,7 @@ export default function SherlockPage() {
         <button onClick={leave} aria-label="나가기" className="text-lg leading-none text-slate-500 hover:text-slate-800 dark:hover:text-slate-100">🏠</button>
         <h1 className="text-xl sm:text-2xl font-extrabold">🔎 셜록13</h1>
         {ss && screen === 'game' && <span className="text-xs text-slate-400">방 {roomCode} · {ss.deck.length}명 중 범인 1명</span>}
+        <button onClick={() => setShowGuide(true)} className="ml-auto text-sm px-3 py-1.5 rounded-lg border border-slate-300 dark:border-slate-600 font-bold hover:border-indigo-500">❓ 게임 설명</button>
       </div>
 
       {/* 입장 */}
@@ -333,6 +335,58 @@ export default function SherlockPage() {
                 {ss.clues.length === 0 && <p className="text-slate-400">아직 조사 없음</p>}
               </div>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* 게임 설명 모달 */}
+      {showGuide && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/55 p-4" onClick={() => setShowGuide(false)}>
+          <div className="w-full max-w-lg max-h-[85vh] overflow-y-auto rounded-2xl bg-white dark:bg-slate-800 shadow-2xl p-5 space-y-3 text-sm" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center gap-2">
+              <h2 className="text-lg font-extrabold">🔎 셜록13 — 게임 설명</h2>
+              <button onClick={() => setShowGuide(false)} className="ml-auto text-slate-400 hover:text-slate-700 dark:hover:text-slate-100 text-xl leading-none">✕</button>
+            </div>
+
+            <div>
+              <p className="font-bold text-indigo-600 dark:text-indigo-300">🎯 목표</p>
+              <p className="text-slate-600 dark:text-slate-300">아무도 가지고 있지 않은 <b>숨은 범인 1명</b>을 추리해서 먼저 <b>지목</b>하면 승리!</p>
+            </div>
+
+            <div>
+              <p className="font-bold text-indigo-600 dark:text-indigo-300">🃏 구성</p>
+              <ul className="list-disc pl-5 text-slate-600 dark:text-slate-300 space-y-0.5">
+                <li>인원에 맞춰 캐릭터 <b>(3×인원 + 1)명</b>이 등장(최대 10인=31명). 목록·아이템은 모두 공개돼요.</li>
+                <li>각자 <b>손패 3장</b>을 받고, 남는 <b>1명이 범인</b>으로 숨겨집니다(아무도 안 가짐).</li>
+                <li>캐릭터마다 아이템 8종(🔍돋보기 🚬파이프 👊주먹 💀해골 🕯️등불 ✉️편지 💎보석 🔫권총) 중 몇 개를 가져요. 조합은 전부 달라요.</li>
+              </ul>
+            </div>
+
+            <div>
+              <p className="font-bold text-indigo-600 dark:text-indigo-300">🔁 내 차례에 하나 선택</p>
+              <ul className="list-disc pl-5 text-slate-600 dark:text-slate-300 space-y-0.5">
+                <li><b>🔎 전체 조사</b> — 아이템 하나를 지목하면, 나머지 <b>전원</b>이 그 아이템이 그려진 카드가 몇 장인지 공개. (모두에게 정보 노출)</li>
+                <li><b>🎯 한 명 조사</b> — 한 명 + 아이템 하나를 지목하면 <b>그 사람만</b> 개수 공개.</li>
+                <li><b>⚖️ 범인 지목</b> — 맞히면 <b>승리 🏆</b>, 틀리면 <b>탈락</b>. 끝까지 남으면 승리.</li>
+              </ul>
+              <p className="text-[12px] text-slate-400 mt-1">답변(개수)은 각자 손패에서 <b>시스템이 자동 계산·공개</b>해요. 따로 응답할 필요 없어요.</p>
+            </div>
+
+            <div>
+              <p className="font-bold text-indigo-600 dark:text-indigo-300">🧩 추리 방법</p>
+              <p className="text-slate-600 dark:text-slate-300">"이 아이템은 총 N명이 가졌는데 손패에서 X장 나왔다 → 나머지는 범인에게 있을 수도" 식으로 좁혀요. 어떤 아이템 개수가 손패 합과 안 맞으면 <b>범인이 그 아이템을 가진 인물</b>! 아이템 조합이 딱 맞는 1명이 범인입니다.</p>
+            </div>
+
+            <div>
+              <p className="font-bold text-indigo-600 dark:text-indigo-300">📝 추리판 사용법</p>
+              <ul className="list-disc pl-5 text-slate-600 dark:text-slate-300 space-y-0.5">
+                <li>격자 <b>칸 탭</b> → ⭕ → ❌ → 해제 (인물이 그 아이템을 갖는지 내 메모)</li>
+                <li><b>이름 탭</b> → 제외(✗) / 의심(⭐) 표시</li>
+                <li>옅은 칸 = 그 인물이 실제로 가진 아이템(참조), 🟢 = 내 카드(범인 아님)</li>
+              </ul>
+            </div>
+
+            <button onClick={() => setShowGuide(false)} className="w-full bg-indigo-600 text-white font-bold py-2.5 rounded-lg mt-1">확인</button>
           </div>
         </div>
       )}
