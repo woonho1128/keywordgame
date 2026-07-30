@@ -198,18 +198,24 @@ export default function MarblePage() {
     barsRef.current.forEach((b) => Matter.Body.rotate(b.body, b.spin));
     Matter.Engine.update(engine, 1000 / 60);
 
-    // 회전 바에 닿은 마블을 회전 방향으로 실어 올림(핀볼 패들처럼 퍼올림)
+    // 회전 바에 '실제로 닿은' 마블만 회전 방향으로 실어 날림(날개 선분 근처일 때만)
     for (const b of barsRef.current) {
-      const bx = b.body.position.x, by = b.body.position.y;
+      const bx = b.body.position.x, by = b.body.position.y, a = b.body.angle;
+      const ca = Math.cos(a), sa = Math.sin(a);
       for (const m of marblesRef.current) {
         if (m.finished) continue;
         const dx = m.body.position.x - bx, dy = m.body.position.y - by;
-        const d = Math.hypot(dx, dy);
-        if (d < 8 || d > b.half + 16) continue;
-        // 접선 속도 = 회전 방향으로 표면이 움직이는 방향(위로 올라오는 쪽은 위로)
-        const vx = -dy * b.spin * 2.6, vy = dx * b.spin * 2.6;
-        Matter.Body.setVelocity(m.body, { x: m.body.velocity.x * 0.35 + vx, y: m.body.velocity.y * 0.35 + vy });
+        const along = dx * ca + dy * sa, perp = -dx * sa + dy * ca;
+        if (Math.abs(along) > b.half + 10 || Math.abs(perp) > 20) continue; // 날개 길이·두께 근처만
+        const vx = -dy * b.spin * 2.2, vy = dx * b.spin * 2.2;
+        Matter.Body.setVelocity(m.body, { x: m.body.velocity.x * 0.4 + vx, y: m.body.velocity.y * 0.4 + vy });
       }
+    }
+    // 속도 상한(벽 터널링 방지): 너무 빠르면 벽을 뚫음 → 상한으로 제한
+    for (const m of marblesRef.current) {
+      if (m.finished) continue;
+      const v = m.body.velocity, sp = Math.hypot(v.x, v.y);
+      if (sp > 18) Matter.Body.setVelocity(m.body, { x: v.x / sp * 18, y: v.y / sp * 18 });
     }
 
     // 끼임 방지: 거의 멈춘 마블은 안쪽(중앙)으로 밀고 아래로 내려보냄. 오래 낄수록 세게(에스컬레이션).
