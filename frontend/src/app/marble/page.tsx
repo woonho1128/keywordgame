@@ -154,11 +154,11 @@ export default function MarblePage() {
     for (const raw of namesText.split('\n')) {
       const line = raw.trim(); if (!line) continue;
       const m = line.match(/^(.*?)\s*[x*×]\s*(\d+)$/i);
-      if (m && m[1].trim()) { const cnt = Math.min(24, Math.max(1, parseInt(m[2], 10))); for (let i = 0; i < cnt; i++) names.push(m[1].trim()); }
+      if (m && m[1].trim()) { const cnt = Math.min(50, Math.max(1, parseInt(m[2], 10))); for (let i = 0; i < cnt; i++) names.push(m[1].trim()); }
       else names.push(line);
-      if (names.length >= 24) break;
+      if (names.length >= 50) break;
     }
-    const list = names.slice(0, 24);
+    const list = names.slice(0, 50);
     if (list.length < 2) { alert('참가자를 2명 이상 입력하세요 (한 줄에 한 명, "이름 x3"으로 여러 개)'); return; }
     stop();
     setRanking([]); setWinner(null); finishRef.current = []; camRef.current = 0;
@@ -171,11 +171,11 @@ export default function MarblePage() {
 
     const marbles: Marble[] = [];
     list.forEach((name, i) => {
-      const perRow = 6, rowN = Math.floor(i / perRow), col = i % perRow;
+      const perRow = list.length > 24 ? 10 : 6, rowN = Math.floor(i / perRow), col = i % perRow;
       const rowCount = Math.min(perRow, list.length - rowN * perRow);
       const gap = VW / (rowCount + 1);
       const x = (col + 1) * gap + (Math.random() * 8 - 4);
-      const yy = 40 + rowN * 30;
+      const yy = 26 + rowN * 26;
       const body = Matter.Bodies.circle(x, yy, 11, { restitution: 0.18, friction: 0.05, frictionAir: 0.012, density: 0.02 });
       Matter.Composite.add(engine.world, body);
       marbles.push({ body, name, color: i % COLORS.length, finished: false, stuck: 0 });
@@ -420,7 +420,7 @@ export default function MarblePage() {
             </div>
           )}
           <div className="rounded-xl border border-slate-200 dark:border-slate-700 p-3 space-y-2">
-            <p className="text-sm font-bold text-slate-600 dark:text-slate-300">참가자 (한 줄에 한 명, 최대 24)</p>
+            <p className="text-sm font-bold text-slate-600 dark:text-slate-300">참가자 (한 줄에 한 명, 최대 50)</p>
             <p className="text-[11px] text-slate-400">같은 이름 여러 개는 줄 반복 또는 <b>이름 x3</b> 처럼 개수 지정</p>
             <textarea value={namesText} onChange={(e) => setNamesText(e.target.value)} rows={6} disabled={running}
               className="w-full border border-slate-300 dark:border-slate-600 bg-transparent rounded-lg px-3 py-2 text-sm resize-y disabled:opacity-50" placeholder={'라미\n우노\n...'} />
