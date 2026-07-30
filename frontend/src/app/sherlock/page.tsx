@@ -10,7 +10,7 @@ type CharView = { id: number; name: string; items: number[] };
 type SeatCount = { seat: number; count: number };
 type Clue = { askerSeat: number; askerName: string; target: number; item: number; results: SeatCount[] };
 type State = {
-  phase: string; turnSec: number; isHost: boolean; joined: boolean;
+  phase: string; turnSec: number; memoryMode: boolean; isHost: boolean; joined: boolean;
   players: PlayerView[]; deck: CharView[]; myCards: number[]; items: string[];
   turnSeat: number; turnName: string | null; myTurn: boolean; mySeat: number;
   clues: Clue[]; lastAction: string | null; log: string[];
@@ -41,6 +41,7 @@ export default function SherlockPage() {
   const [ss, setSs] = useState<State | null>(null);
   const [botLevel, setBotLevel] = useState('NORMAL');
   const [turnSec, setTurnSec] = useState(60);
+  const [memMode, setMemMode] = useState(false);
   const [remaining, setRemaining] = useState(0);
   const [showGuide, setShowGuide] = useState(false);
   const [mode, setMode] = useState<'all' | 'one' | 'accuse' | null>(null);
@@ -88,7 +89,7 @@ export default function SherlockPage() {
   const saveNick = (n: string) => { try { localStorage.setItem('arcade_nick', n); } catch {} };
   const create = async () => {
     const n = nick.trim(); if (!n) return; saveNick(n);
-    try { const res = await api<{ roomCode: string; state: State }>(`/api/v1/sherlock/new?clientId=${cid()}`, { method: 'POST', body: JSON.stringify({ nick: n, turnSec }) }); setRoomCode(res.roomCode); setSs(res.state); setScreen('lobby'); }
+    try { const res = await api<{ roomCode: string; state: State }>(`/api/v1/sherlock/new?clientId=${cid()}`, { method: 'POST', body: JSON.stringify({ nick: n, turnSec, memoryMode: memMode }) }); setRoomCode(res.roomCode); setSs(res.state); setScreen('lobby'); }
     catch (e: any) { alert(e?.message || '방 생성 실패'); }
   };
   const join = async (code: string, nickOverride?: string) => {
@@ -141,6 +142,13 @@ export default function SherlockPage() {
                 {[20, 30, 45, 60, 90, 120].map((s) => <option key={s} value={s}>{s}초</option>)}
               </select>
             </label>
+            <div>
+              <p className="text-sm font-bold text-slate-600 dark:text-slate-300 mb-1">단서 공개</p>
+              <div className="grid grid-cols-2 gap-2">
+                <button onClick={() => setMemMode(false)} className={`rounded-xl border-2 p-2.5 text-sm font-bold ${!memMode ? 'border-indigo-500 bg-indigo-500/10' : 'border-slate-300 dark:border-slate-600'}`}>📋 전체 기록<br /><span className="text-[11px] font-normal text-slate-400">모든 단서 로그 유지(쉬움)</span></button>
+                <button onClick={() => setMemMode(true)} className={`rounded-xl border-2 p-2.5 text-sm font-bold ${memMode ? 'border-indigo-500 bg-indigo-500/10' : 'border-slate-300 dark:border-slate-600'}`}>🧠 정통 기억<br /><span className="text-[11px] font-normal text-slate-400">내 턴 오면 사라짐(어려움)</span></button>
+              </div>
+            </div>
             <button onClick={create} disabled={!nick.trim()} className="w-full bg-indigo-600 text-white font-bold py-3 rounded-lg disabled:opacity-50">방 만들기 (2~10인)</button>
           </div>
           <div className="rounded-2xl border border-slate-200 dark:border-slate-700 p-4 space-y-2">
@@ -176,7 +184,7 @@ export default function SherlockPage() {
                 </div>
               ))}
             </div>
-            <p className="text-[11px] text-slate-400 mt-2">인원에 맞춰 캐릭터 {ss.players.length >= 2 ? 3 * ss.players.length + 1 : '?'}명(범인 1명) · 턴 제한 {ss.turnSec}초</p>
+            <p className="text-[11px] text-slate-400 mt-2">인원에 맞춰 캐릭터 {ss.players.length >= 2 ? 3 * ss.players.length + 1 : '?'}명(범인 1명) · 턴 {ss.turnSec}초 · {ss.memoryMode ? '🧠 정통 기억' : '📋 전체 기록'}</p>
           </div>
           {ss.isHost ? (
             <div className="rounded-2xl border border-slate-200 dark:border-slate-700 p-4 space-y-2">
@@ -243,19 +251,21 @@ export default function SherlockPage() {
                   <tbody>
                     {ss.deck.map((c) => {
                       const nt = notes[c.id]; const mine = ss.myCards.includes(c.id);
+                      const rowX = nt === 'x'; // 제외한 인물 → 줄 전체 빨간 ✗
                       return (
-                        <tr key={c.id} className={nt === 'x' ? 'opacity-40' : ''}>
+                        <tr key={c.id}>
                           <td onClick={() => cycleNote(c.id)}
-                            className={`sticky left-0 z-10 bg-white dark:bg-slate-900 text-left text-[11px] font-bold px-1 py-0.5 whitespace-nowrap cursor-pointer max-w-[92px] truncate ${nt === 'star' ? 'text-amber-500' : ''}`}>
-                            {nt === 'star' ? '⭐' : nt === 'x' ? '✗' : mine ? '🟢' : ''}{c.name}
+                            className={`sticky left-0 z-10 text-left text-[11px] font-bold px-1 py-0.5 whitespace-nowrap cursor-pointer max-w-[92px] truncate ${rowX ? 'bg-rose-100 dark:bg-rose-500/25 text-rose-600 dark:text-rose-300 line-through' : 'bg-white dark:bg-slate-900'} ${nt === 'star' ? 'text-amber-500' : ''}`}>
+                            {nt === 'star' ? '⭐' : rowX ? '✗' : mine ? '🟢' : ''}{c.name}
                           </td>
                           {ss.items.map((_, i) => {
                             const has = c.items.includes(i);
                             const cn = cellNotes[`${c.id}:${i}`];
+                            const clickable = has && !rowX; // 그 인물이 가진 아이템 칸만 메모 가능(빈칸은 클릭 불가)
                             return (
-                              <td key={i} onClick={() => cycleCell(c.id, i)}
-                                className={`w-7 h-7 sm:w-8 sm:h-8 border border-slate-200 dark:border-slate-700 cursor-pointer text-sm ${has ? 'bg-slate-100 dark:bg-slate-700/40' : ''}`}>
-                                {cn === 'o' ? '⭕' : cn === 'tri' ? '🔺' : cn === 'x' ? '❌' : has ? <span className="opacity-40 text-[11px]">{emo(ss.items[i])}</span> : ''}
+                              <td key={i} onClick={clickable ? () => cycleCell(c.id, i) : undefined}
+                                className={`w-7 h-7 sm:w-8 sm:h-8 border text-sm ${clickable ? 'cursor-pointer' : ''} ${rowX ? 'bg-rose-100 dark:bg-rose-500/25 border-rose-300 dark:border-rose-500/40 text-rose-600 dark:text-rose-300 font-black' : has ? 'border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-700/40' : 'border-slate-200 dark:border-slate-700 bg-slate-50/40 dark:bg-slate-900/30'}`}>
+                                {rowX ? '✗' : cn === 'o' ? '⭕' : cn === 'tri' ? '🔺' : cn === 'x' ? '❌' : has ? <span className="opacity-40 text-[11px]">{emo(ss.items[i])}</span> : ''}
                               </td>
                             );
                           })}
@@ -323,13 +333,17 @@ export default function SherlockPage() {
 
             {/* 단서 로그 */}
             <div className="rounded-xl border border-slate-200 dark:border-slate-700 p-3">
-              <p className="text-sm font-bold text-slate-600 dark:text-slate-300 mb-2">🔍 단서</p>
+              <p className="text-sm font-bold text-slate-600 dark:text-slate-300 mb-2">🔍 단서{ss.memoryMode && <span className="text-[11px] font-normal text-rose-400"> · 내 턴 오면 사라져요! 격자에 기록하세요</span>}</p>
               <div className="space-y-1 text-xs max-h-72 overflow-y-auto">
                 {[...ss.clues].reverse().map((c, i) => (
                   <div key={i} className="border-b border-slate-100 dark:border-slate-800 pb-1">
                     <span className="font-bold" style={{ color: PCOL[c.askerSeat % PCOL.length] }}>{c.askerName}</span>
-                    <span className="text-slate-400"> · {emo(ss.items[c.item])}{ss.items[c.item].split(' ')[1]} {c.target < 0 ? '전체' : `→ ${nameOf(c.target)}`}</span>
-                    <div className="flex flex-wrap gap-x-2">{c.results.map((r) => <span key={r.seat}><b style={{ color: PCOL[r.seat % PCOL.length] }}>{nameOf(r.seat)}</b> {r.count}</span>)}</div>
+                    {c.item < 0 ? (
+                      <span className="text-slate-400"> → {nameOf(c.target)} 개인 조사 🔒<span className="italic">비공개</span></span>
+                    ) : (<>
+                      <span className="text-slate-400"> · {ss.items[c.item]} {c.target < 0 ? '전체' : `→ ${nameOf(c.target)}`}</span>
+                      <div className="flex flex-wrap gap-x-2">{c.results.map((r) => <span key={r.seat}><b style={{ color: PCOL[r.seat % PCOL.length] }}>{nameOf(r.seat)}</b> {r.count}</span>)}</div>
+                    </>)}
                   </div>
                 ))}
                 {ss.clues.length === 0 && <p className="text-slate-400">아직 조사 없음</p>}

@@ -66,11 +66,13 @@ public class SherlockGame implements RoomGame {
 
     private final String hostClientId;
     private final int turnSec;
+    private final boolean memoryMode;
     private Phase phase = Phase.LOBBY;
     private final List<P> players = new ArrayList<>();
     private final List<Integer> inPlay = new ArrayList<>(); // 이번 판 캐릭터(마스터 idx), 정렬
     private int culprit = -1;
     private int turnSeat = -1;
+    private int[] seenBaseline;   // 정통 모드: 각 seat 기준으로 이 인덱스 이후의 단서만 보임(내 턴 시작 시 갱신)
     private final List<Clue> clues = new ArrayList<>();
     private final List<String> log = new ArrayList<>();
     private String lastAction = null;
@@ -78,10 +80,11 @@ public class SherlockGame implements RoomGame {
     private String winnerLabel = null;
     private long turnEndsAt = 0, botAt = 0, lastActive = System.currentTimeMillis();
 
-    public SherlockGame(String hostClientId, String nick, Integer turnSecOpt) {
+    public SherlockGame(String hostClientId, String nick, Integer turnSecOpt, Boolean memoryModeOpt) {
         this.hostClientId = hostClientId;
         int ts = turnSecOpt == null ? DEFAULT_TURN_SEC : turnSecOpt;
         this.turnSec = Math.max(MIN_TURN_SEC, Math.min(MAX_TURN_SEC, ts));
+        this.memoryMode = Boolean.TRUE.equals(memoryModeOpt);
         P host = new P(); host.clientId = hostClientId; host.nick = clean(nick); host.host = true; host.lastSeen = now();
         players.add(host);
     }
@@ -140,6 +143,7 @@ public class SherlockGame implements RoomGame {
 
         phase = Phase.PLAYING;
         winnerSeat = -1; winnerLabel = null; clues.clear(); log.clear();
+        seenBaseline = new int[players.size()];
         turnSeat = 0;
         note("게임 시작! 범인은 " + deckSize + "명 중 숨은 1명. 조사해서 찾아라!");
         beginTurn();
@@ -152,7 +156,11 @@ public class SherlockGame implements RoomGame {
             default -> deckSize + ThreadLocalRandom.current().nextInt(deckSize);
         };
     }
-    private void beginTurn() { turnEndsAt = now() + turnSec * 1000L; botAt = now() + BOT_DELAY_MS; }
+    private void beginTurn() {
+        turnEndsAt = now() + turnSec * 1000L; botAt = now() + BOT_DELAY_MS;
+        // 정통 모드: 내 턴이 시작되면 그때까지의 단서는 "사라짐"(이후 것만 보임)
+        if (seenBaseline != null && turnSeat >= 0 && turnSeat < seenBaseline.length) seenBaseline[turnSeat] = clues.size();
+    }
 
     // ── 행동 ──
     public synchronized void askAll(String clientId, int item) {
@@ -182,13 +190,15 @@ public class SherlockGame implements RoomGame {
             sb.append(q.nick).append(" ").append(c).append("  ");
         }
         clues.add(new Clue(p.seat, p.nick, -1, item, res));
-        note(p.nick + " ▸ [전체] " + ITEMS[item] + " → " + sb.toString().trim());
+        note(memoryMode ? (p.nick + " ▸ [전체] " + ITEMS[item] + " 조사")
+                : (p.nick + " ▸ [전체] " + ITEMS[item] + " → " + sb.toString().trim()));
         endTurn();
     }
     private void doAskOne(P p, P q, int item) {
         int c = countItem(q, item);
         clues.add(new Clue(p.seat, p.nick, q.seat, item, List.of(new SeatCount(q.seat, c))));
-        note(p.nick + " ▸ [" + q.nick + "] " + ITEMS[item] + " → " + c + "장");
+        note(memoryMode ? (p.nick + " ▸ [" + q.nick + "] " + ITEMS[item] + " 조사")
+                : (p.nick + " ▸ [" + q.nick + "] " + ITEMS[item] + " → " + c + "장"));
         endTurn();
     }
     private void doAccuse(P p, int charId) {
@@ -279,14 +289,26 @@ public class SherlockGame implements RoomGame {
         boolean myTurn = phase == Phase.PLAYING && meSeat == turnSeat && me != null && me.alive && !me.left;
         String turnName = phase == Phase.PLAYING && turnSeat >= 0 ? players.get(turnSeat).nick : null;
 
+        // 정통 기억 모드: 내 기준선 이후의 단서만 노출(내 턴 시작 시 리셋). 종료 후엔 전부 공개.
+        List<Clue> window;
+        if (!memoryMode || phase == Phase.ENDED || meSeat < 0 || seenBaseline == null) window = clues;
+        else { int base = Math.max(0, Math.min(meSeat < seenBaseline.length ? seenBaseline[meSeat] : 0, clues.size())); window = clues.subList(base, clues.size()); }
+        // 개인 조사(target>=0)는 질문자만 답을 본다. 나머지에겐 item=-1·결과없음으로 '비공개' 표시.
+        List<Clue> shownClues = new ArrayList<>();
+        for (Clue c : window) {
+            if (c.target() < 0 || meSeat == c.askerSeat() || phase == Phase.ENDED) shownClues.add(c);
+            else shownClues.add(new Clue(c.askerSeat(), c.askerName(), c.target(), -1, List.of()));
+        }
+
         return new SherlockState(
                 phase.name(),
                 turnSec,
+                memoryMode,
                 clientId != null && clientId.equals(hostClientId),
                 me != null,
                 pv, deck, myCards, List.of(ITEMS),
                 turnSeat, turnName, myTurn, meSeat,
-                new ArrayList<>(clues), lastAction, new ArrayList<>(log),
+                shownClues, lastAction, new ArrayList<>(log),
                 winnerSeat, winnerLabel, turnEndsAt, now());
     }
 

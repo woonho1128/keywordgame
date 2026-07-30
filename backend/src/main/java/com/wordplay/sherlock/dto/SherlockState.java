@@ -6,6 +6,7 @@ import java.util.List;
 public record SherlockState(
         String phase,                 // LOBBY / PLAYING / ENDED
         int turnSec,                  // 턴 제한시간(초)
+        boolean memoryMode,           // 정통 기억 모드(단서 로그 미보존)
         boolean isHost,
         boolean joined,
         List<PlayerView> players,
@@ -33,7 +34,7 @@ public record SherlockState(
     public record SeatCount(int seat, int count) {}
 
     public static SherlockState notFound(long now) {
-        return new SherlockState("NONE", 60, false, false, List.of(), List.of(), List.of(), List.of(),
+        return new SherlockState("NONE", 60, false, false, false, List.of(), List.of(), List.of(), List.of(),
                 -1, null, false, -1, List.of(), null, List.of(), -1, null, 0, now);
     }
 }
