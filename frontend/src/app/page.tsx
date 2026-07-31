@@ -9,10 +9,10 @@ const GAME_SLUG: Record<string, string> = {
   mafia: 'mafia', 'mafia-jobs': 'jobmafia', avalon: 'avalon', codenames: 'codenames',
   rummikub: 'rummikub', halligalli: 'halligalli', lexio: 'lexio', bingo: 'bingo',
   gartic: 'gartic', othello: 'othello', coup: 'coup', omok: 'omok', horserace: 'horserace',
-  sixnimmt: 'sixnimmt', 'tetris-battle': 'tetris-battle', yacht: 'yacht', mojo: 'mojo', yut: 'yut', monopoly: 'monopoly', sherlock: 'sherlock',
+  sixnimmt: 'sixnimmt', 'tetris-battle': 'tetris-battle', yacht: 'yacht', mojo: 'mojo', yut: 'yut', monopoly: 'monopoly', sherlock: 'sherlock', ciao: 'ciao',
 };
 // 엔트리형(방을 localStorage로 복원하지 않는) 게임 → ?join=CODE 쿼리로 자동 참가
-const ENTRY_GAMES = new Set(['sixnimmt', 'tetris-battle', 'yacht', 'mojo', 'yut', 'monopoly', 'sherlock']);
+const ENTRY_GAMES = new Set(['sixnimmt', 'tetris-battle', 'yacht', 'mojo', 'yut', 'monopoly', 'sherlock', 'ciao']);
 
 type Genre = 'mystery' | 'card' | 'board' | 'puzzle' | 'action' | 'party';
 
@@ -63,6 +63,7 @@ const GAMES: Game[] = [
   { href: '/territory', title: '🗺️ 땅따먹기', desc: '영역을 그려 땅을 넓히고 봇과 경쟁하는 게임. 랭킹 등록 (혼자 플레이).', hover: 'hit', solo: true, soloLabel: '🤖 봇과 1인 가능', genres: ['action'] },
   { href: '/monopoly', title: '🏙️ 부루마블', desc: '도시를 사고 건물을 올려 통행료로 상대를 파산시키는 보드게임. 독점 라인·랜드마크·인수·황금열쇠, 개인전/팀전(2:2). 봇과 2~4인.', hover: 'move', solo: true, soloLabel: '🤖 봇과 1인 가능', genres: ['board'] },
   { href: '/sherlock', title: '🔎 셜록13', desc: '아이템 단서로 숨은 범인 1명을 추리하는 게임. 전체/개인 조사로 개수를 캐내 용의자를 좁히고 먼저 지목! 인원에 맞춰 캐릭터가 늘어나 최대 10인. 봇과 2~10인.', hover: 'hit', solo: true, soloLabel: '🤖 봇과 1인 가능', genres: ['mystery'] },
+  { href: '/ciao', title: '🌉 차오차오', desc: '주사위를 통 속에 숨겨 굴리고 숫자를 선언(뻥 가능!), 의심으로 견제하며 구름다리를 건너는 블러핑 레이스. X가 나오면 무조건 거짓말! 인원에 맞춰 말·목표 자동 조정. 봇과 2~10인.', hover: 'move', solo: true, soloLabel: '🤖 봇과 1인 가능', genres: ['mystery', 'party'] },
 ];
 
 export default function HomePage() {
