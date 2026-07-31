@@ -238,8 +238,9 @@ public class CiaoGame implements RoomGame {
         int v;
         double bluff = switch (p.botLevel) { case "EASY" -> 0.10; case "HARD" -> 0.35; default -> 0.20; };
         if (actualIsX()) {
-            // 강제 거짓말: 고급 봇은 그럴듯한 2~3 위주, 초급은 아무거나
-            v = "HARD".equals(p.botLevel) ? 2 + ThreadLocalRandom.current().nextInt(2)
+            // 강제 거짓말. 고급 봇은 큰 수를 선호하되 1~4를 모두 쓴다 —
+            // 2~3만 부르면 "고급 봇의 1은 무조건 진실"이라는 정보가 새어 공략당한다.
+            v = "HARD".equals(p.botLevel) ? weightedPick(1, 3, 3, 2)
                     : 1 + ThreadLocalRandom.current().nextInt(4);
         } else if (ThreadLocalRandom.current().nextDouble() < bluff && actual < 4) {
             v = actual + 1 + ThreadLocalRandom.current().nextInt(4 - actual); // 과장
@@ -247,6 +248,14 @@ public class CiaoGame implements RoomGame {
             v = actual;
         }
         doDeclare(v);
+    }
+
+    /** w1~w4 가중치로 1~4 중 하나를 고른다. */
+    private static int weightedPick(int w1, int w2, int w3, int w4) {
+        int total = w1 + w2 + w3 + w4, r = ThreadLocalRandom.current().nextInt(total);
+        if ((r -= w1) < 0) return 1;
+        if ((r -= w2) < 0) return 2;
+        return (r - w3) < 0 ? 3 : 4;
     }
 
     /** 의심 창에서 봇들의 의심 여부를 한 번만 판정. */

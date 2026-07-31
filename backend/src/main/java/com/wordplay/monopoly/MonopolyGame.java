@@ -28,7 +28,7 @@ public class MonopolyGame implements RoomGame {
 
     static final int MAX_PLAYERS = 4;
     static final long TURN_MS = 45_000, BOT_DELAY_MS = 2000; // 봇 한 동작 간 간격(느긋하게)
-    static final long START_CASH = 1500, SALARY = 300;
+    static final long START_CASH = 1500, SALARY = 200;
     static final int ISLAND = 8, TRAVEL = 24, OLYMPIC = 16, START_TILE = 0;
     static final int MAX_ISLAND_TURNS = 3;
 
@@ -70,8 +70,15 @@ public class MonopolyGame implements RoomGame {
     };
     static final int N = BOARD.length;
 
-    // 건물 단계별 통행료 배율(가격 대비), 건설비 배율(다음 단계로)
-    static final double[] TOLL_MUL = {0.10, 0.45, 1.1, 2.2, 4.5};   // 0땅 1별장 2빌딩 3호텔 4랜드마크
+    /*
+     * 건물 단계별 통행료 배율(가격 대비), 건설비 배율(다음 단계로).
+     *
+     * 맨땅(0단계) 배율이 0.10이던 때는 상대가 전 도시를 소유해도 한 바퀴 통행료가 68만에
+     * 그쳐 월급(300만)에 한참 못 미쳤다. 즉 "땅을 다 뺏겨도 돈이 계속 불어나" 아무도
+     * 파산하지 않았다(봇이 몇십 분씩 버티던 원인). 맨땅 0.30 + 월급 200만으로 조정해
+     * 전 도시를 뺏기면 대략 본전, 건물을 올리면 확실히 압박이 되도록 맞췄다.
+     */
+    static final double[] TOLL_MUL = {0.30, 0.45, 1.1, 2.2, 4.5};   // 0땅 1별장 2빌딩 3호텔 4랜드마크
     static final double[] BUILD_MUL = {0.5, 0.6, 0.7, 1.0};          // t→t+1 비용
 
     static final class P {
