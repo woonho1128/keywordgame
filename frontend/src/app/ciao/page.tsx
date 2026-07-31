@@ -237,7 +237,9 @@ export default function CiaoPage() {
               <p>· 진실이면 → 의심자 말 추락 💦 + 선언자가 실제 값만큼 전진!</p>
               <p>· 아무도 의심 안 하면 선언 값 그대로 전진 (뻥이 통한 것!).</p>
               <p>· 다리(10칸) 끝을 넘어가면 1개 건넘. <b>목표 수만큼 먼저 건너면 승리!</b></p>
-              <p>· 말이 다 떨어지면 탈락. 인원에 따라 말·목표가 자동 조정돼요(2~4인은 원작: 말7·3건넘).</p>
+              <p>· <b>건넌 말은 반대편에 남아 다시 쓸 수 없어요.</b> 말 7개로 3개를 건너보내야 하니, 추락은 4번까지만 버팁니다.</p>
+              <p>· 말이 다 떨어지면 탈락 — 헛의심으로 말을 낭비하면 건널 말이 모자라요!</p>
+              <p>· 인원에 따라 말·목표가 자동 조정돼요(2~4인은 원작: 말7·3건넘).</p>
             </div>
           </details>
         </div>
@@ -454,11 +456,15 @@ export default function CiaoPage() {
                     {p.seat === ss.turnSeat && !ended && <span className="text-[10px] lg:text-xs font-extrabold text-amber-600 bg-amber-100 rounded-full px-2 py-0.5">차례</span>}
                   </div>
                   <div className="flex items-center justify-between mt-1 lg:mt-1.5">
-                    <span className="flex gap-0.5 lg:gap-1 items-center">
-                      {Array.from({ length: p.pawnsLeft }).map((_, i) => (
-                        <span key={i} className="w-2 h-2 lg:w-2.5 lg:h-2.5 rounded-full" style={{ background: SEAT_COLORS[p.seat % SEAT_COLORS.length] }} />
+                    {/* 남은 말(진한 점) + 잃거나 건너보낸 말(빈 점) — 말이 어디로 갔는지 보이게 */}
+                    <span className="flex gap-0.5 lg:gap-1 items-center" title={`남은 말 ${p.pawnsLeft}개 · 건넌 말 ${p.crossed}개 · 추락 ${Math.max(0, ss.pawnsPer - p.pawnsLeft - p.crossed)}개`}>
+                      {Array.from({ length: ss.pawnsPer }).map((_, i) => (
+                        <span key={i} className="w-2 h-2 lg:w-2.5 lg:h-2.5 rounded-full"
+                          style={i < p.pawnsLeft
+                            ? { background: SEAT_COLORS[p.seat % SEAT_COLORS.length] }
+                            : { background: 'transparent', border: '1px solid #cbd5e1' }} />
                       ))}
-                      {p.pawnsLeft === 0 && <span className="text-[10px] lg:text-xs text-slate-300">말 없음</span>}
+                      {p.pawnsLeft === 0 && <span className="ml-1 text-[10px] lg:text-xs text-slate-400">말 없음</span>}
                     </span>
                     <span className="flex gap-0.5 text-[11px] lg:text-sm">
                       {Array.from({ length: ss.goal }).map((_, i) => (

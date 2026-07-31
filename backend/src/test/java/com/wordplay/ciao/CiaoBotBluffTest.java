@@ -65,6 +65,27 @@ class CiaoBotBluffTest {
         }
     }
 
+    /**
+     * 봇들이 헛의심을 남발하면 서로 말을 다 잃어 아무도 다리를 못 건너고 전멸로 끝난다.
+     * (실제로 봇이 1개만 건넌 채 말이 바닥나 탈락하는 제보가 있었다.)
+     */
+    @Test
+    void 판이_전멸이_아니라_목표_달성으로_끝난다() throws Exception {
+        int games = 24, byGoal = 0;
+        for (int game = 0; game < games; game++) {
+            CiaoGame g = new CiaoGame("h", "호스트", 8);
+            for (int i = 1; i < 4; i++) g.addBot("h", "HARD");
+            g.start("h");
+            for (CiaoGame.P p : players(g)) { p.bot = true; p.botLevel = "HARD"; }
+            for (int s = 0; s < 20000 && g.phase() == CiaoGame.Phase.PLAYING; s++) step(g);
+            assertThat(g.phase()).isEqualTo(CiaoGame.Phase.ENDED);
+            int ws = g.winnerSeat();
+            if (ws >= 0 && players(g).get(ws).crossed >= 3) byGoal++;   // 4인 기준 목표 3개
+        }
+        // 대부분의 판은 다리를 다 건너서 끝나야 한다(전멸승이 예외여야 함).
+        assertThat(byGoal).as("목표 달성으로 끝난 판 수").isGreaterThanOrEqualTo((int) (games * 0.8));
+    }
+
     @Test
     void 선언값이_진실_여부를_누설하지_않는다() throws Exception {
         for (String level : new String[]{"EASY", "NORMAL", "HARD"}) {

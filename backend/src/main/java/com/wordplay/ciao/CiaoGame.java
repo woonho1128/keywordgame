@@ -192,7 +192,7 @@ public class CiaoGame implements RoomGame {
     }
     private void eliminate(P p) {
         p.eliminated = true;
-        note("☠️ " + p.nick + " 말이 모두 사라져 탈락!");
+        note("☠️ " + p.nick + " 말이 다 떨어져 탈락! (건넌 말 " + p.crossed + "개 · 추락 " + (pawnsPer - p.crossed) + "개)");
         P last = null; int n = 0;
         for (P q : players) if (!q.eliminated && !q.left) { n++; last = q; }
         if (n == 1 && last != null) { win(last); return; }
@@ -265,13 +265,19 @@ public class CiaoGame implements RoomGame {
         List<P> bots = new ArrayList<>();
         for (P p : players) if (p.bot && !p.eliminated && !p.left && p.seat != turnSeat) bots.add(p);
         java.util.Collections.shuffle(bots, ThreadLocalRandom.current());
+        if (bots.isEmpty()) return;
         boolean crossing = cur.bridgePos + declared > BRIDGE_LEN;          // 이 선언이 통하면 건넘
         boolean reaching = crossing && cur.crossed + 1 >= goal;            // 통하면 승리
         for (P b : bots) {
-            double base = switch (declared) { case 4 -> 0.22; case 3 -> 0.13; case 2 -> 0.07; default -> 0.03; };
-            double mul = switch (b.botLevel) { case "EASY" -> 0.6; case "HARD" -> 1.5; default -> 1.0; };
-            double prob = base * mul * (reaching ? 2.5 : crossing ? 1.6 : 1.0);
-            if (ThreadLocalRandom.current().nextDouble() < Math.min(0.85, prob)) { resolveChallenge(b); return; }
+            // 먼저 '이 선언을 누구든 의심할 확률'을 정하고 봇 수로 나눠 개인 확률을 구한다.
+            // 봇마다 독립으로 굴리면 인원이 많을수록 의심이 폭증해, 서로 헛의심하다
+            // 말을 전부 잃고 아무도 다리를 못 건너는 판이 된다.
+            double agg = switch (declared) { case 4 -> 0.34; case 3 -> 0.20; case 2 -> 0.10; default -> 0.05; };
+            agg *= switch (b.botLevel) { case "EASY" -> 0.6; case "HARD" -> 1.3; default -> 1.0; };
+            if (reaching) agg *= 2.0; else if (crossing) agg *= 1.4;
+            if (b.pawnsLeft <= 2) agg *= 0.4;   // 말이 얼마 안 남으면 몸을 사린다
+            double per = 1 - Math.pow(1 - Math.min(0.85, agg), 1.0 / bots.size());
+            if (ThreadLocalRandom.current().nextDouble() < per) { resolveChallenge(b); return; }
         }
     }
 
