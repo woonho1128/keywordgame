@@ -55,7 +55,13 @@ const GAMES: Game[] = [
 
 export default function HomePage() {
   const [soloOnly, setSoloOnly] = useState(false);
-  const games = soloOnly ? GAMES.filter((g) => g.solo) : GAMES;
+  const [query, setQuery] = useState('');
+  const q = query.trim().toLowerCase();
+  const games = GAMES.filter((g) => {
+    if (soloOnly && !g.solo) return false;
+    if (!q) return true;
+    return (g.title + ' ' + g.desc).toLowerCase().includes(q);
+  });
   const soloCount = GAMES.filter((g) => g.solo).length;
 
   const [joinNick, setJoinNick] = useState('');
@@ -110,6 +116,25 @@ export default function HomePage() {
         <p className="text-[11px] text-gray-400 mt-2">친구가 만든 방 코드를 입력하면 해당 게임 방으로 바로 들어가요.</p>
       </div>
 
+      <div className="mb-4 w-full max-w-md relative">
+        <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none">🔍</span>
+        <input
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="게임 검색 (예: 마피아, 카드, 봇, 추리...)"
+          className="w-full border-2 border-gray-200 rounded-full pl-11 pr-10 py-2.5 text-sm focus:outline-none focus:border-hit"
+        />
+        {query && (
+          <button
+            onClick={() => setQuery('')}
+            aria-label="검색어 지우기"
+            className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 text-lg leading-none"
+          >
+            ×
+          </button>
+        )}
+      </div>
+
       <div className="mb-8">
         <button
           onClick={() => setSoloOnly((v) => !v)}
@@ -142,7 +167,11 @@ export default function HomePage() {
         ))}
       </div>
 
-      {games.length === 0 && <p className="text-gray-400 mt-10">해당하는 게임이 없어요.</p>}
+      {games.length === 0 && (
+        <p className="text-gray-400 mt-10">
+          {q ? `'${query.trim()}'에 해당하는 게임이 없어요.` : '해당하는 게임이 없어요.'}
+        </p>
+      )}
     </main>
   );
 }
