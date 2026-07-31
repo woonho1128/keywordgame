@@ -130,7 +130,7 @@ public class SixNimmtGame implements RoomGame {
     private void beginSelect() {
         phase = Phase.SELECT;
         for (P p : players) p.selected = -1;
-        trickEvents.clear();
+        // 직전 트릭 요약(events)은 다음 선택 중에도 계속 보이도록 여기서 지우지 않음(다음 해소 시작 때 지움)
         deadline = now() + SELECT_MS;
         botAt = now() + BOT_DELAY_MS;
     }
@@ -170,6 +170,7 @@ public class SixNimmtGame implements RoomGame {
     }
 
     private void beginResolve() {
+        trickEvents.clear(); // 새 트릭 해소 시작 → 직전 요약 지우고 새로 기록
         resolveQueue = new ArrayList<>();
         for (int s = 0; s < players.size(); s++) { P p = players.get(s); if (p.left || p.selected == -1) continue; resolveQueue.add(new int[]{p.selected, s}); }
         resolveQueue.sort(Comparator.comparingInt(a -> a[0]));

@@ -232,6 +232,24 @@ export default function SixNimmtPage() {
           </div>
           {ss.iAmChooser && <p className="text-xs text-center text-fuchsia-500">낼 카드가 모든 줄보다 낮아요 — 가져갈 줄을 탭하세요(벌점 적은 줄 추천).</p>}
 
+          {/* 이번 판: 누가 어떤 카드를 어디에 냈는지 요약 */}
+          {ss.events.length > 0 && (
+            <div className="rounded-xl border border-slate-200 dark:border-slate-700 p-2">
+              <p className="text-xs font-bold text-slate-500 dark:text-slate-400 mb-1">🃏 이번 판 (작은 수부터 처리)</p>
+              <div className="space-y-0.5">
+                {ss.events.map((e, i) => (
+                  <div key={i} className="flex items-center gap-1.5 text-xs">
+                    <span className="truncate max-w-[6rem] font-bold">{ss.players[e.seat]?.name ?? '?'}</span>
+                    <span className="px-1.5 py-0.5 rounded font-mono font-bold text-white" style={{ background: bullColor(3) }}>{e.card}</span>
+                    {e.took > 0
+                      ? <span className="text-red-400 font-bold">→ {e.row + 1}번 줄 가져감 · 벌점 +{e.took}🐮</span>
+                      : <span className="text-slate-400">→ {e.row + 1}번 줄</span>}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
           {/* 점수판 */}
           <div className="rounded-xl border border-slate-200 dark:border-slate-700 p-2 grid grid-cols-2 gap-x-3 gap-y-0.5 text-sm">
             {sortedPlayers.map((p, i) => (
