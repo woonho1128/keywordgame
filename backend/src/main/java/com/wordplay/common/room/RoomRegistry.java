@@ -24,6 +24,12 @@ public class RoomRegistry<T extends RoomGame> {
     private static final long IDLE_MS = 30 * 60_000L;       // 30분 방치 → 제거
     private static final long ENDED_IDLE_MS = 40_000L;      // 종료 후 40초 → 제거
     private static final long EMPTY_IDLE_MS = 20_000L;      // 빈 방 20초 → 제거
+    /**
+     * 3분간 이 방으로 아무 요청도 없으면 제거. 방 화면은 열려 있는 동안 1초 간격으로
+     * me()를 호출하므로, 요청이 끊겼다는 건 아무도 그 방을 보고 있지 않다는 뜻이다.
+     * (나가기를 누르지 않고 홈으로 가거나 탭을 닫아 '진행중'으로 남던 방을 정리한다.)
+     */
+    private static final long ABANDONED_MS = 3 * 60_000L;
 
     /** 코드(대문자) → 게임 키. 모든 레지스트리가 공유. */
     private static final Map<String, String> GLOBAL = new ConcurrentHashMap<>();
@@ -35,6 +41,8 @@ public class RoomRegistry<T extends RoomGame> {
 
     private final String gameKey;
     private final Map<String, T> rooms = new HashMap<>();
+    /** 코드 → 마지막으로 이 방에 요청이 닿은 시각. 게임 구현과 무관하게 레지스트리가 직접 기록한다. */
+    private final Map<String, Long> lastAccess = new HashMap<>();
 
     /** gameKey는 프론트 경로(예: "othello", "mafia-jobs", "yacht"). */
     public RoomRegistry(String gameKey) { this.gameKey = gameKey; }
@@ -44,13 +52,18 @@ public class RoomRegistry<T extends RoomGame> {
         if (rooms.size() >= MAX_ROOMS) throw new IllegalStateException("방이 너무 많습니다. 잠시 후 다시 시도하세요.");
         String code = uniqueCode();
         rooms.put(code, game);
+        lastAccess.put(code, System.currentTimeMillis());
         GLOBAL.put(code, gameKey);
         return code;
     }
 
-    /** 없으면 null. */
+    /** 없으면 null. 조회 시각을 기록해 '아무도 보고 있지 않은 방' 판정에 쓴다. */
     public synchronized T find(String code) {
-        return code == null ? null : rooms.get(code.toUpperCase());
+        if (code == null) return null;
+        String u = code.toUpperCase();
+        T g = rooms.get(u);
+        if (g != null) lastAccess.put(u, System.currentTimeMillis());
+        return g;
     }
 
     public synchronized List<RoomSummary> list() {
@@ -72,6 +85,7 @@ public class RoomRegistry<T extends RoomGame> {
     public synchronized void clear() {
         for (String c : rooms.keySet()) GLOBAL.remove(c);
         rooms.clear();
+        lastAccess.clear();
     }
 
     /** 특정 방 제거. 실제로 지웠으면 true. */
@@ -79,6 +93,7 @@ public class RoomRegistry<T extends RoomGame> {
         if (code == null) return false;
         String u = code.toUpperCase();
         boolean removed = rooms.remove(u) != null;
+        lastAccess.remove(u);
         if (removed) GLOBAL.remove(u);
         return removed;
     }
@@ -99,10 +114,12 @@ public class RoomRegistry<T extends RoomGame> {
             Map.Entry<String, T> entry = it.next();
             T g = entry.getValue();
             long idle = now - g.lastActiveMs();
+            long unseen = now - lastAccess.getOrDefault(entry.getKey(), now);
             boolean dead = idle > IDLE_MS
+                    || unseen > ABANDONED_MS
                     || (g.isEnded() && idle > ENDED_IDLE_MS)
                     || (g.playerCount() == 0 && idle > EMPTY_IDLE_MS);
-            if (dead) { it.remove(); GLOBAL.remove(entry.getKey()); }
+            if (dead) { it.remove(); lastAccess.remove(entry.getKey()); GLOBAL.remove(entry.getKey()); }
         }
     }
 

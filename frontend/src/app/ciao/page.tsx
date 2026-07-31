@@ -130,7 +130,13 @@ export default function CiaoPage() {
   const challenge = async () => { try { setSs(await api(`/api/v1/ciao/challenge?roomCode=${roomCode}&clientId=${id.current}`, { method: 'POST', body: '{}' })); } catch (e: any) { alert(e?.message); } };
   const leave = async () => { const rc = roomRef.current; if (rc) { try { await api(`/api/v1/ciao/leave?roomCode=${rc}&clientId=${id.current}`, { method: 'POST', body: '{}' }); } catch {} } setScreen('entry'); setRoomCode(null); setSs(null); };
 
-  const home = <Link href="/" aria-label="홈으로" className="text-xl leading-none text-slate-500 hover:text-slate-800">🏠</Link>;
+  // 홈으로 나갈 때도 방에서 빠져나가야 '진행중'으로 남지 않는다(sendBeacon은 이동 중에도 전송됨).
+  const beaconLeave = () => {
+    const rc = roomRef.current;
+    if (!rc || !id.current) return;
+    try { navigator.sendBeacon(`/api/v1/ciao/leave?roomCode=${rc}&clientId=${encodeURIComponent(id.current)}`); } catch {}
+  };
+  const home = <Link href="/" aria-label="홈으로" onClick={beaconLeave} className="text-xl leading-none text-slate-500 hover:text-slate-800">🏠</Link>;
   const ended = ss?.phase === 'ENDED';
 
   // 서버 시각 보간 → 부드러운 남은 시간
