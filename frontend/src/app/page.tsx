@@ -14,6 +14,17 @@ const GAME_SLUG: Record<string, string> = {
 // 엔트리형(방을 localStorage로 복원하지 않는) 게임 → ?join=CODE 쿼리로 자동 참가
 const ENTRY_GAMES = new Set(['sixnimmt', 'tetris-battle', 'yacht', 'mojo', 'yut', 'monopoly', 'sherlock']);
 
+type Genre = 'mystery' | 'card' | 'board' | 'puzzle' | 'action' | 'party';
+
+const GENRES: { key: Genre; label: string }[] = [
+  { key: 'mystery', label: '🕵️ 추리·심리' },
+  { key: 'card', label: '🃏 카드' },
+  { key: 'board', label: '♟️ 보드·전략' },
+  { key: 'puzzle', label: '🧩 퍼즐' },
+  { key: 'action', label: '⚡ 순발력·액션' },
+  { key: 'party', label: '🎉 파티' },
+];
+
 type Game = {
   href: string;
   title: string;
@@ -21,44 +32,47 @@ type Game = {
   hover: 'hit' | 'move';
   solo: boolean;      // 혼자(1인) 플레이 가능
   soloLabel?: string; // 배지 문구
+  genres: Genre[];    // 장르(멀티 태그)
 };
 
 const GAMES: Game[] = [
-  { href: '/create/wordguess', title: 'WordGuess', desc: '정답의 자모를 맞히는 한국어 Wordle 스타일 게임 (혼자 플레이).', hover: 'hit', solo: true, soloLabel: '🧩 1인 플레이' },
-  { href: '/spyfall', title: '🕵️ 스파이폴', desc: '각자 폰으로 접속해 역할을 확인하고, 숨은 스파이를 찾는 게임 (3~12인).', hover: 'hit', solo: false },
-  { href: '/mafia', title: '🎭 마피아', desc: '밤·낮으로 자동 진행되는 마피아. 각자 폰으로 접속 (4~12인).', hover: 'move', solo: false },
-  { href: '/mafia-jobs', title: '🕵️‍♂️ 직업 마피아', desc: '경찰·의사·정신병자·관종 등 직업이 있는 마피아 (5~12인).', hover: 'move', solo: false },
-  { href: '/avalon', title: '🏰 아발론', desc: '선과 악으로 나뉘어 원정을 다투는 추리 게임 (5~10인).', hover: 'hit', solo: false },
-  { href: '/codenames', title: '🔡 코드네임', desc: '두 팀으로 나눠 팀장의 힌트로 단어를 맞히는 팀 게임 (4~8인).', hover: 'hit', solo: false },
-  { href: '/rummikub', title: '🁢 루미큐브', desc: '타일로 세트를 만들어 먼저 다 내려놓는 사람이 이기는 게임. 봇과 1인~4인.', hover: 'hit', solo: true, soloLabel: '🤖 봇과 1인 가능' },
-  { href: '/halligalli', title: '🔔 할리갈리', desc: '같은 과일 5개가 뜨면 먼저 종을 치는 실시간 순발력 게임. 봇과 1인~6인.', hover: 'hit', solo: true, soloLabel: '🤖 봇과 1인 가능' },
-  { href: '/lexio', title: '🀫 렉시오', desc: '타일로 족보를 만들어 먼저 다 내려놓는 빅투 계열 게임. 봇과 1인~5인.', hover: 'hit', solo: true, soloLabel: '🤖 봇과 1인 가능' },
-  { href: '/othello', title: '⚫⚪ 오델로', desc: '돌을 뒤집어 더 많이 차지하는 8×8 리버시. 봇(초·중·고급·초고수)과 1인 또는 유저 대전.', hover: 'hit', solo: true, soloLabel: '🤖 봇과 1인 가능' },
-  { href: '/coup', title: '🎴 쿠 (Coup)', desc: '정체를 숨기고 속고 속이는 블러핑 심리전. 의심·차단으로 서로 견제 (봇과 2~6인).', hover: 'move', solo: true, soloLabel: '🤖 봇과 1인 가능' },
-  { href: '/omok', title: '⚫ 오목', desc: '5목을 먼저 만들면 승리하는 고전 보드게임. 봇(초·중·고급) 또는 유저와 대전. 자유룰/금수룰.', hover: 'hit', solo: true, soloLabel: '🤖 봇과 1인 가능' },
-  { href: '/horserace', title: '🏇 경마', desc: '말에 가상 칩을 걸고 배당을 노리는 경마. 봇과 혼자 또는 여러 명이 배팅 대결(놀이용 칩).', hover: 'move', solo: true, soloLabel: '🤖 봇과 1인 가능' },
-  { href: '/tetris', title: '🧱 테트리스', desc: '블록을 쌓아 줄을 지우는 고전 낙하 퍼즐. 마라톤·스프린트 모드 + 랭킹. T-스핀·홀드 지원 (혼자 플레이).', hover: 'hit', solo: true, soloLabel: '🧩 1인 플레이' },
-  { href: '/tetris-battle', title: '🧱⚔️ 테트리스 배틀', desc: '줄을 지워 상대에게 방해 줄을 보내는 대전 테트리스. 1v1·배틀로얄(최대 6인), 봇과 혼자도 가능. 우승 랭킹.', hover: 'move', solo: true, soloLabel: '🤖 봇과 1인 가능' },
-  { href: '/sixnimmt', title: '🐮 젝스님트', desc: '카드를 동시에 내어 6번째가 되면 벌점을 먹는 눈치 카드게임. 벌점 적게 먹기! 봇과 2~10인.', hover: 'hit', solo: true, soloLabel: '🤖 봇과 1인 가능' },
-  { href: '/mojo', title: '🎴 모죠', desc: '카드를 내며 비교하고, 모죠타임에 뒷면 카드를 공개하는 눈치·도박 카드게임. 색상별 최고 숫자만 벌점! 봇과 2~8인.', hover: 'hit', solo: true, soloLabel: '🤖 봇과 1인 가능' },
-  { href: '/yut', title: '🎋 윷놀이', desc: '윷을 던져 말 4개를 먼저 빼내는 한국 전통 보드게임. 잡기·업기·지름길·백도, 개인전·팀전(2:2). 봇과 2~4인.', hover: 'move', solo: true, soloLabel: '🤖 봇과 1인 가능' },
-  { href: '/marble', title: '🎱 마블 레이스', desc: '이름을 넣으면 귀여운 마블들이 물리 코스를 튕기며 내려가 순위를 정하는 랜덤 뽑기. 누가 살지·순서 정하기 (혼자 플레이).', hover: 'hit', solo: true, soloLabel: '🧩 1인 플레이' },
-  { href: '/2048', title: '🔢 2048', desc: '같은 숫자 타일을 밀어 합쳐 2048을 만드는 중독성 퍼즐. 최고 점수 랭킹 (혼자 플레이).', hover: 'hit', solo: true, soloLabel: '🧩 1인 플레이' },
-  { href: '/yacht', title: '🎲 야찌', desc: '주사위 5개를 굴려 족보를 채우는 다이스 게임. 친구·봇과 방에서 대결하고 최고 점수 랭킹 도전. 봇과 1인~8인.', hover: 'hit', solo: true, soloLabel: '🤖 봇과 1인 가능' },
-  { href: '/gartic', title: '🎨 그림 텔레폰', desc: '문장을 그림으로, 그림을 문장으로 넘기며 엉뚱하게 변해가는 갈틱폰 (3~10인).', hover: 'hit', solo: false },
-  { href: '/bingo', title: '🔢 빙고', desc: '3×3~5×5 판을 채우고, 뽑히는 숫자로 먼저 빙고 줄을 완성하면 승리 (2~8인).', hover: 'hit', solo: false },
-  { href: '/snake', title: '🐍 지렁이', desc: '먹이를 먹고 커지며 봇과 경쟁하는 지렁이 게임. 랭킹 등록 (혼자 플레이).', hover: 'hit', solo: true, soloLabel: '🤖 봇과 1인 가능' },
-  { href: '/territory', title: '🗺️ 땅따먹기', desc: '영역을 그려 땅을 넓히고 봇과 경쟁하는 게임. 랭킹 등록 (혼자 플레이).', hover: 'hit', solo: true, soloLabel: '🤖 봇과 1인 가능' },
-  { href: '/monopoly', title: '🏙️ 부루마블', desc: '도시를 사고 건물을 올려 통행료로 상대를 파산시키는 보드게임. 독점 라인·랜드마크·인수·황금열쇠, 개인전/팀전(2:2). 봇과 2~4인.', hover: 'move', solo: true, soloLabel: '🤖 봇과 1인 가능' },
-  { href: '/sherlock', title: '🔎 셜록13', desc: '아이템 단서로 숨은 범인 1명을 추리하는 게임. 전체/개인 조사로 개수를 캐내 용의자를 좁히고 먼저 지목! 인원에 맞춰 캐릭터가 늘어나 최대 10인. 봇과 2~10인.', hover: 'hit', solo: true, soloLabel: '🤖 봇과 1인 가능' },
+  { href: '/create/wordguess', title: 'WordGuess', desc: '정답의 자모를 맞히는 한국어 Wordle 스타일 게임 (혼자 플레이).', hover: 'hit', solo: true, soloLabel: '🧩 1인 플레이', genres: ['puzzle'] },
+  { href: '/spyfall', title: '🕵️ 스파이폴', desc: '각자 폰으로 접속해 역할을 확인하고, 숨은 스파이를 찾는 게임 (3~12인).', hover: 'hit', solo: false, genres: ['mystery'] },
+  { href: '/mafia', title: '🎭 마피아', desc: '밤·낮으로 자동 진행되는 마피아. 각자 폰으로 접속 (4~12인).', hover: 'move', solo: false, genres: ['mystery'] },
+  { href: '/mafia-jobs', title: '🕵️‍♂️ 직업 마피아', desc: '경찰·의사·정신병자·관종 등 직업이 있는 마피아 (5~12인).', hover: 'move', solo: false, genres: ['mystery'] },
+  { href: '/avalon', title: '🏰 아발론', desc: '선과 악으로 나뉘어 원정을 다투는 추리 게임 (5~10인).', hover: 'hit', solo: false, genres: ['mystery'] },
+  { href: '/codenames', title: '🔡 코드네임', desc: '두 팀으로 나눠 팀장의 힌트로 단어를 맞히는 팀 게임 (4~8인).', hover: 'hit', solo: false, genres: ['party'] },
+  { href: '/rummikub', title: '🁢 루미큐브', desc: '타일로 세트를 만들어 먼저 다 내려놓는 사람이 이기는 게임. 봇과 1인~4인.', hover: 'hit', solo: true, soloLabel: '🤖 봇과 1인 가능', genres: ['board'] },
+  { href: '/halligalli', title: '🔔 할리갈리', desc: '같은 과일 5개가 뜨면 먼저 종을 치는 실시간 순발력 게임. 봇과 1인~6인.', hover: 'hit', solo: true, soloLabel: '🤖 봇과 1인 가능', genres: ['action', 'card'] },
+  { href: '/lexio', title: '🀫 렉시오', desc: '타일로 족보를 만들어 먼저 다 내려놓는 빅투 계열 게임. 봇과 1인~5인.', hover: 'hit', solo: true, soloLabel: '🤖 봇과 1인 가능', genres: ['card'] },
+  { href: '/othello', title: '⚫⚪ 오델로', desc: '돌을 뒤집어 더 많이 차지하는 8×8 리버시. 봇(초·중·고급·초고수)과 1인 또는 유저 대전.', hover: 'hit', solo: true, soloLabel: '🤖 봇과 1인 가능', genres: ['board'] },
+  { href: '/coup', title: '🎴 쿠 (Coup)', desc: '정체를 숨기고 속고 속이는 블러핑 심리전. 의심·차단으로 서로 견제 (봇과 2~6인).', hover: 'move', solo: true, soloLabel: '🤖 봇과 1인 가능', genres: ['mystery', 'card'] },
+  { href: '/omok', title: '⚫ 오목', desc: '5목을 먼저 만들면 승리하는 고전 보드게임. 봇(초·중·고급) 또는 유저와 대전. 자유룰/금수룰.', hover: 'hit', solo: true, soloLabel: '🤖 봇과 1인 가능', genres: ['board'] },
+  { href: '/horserace', title: '🏇 경마', desc: '말에 가상 칩을 걸고 배당을 노리는 경마. 봇과 혼자 또는 여러 명이 배팅 대결(놀이용 칩).', hover: 'move', solo: true, soloLabel: '🤖 봇과 1인 가능', genres: ['party'] },
+  { href: '/tetris', title: '🧱 테트리스', desc: '블록을 쌓아 줄을 지우는 고전 낙하 퍼즐. 마라톤·스프린트 모드 + 랭킹. T-스핀·홀드 지원 (혼자 플레이).', hover: 'hit', solo: true, soloLabel: '🧩 1인 플레이', genres: ['puzzle'] },
+  { href: '/tetris-battle', title: '🧱⚔️ 테트리스 배틀', desc: '줄을 지워 상대에게 방해 줄을 보내는 대전 테트리스. 1v1·배틀로얄(최대 6인), 봇과 혼자도 가능. 우승 랭킹.', hover: 'move', solo: true, soloLabel: '🤖 봇과 1인 가능', genres: ['action', 'puzzle'] },
+  { href: '/sixnimmt', title: '🐮 젝스님트', desc: '카드를 동시에 내어 6번째가 되면 벌점을 먹는 눈치 카드게임. 벌점 적게 먹기! 봇과 2~10인.', hover: 'hit', solo: true, soloLabel: '🤖 봇과 1인 가능', genres: ['card'] },
+  { href: '/mojo', title: '🎴 모죠', desc: '카드를 내며 비교하고, 모죠타임에 뒷면 카드를 공개하는 눈치·도박 카드게임. 색상별 최고 숫자만 벌점! 봇과 2~8인.', hover: 'hit', solo: true, soloLabel: '🤖 봇과 1인 가능', genres: ['card'] },
+  { href: '/yut', title: '🎋 윷놀이', desc: '윷을 던져 말 4개를 먼저 빼내는 한국 전통 보드게임. 잡기·업기·지름길·백도, 개인전·팀전(2:2). 봇과 2~4인.', hover: 'move', solo: true, soloLabel: '🤖 봇과 1인 가능', genres: ['board'] },
+  { href: '/marble', title: '🎱 마블 레이스', desc: '이름을 넣으면 귀여운 마블들이 물리 코스를 튕기며 내려가 순위를 정하는 랜덤 뽑기. 누가 살지·순서 정하기 (혼자 플레이).', hover: 'hit', solo: true, soloLabel: '🧩 1인 플레이', genres: ['party'] },
+  { href: '/2048', title: '🔢 2048', desc: '같은 숫자 타일을 밀어 합쳐 2048을 만드는 중독성 퍼즐. 최고 점수 랭킹 (혼자 플레이).', hover: 'hit', solo: true, soloLabel: '🧩 1인 플레이', genres: ['puzzle'] },
+  { href: '/yacht', title: '🎲 야찌', desc: '주사위 5개를 굴려 족보를 채우는 다이스 게임. 친구·봇과 방에서 대결하고 최고 점수 랭킹 도전. 봇과 1인~8인.', hover: 'hit', solo: true, soloLabel: '🤖 봇과 1인 가능', genres: ['board'] },
+  { href: '/gartic', title: '🎨 그림 텔레폰', desc: '문장을 그림으로, 그림을 문장으로 넘기며 엉뚱하게 변해가는 갈틱폰 (3~10인).', hover: 'hit', solo: false, genres: ['party'] },
+  { href: '/bingo', title: '🔢 빙고', desc: '3×3~5×5 판을 채우고, 뽑히는 숫자로 먼저 빙고 줄을 완성하면 승리 (2~8인).', hover: 'hit', solo: false, genres: ['party'] },
+  { href: '/snake', title: '🐍 지렁이', desc: '먹이를 먹고 커지며 봇과 경쟁하는 지렁이 게임. 랭킹 등록 (혼자 플레이).', hover: 'hit', solo: true, soloLabel: '🤖 봇과 1인 가능', genres: ['action'] },
+  { href: '/territory', title: '🗺️ 땅따먹기', desc: '영역을 그려 땅을 넓히고 봇과 경쟁하는 게임. 랭킹 등록 (혼자 플레이).', hover: 'hit', solo: true, soloLabel: '🤖 봇과 1인 가능', genres: ['action'] },
+  { href: '/monopoly', title: '🏙️ 부루마블', desc: '도시를 사고 건물을 올려 통행료로 상대를 파산시키는 보드게임. 독점 라인·랜드마크·인수·황금열쇠, 개인전/팀전(2:2). 봇과 2~4인.', hover: 'move', solo: true, soloLabel: '🤖 봇과 1인 가능', genres: ['board'] },
+  { href: '/sherlock', title: '🔎 셜록13', desc: '아이템 단서로 숨은 범인 1명을 추리하는 게임. 전체/개인 조사로 개수를 캐내 용의자를 좁히고 먼저 지목! 인원에 맞춰 캐릭터가 늘어나 최대 10인. 봇과 2~10인.', hover: 'hit', solo: true, soloLabel: '🤖 봇과 1인 가능', genres: ['mystery'] },
 ];
 
 export default function HomePage() {
   const [soloOnly, setSoloOnly] = useState(false);
   const [query, setQuery] = useState('');
+  const [genre, setGenre] = useState<Genre | null>(null);
   const q = query.trim().toLowerCase();
   const games = GAMES.filter((g) => {
     if (soloOnly && !g.solo) return false;
+    if (genre && !g.genres.includes(genre)) return false;
     if (!q) return true;
     return (g.title + ' ' + g.desc).toLowerCase().includes(q);
   });
@@ -133,6 +147,28 @@ export default function HomePage() {
             ×
           </button>
         )}
+      </div>
+
+      <div className="mb-4 flex flex-wrap justify-center gap-2 max-w-2xl">
+        <button
+          onClick={() => setGenre(null)}
+          className={`rounded-full border-2 px-4 py-1.5 text-sm font-bold transition ${
+            genre === null ? 'border-hit bg-hit text-white' : 'border-gray-200 text-gray-500 hover:border-hit'
+          }`}
+        >
+          전체
+        </button>
+        {GENRES.map((gn) => (
+          <button
+            key={gn.key}
+            onClick={() => setGenre((v) => (v === gn.key ? null : gn.key))}
+            className={`rounded-full border-2 px-4 py-1.5 text-sm font-bold transition ${
+              genre === gn.key ? 'border-hit bg-hit text-white' : 'border-gray-200 text-gray-500 hover:border-hit'
+            }`}
+          >
+            {gn.label}
+          </button>
+        ))}
       </div>
 
       <div className="mb-8">
