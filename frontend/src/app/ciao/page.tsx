@@ -27,7 +27,8 @@ function cid(): string {
 const SEAT_COLORS = ['#f43f5e', '#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899', '#14b8a6', '#f97316', '#6366f1', '#84cc16'];
 
 /** 주사위 면. v: 1~4 눈금, 0 = X(빨강). hidden이면 ? 표시. */
-function DiceFace({ v, size = 48, hidden = false }: { v: number; size?: number; hidden?: boolean }) {
+/** 크기는 CSS 변수 --d 로 잡아 cls(예: 'lg:[--d:64px]')로 반응형 확대가 가능하다. */
+function DiceFace({ v, size = 48, hidden = false, cls = '' }: { v: number; size?: number; hidden?: boolean; cls?: string }) {
   const pips: Record<number, [number, number][]> = {
     1: [[50, 50]],
     2: [[28, 28], [72, 72]],
@@ -35,16 +36,16 @@ function DiceFace({ v, size = 48, hidden = false }: { v: number; size?: number; 
     4: [[28, 28], [72, 28], [28, 72], [72, 72]],
   };
   return (
-    <span className="relative inline-block rounded-2xl border-2 border-slate-300 bg-white shadow-[inset_0_-3px_0_rgba(0,0,0,0.08),0_2px_6px_rgba(0,0,0,0.15)] align-middle"
-      style={{ width: size, height: size }}>
+    <span className={`relative inline-block shrink-0 rounded-2xl border-2 border-slate-300 bg-white shadow-[inset_0_-3px_0_rgba(0,0,0,0.08),0_2px_6px_rgba(0,0,0,0.15)] align-middle ${cls}`}
+      style={{ ['--d' as string]: `${size}px`, width: 'var(--d)', height: 'var(--d)' } as React.CSSProperties}>
       {hidden ? (
-        <span className="absolute inset-0 flex items-center justify-center font-extrabold text-slate-300" style={{ fontSize: size * 0.52 }}>?</span>
+        <span className="absolute inset-0 flex items-center justify-center font-extrabold text-slate-300" style={{ fontSize: 'calc(var(--d) * 0.52)' }}>?</span>
       ) : v === 0 ? (
-        <span className="absolute inset-0 flex items-center justify-center font-extrabold text-rose-500" style={{ fontSize: size * 0.5 }}>✕</span>
+        <span className="absolute inset-0 flex items-center justify-center font-extrabold text-rose-500" style={{ fontSize: 'calc(var(--d) * 0.5)' }}>✕</span>
       ) : (
         (pips[v] || []).map(([x, y], i) => (
           <span key={i} className="absolute rounded-full bg-slate-800"
-            style={{ width: size * 0.17, height: size * 0.17, left: `${x}%`, top: `${y}%`, transform: 'translate(-50%,-50%)' }} />
+            style={{ width: 'calc(var(--d) * 0.17)', height: 'calc(var(--d) * 0.17)', left: `${x}%`, top: `${y}%`, transform: 'translate(-50%,-50%)' }} />
         ))
       )}
     </span>
@@ -144,14 +145,14 @@ export default function CiaoPage() {
 
   const Pawn = ({ p, big }: { p: PlayerView; big?: boolean }) => (
     <span title={p.name}
-      className={`rounded-full font-extrabold text-white flex items-center justify-center border-2 border-white shadow-md ${big ? 'w-6 h-6 text-[11px] sm:w-8 sm:h-8 sm:text-sm' : 'w-5 h-5 text-[10px]'}`}
+      className={`rounded-full font-extrabold text-white flex items-center justify-center border-2 border-white shadow-md ${big ? 'w-6 h-6 text-[11px] sm:w-8 sm:h-8 sm:text-sm lg:w-10 lg:h-10 lg:text-base' : 'w-5 h-5 text-[10px]'}`}
       style={{ background: SEAT_COLORS[p.seat % SEAT_COLORS.length], animation: !ended && p.seat === ss?.turnSeat ? 'ciao-float 1.1s ease-in-out infinite' : undefined }}>
       {p.name.slice(0, 1)}
     </span>
   );
 
   return (
-    <main className="min-h-screen flex flex-col items-center p-3 sm:p-5 max-w-6xl mx-auto w-full text-slate-800">
+    <main className="min-h-screen flex flex-col items-center p-3 sm:p-5 max-w-6xl xl:max-w-[1500px] 2xl:max-w-[1760px] mx-auto w-full text-slate-800">
       <style>{`
         @keyframes ciao-float { 0%,100% { transform: translateY(0) } 50% { transform: translateY(-5px) } }
         @keyframes ciao-pop { 0% { transform: scale(.85); opacity: 0 } 100% { transform: scale(1); opacity: 1 } }
@@ -272,11 +273,11 @@ export default function CiaoPage() {
 
       {/* 게임 */}
       {screen === 'game' && ss && (
-        <div className="w-full grid grid-cols-1 lg:grid-cols-[1fr_300px] gap-3 sm:gap-4 items-start">
+        <div className="w-full grid grid-cols-1 lg:grid-cols-[1fr_300px] xl:grid-cols-[1fr_360px] gap-3 sm:gap-4 lg:gap-5 items-start lg:items-stretch lg:min-h-[calc(100vh-150px)]">
           {/* ── 왼쪽: 다리 씬 + 액션 ── */}
-          <div className="space-y-3 sm:space-y-4 min-w-0">
-            <div className="flex items-center justify-between text-xs sm:text-sm">
-              <span className="px-3 py-1.5 rounded-full bg-amber-100 text-amber-800 font-bold">🧍 말 {ss.pawnsPer}개 · 🏁 {ss.goal}개 건너면 승리</span>
+          <div className="flex flex-col gap-3 sm:gap-4 min-w-0">
+            <div className="flex items-center justify-between text-xs sm:text-sm lg:text-base flex-none">
+              <span className="px-3 py-1.5 lg:px-4 lg:py-2 rounded-full bg-amber-100 text-amber-800 font-bold">🧍 말 {ss.pawnsPer}개 · 🏁 {ss.goal}개 건너면 승리</span>
               <span className="font-extrabold text-amber-600">
                 {ended ? '게임 종료'
                   : ss.myTurn
@@ -286,50 +287,51 @@ export default function CiaoPage() {
             </div>
 
             {/* 구름다리 씬 */}
-            <div className="relative rounded-3xl overflow-hidden border-2 border-sky-200 shadow-lg">
+            <div className="relative rounded-3xl overflow-hidden border-2 border-sky-200 shadow-lg flex-1 lg:min-h-[300px] lg:max-h-[460px] flex flex-col">
               <div className="absolute inset-0 bg-gradient-to-b from-sky-300 via-sky-100 to-emerald-100" />
-              <span className="absolute top-3 left-6 text-2xl select-none" style={{ animation: 'ciao-drift 6s ease-in-out infinite' }}>⛅</span>
-              <span className="absolute top-8 right-10 text-lg select-none" style={{ animation: 'ciao-drift 8s ease-in-out infinite' }}>☁️</span>
-              <span className="absolute top-2 right-1/3 text-sm select-none">🕊️</span>
+              <span className="absolute top-3 left-6 text-2xl lg:text-4xl select-none" style={{ animation: 'ciao-drift 6s ease-in-out infinite' }}>⛅</span>
+              <span className="absolute top-8 right-10 text-lg lg:text-3xl select-none" style={{ animation: 'ciao-drift 8s ease-in-out infinite' }}>☁️</span>
+              <span className="absolute top-2 right-1/3 text-sm lg:text-xl select-none">🕊️</span>
+              <span className="hidden lg:block absolute top-16 left-1/4 text-2xl select-none" style={{ animation: 'ciao-drift 9s ease-in-out infinite' }}>☁️</span>
               {/* 물 */}
-              <div className="absolute bottom-0 inset-x-0 h-9 sm:h-12 bg-gradient-to-t from-sky-500/60 to-sky-300/0" />
-              <div className="absolute bottom-1 inset-x-0 text-center text-sky-600/70 text-xs sm:text-sm tracking-[0.5em] select-none">〜〜〜〜〜〜〜〜</div>
+              <div className="absolute bottom-0 inset-x-0 h-9 sm:h-12 lg:h-20 bg-gradient-to-t from-sky-500/60 to-sky-300/0" />
+              <div className="absolute bottom-1 lg:bottom-3 inset-x-0 text-center text-sky-600/70 text-xs sm:text-sm lg:text-xl tracking-[0.5em] select-none">〜〜〜〜〜〜〜〜</div>
 
-              <div className="relative pt-8 sm:pt-10 pb-10 sm:pb-14 overflow-x-auto">
-                <div className="flex items-end gap-1 sm:gap-1.5 min-w-[640px] px-3 sm:px-5">
+              <div className="relative flex-1 flex items-center lg:items-center pt-8 sm:pt-10 lg:pt-6 pb-10 sm:pb-14 lg:pb-10 overflow-x-auto">
+                <div className="flex-1 flex items-end gap-1 sm:gap-1.5 lg:gap-2 min-w-[640px] px-3 sm:px-5 lg:px-8">
                   {/* 출발 절벽 */}
-                  <div className="min-w-[60px] sm:min-w-[72px] flex-none flex flex-col items-center justify-end gap-1.5">
-                    <div className="flex flex-wrap justify-center gap-0.5 items-end min-h-[28px] sm:min-h-[36px]">
+                  <div className="min-w-[60px] sm:min-w-[72px] lg:min-w-[92px] flex-none flex flex-col items-center justify-end gap-1.5 lg:gap-2.5">
+                    <div className="flex flex-wrap justify-center gap-0.5 lg:gap-1 items-end min-h-[28px] sm:min-h-[36px] lg:min-h-[44px]">
                       {pawnsAt(0).map((p) => <Pawn key={p.seat} p={p} big />)}
                     </div>
-                    <div className="w-full rounded-t-xl border-b-0 bg-gradient-to-b from-emerald-400 to-emerald-600 text-center py-2.5 sm:py-4 shadow-md">
-                      <span className="text-[11px] sm:text-sm font-extrabold text-emerald-950/70">🌿 출발</span>
+                    <div className="w-full rounded-t-xl border-b-0 bg-gradient-to-b from-emerald-400 to-emerald-600 text-center py-2.5 sm:py-4 lg:py-7 shadow-md">
+                      <span className="text-[11px] sm:text-sm lg:text-base font-extrabold text-emerald-950/70">🌿 출발</span>
                     </div>
                   </div>
                   {/* 다리 판자 */}
                   {Array.from({ length: ss.bridgeLen }, (_, i) => i + 1).map((pos) => (
-                    <div key={pos} className="flex-1 min-w-[42px] sm:min-w-[50px] flex flex-col items-center justify-end gap-1.5">
-                      <div className="flex flex-wrap justify-center gap-0.5 items-end min-h-[28px] sm:min-h-[36px]">
+                    <div key={pos} className="flex-1 min-w-[42px] sm:min-w-[50px] lg:min-w-[62px] flex flex-col items-center justify-end gap-1.5 lg:gap-2.5">
+                      <div className="flex flex-wrap justify-center gap-0.5 lg:gap-1 items-end min-h-[28px] sm:min-h-[36px] lg:min-h-[44px]">
                         {pawnsAt(pos).map((p) => <Pawn key={p.seat} p={p} big />)}
                       </div>
-                      <div className="w-full rounded-lg bg-gradient-to-b from-amber-400 to-amber-600 border-b-4 border-amber-800/60 text-center py-1.5 sm:py-2.5 shadow"
+                      <div className="w-full rounded-lg bg-gradient-to-b from-amber-400 to-amber-600 border-b-4 lg:border-b-[6px] border-amber-800/60 text-center py-1.5 sm:py-2.5 lg:py-4 shadow"
                         style={{ transform: pos % 2 ? 'rotate(-1.2deg)' : 'rotate(1.2deg)' }}>
-                        <span className="text-[11px] sm:text-sm font-extrabold text-amber-950/60">{pos}</span>
+                        <span className="text-[11px] sm:text-sm lg:text-lg font-extrabold text-amber-950/60">{pos}</span>
                       </div>
                     </div>
                   ))}
                   {/* 도착 절벽 */}
-                  <div className="min-w-[60px] sm:min-w-[72px] flex-none flex flex-col items-center justify-end gap-1.5">
-                    <div className="flex flex-col items-center gap-0.5 min-h-[28px] sm:min-h-[36px] justify-end">
+                  <div className="min-w-[60px] sm:min-w-[72px] lg:min-w-[92px] flex-none flex flex-col items-center justify-end gap-1.5 lg:gap-2.5">
+                    <div className="flex flex-col items-center gap-0.5 min-h-[28px] sm:min-h-[36px] lg:min-h-[44px] justify-end">
                       {activePlayers.filter((p) => p.crossed > 0).map((p) => (
-                        <span key={p.seat} className="text-[10px] sm:text-xs font-extrabold text-white rounded-full px-1.5 sm:px-2 py-px shadow border border-white/60"
+                        <span key={p.seat} className="text-[10px] sm:text-xs lg:text-sm font-extrabold text-white rounded-full px-1.5 sm:px-2 py-px shadow border border-white/60"
                           style={{ background: SEAT_COLORS[p.seat % SEAT_COLORS.length] }}>
                           {p.name.slice(0, 3)} ×{p.crossed}
                         </span>
                       ))}
                     </div>
-                    <div className="w-full rounded-t-xl bg-gradient-to-b from-yellow-300 to-amber-500 text-center py-2.5 sm:py-4 shadow-md">
-                      <span className="text-[11px] sm:text-sm font-extrabold text-amber-950/70">도착 🏁</span>
+                    <div className="w-full rounded-t-xl bg-gradient-to-b from-yellow-300 to-amber-500 text-center py-2.5 sm:py-4 lg:py-7 shadow-md">
+                      <span className="text-[11px] sm:text-sm lg:text-base font-extrabold text-amber-950/70">도착 🏁</span>
                     </div>
                   </div>
                 </div>
@@ -341,9 +343,9 @@ export default function CiaoPage() {
               <div key={`${ss.lastReveal.seat}-${ss.lastReveal.challengerSeat}-${ss.lastReveal.declared}-${ss.lastReveal.actual}`}
                 className={`flex flex-wrap items-center justify-center gap-x-3 gap-y-1.5 rounded-2xl border-2 px-4 py-2.5 font-bold text-sm sm:text-base ${ss.lastReveal.lie ? 'border-rose-300 bg-rose-50 text-rose-700' : 'border-emerald-300 bg-emerald-50 text-emerald-700'}`}
                 style={{ animation: 'ciao-pop .3s ease' }}>
-                <span>🔍 {seatName(ss.lastReveal.challengerSeat)} ▸ {seatName(ss.lastReveal.seat)}</span>
-                <span className="flex items-center gap-1.5">선언 <DiceFace v={ss.lastReveal.declared} size={30} /> vs 실제 <DiceFace v={ss.lastReveal.actual} size={30} /></span>
-                <span className="text-base sm:text-lg">{ss.lastReveal.lie ? '거짓말! 💦' : '진실!'}</span>
+                <span className="lg:text-lg">🔍 {seatName(ss.lastReveal.challengerSeat)} ▸ {seatName(ss.lastReveal.seat)}</span>
+                <span className="flex items-center gap-1.5 lg:gap-2 lg:text-lg">선언 <DiceFace v={ss.lastReveal.declared} size={30} cls="lg:[--d:40px]" /> vs 실제 <DiceFace v={ss.lastReveal.actual} size={30} cls="lg:[--d:40px]" /></span>
+                <span className="text-base sm:text-lg lg:text-xl">{ss.lastReveal.lie ? '거짓말! 💦' : '진실!'}</span>
               </div>
             )}
 
@@ -359,31 +361,31 @@ export default function CiaoPage() {
             {/* 내 차례: 굴리기 */}
             {!ended && ss.myTurn && ss.turnPhase === 'ROLL' && (
               <button onClick={roll}
-                className="w-full bg-gradient-to-b from-amber-500 to-amber-600 text-white font-extrabold text-lg sm:text-xl py-4 sm:py-5 rounded-2xl shadow-lg active:scale-[0.98] transition flex items-center justify-center gap-2">
-                <span className="text-2xl inline-block" style={{ animation: 'ciao-shake 0.9s ease-in-out infinite' }}>🎲</span>
+                className="w-full bg-gradient-to-b from-amber-500 to-amber-600 text-white font-extrabold text-lg sm:text-xl lg:text-2xl py-4 sm:py-5 lg:py-7 rounded-2xl shadow-lg active:scale-[0.98] transition flex items-center justify-center gap-2 lg:gap-3">
+                <span className="text-2xl lg:text-4xl inline-block" style={{ animation: 'ciao-shake 0.9s ease-in-out infinite' }}>🎲</span>
                 통 속에 주사위 굴리기
               </button>
             )}
 
             {/* 내 차례: 선언 */}
             {!ended && ss.myTurn && ss.turnPhase === 'DECLARE' && (
-              <div className="rounded-2xl border-2 border-amber-400 bg-gradient-to-b from-amber-50/70 to-white p-4 sm:p-5 space-y-3 shadow" style={{ animation: 'ciao-pop .25s ease' }}>
-                <div className="flex items-center justify-center gap-3">
-                  <DiceFace v={ss.myRoll} size={56} />
+              <div className="rounded-2xl border-2 border-amber-400 bg-gradient-to-b from-amber-50/70 to-white p-4 sm:p-5 lg:p-7 space-y-3 lg:space-y-5 shadow" style={{ animation: 'ciao-pop .25s ease' }}>
+                <div className="flex items-center justify-center gap-3 lg:gap-5">
+                  <DiceFace v={ss.myRoll} size={56} cls="lg:[--d:80px]" />
                   <div>
-                    <p className="font-extrabold text-base sm:text-lg">{ss.myRoll === 0 ? 'X가 나왔어요 — 반드시 거짓말!' : `「${ss.myRoll}」 나왔어요`}</p>
-                    <p className="text-xs text-slate-400">🤫 이 결과는 나만 볼 수 있어요</p>
+                    <p className="font-extrabold text-base sm:text-lg lg:text-2xl">{ss.myRoll === 0 ? 'X가 나왔어요 — 반드시 거짓말!' : `「${ss.myRoll}」 나왔어요`}</p>
+                    <p className="text-xs lg:text-sm text-slate-400">🤫 이 결과는 나만 볼 수 있어요</p>
                   </div>
                 </div>
-                <p className="text-center text-xs sm:text-sm text-slate-500 font-bold">
+                <p className="text-center text-xs sm:text-sm lg:text-base text-slate-500 font-bold">
                   {ss.myRoll === 0 ? '1~4 중 아무 숫자나 선언하세요 (전부 거짓말!)' : '진실을 말해도, 뻥을 쳐도 됩니다 — 몇을 선언할까요?'}
                 </p>
-                <div className="grid grid-cols-4 gap-2 sm:gap-3">
+                <div className="grid grid-cols-4 gap-2 sm:gap-3 lg:gap-5">
                   {[1, 2, 3, 4].map((v) => (
                     <button key={v} onClick={() => declareVal(v)}
-                      className={`flex flex-col items-center gap-1 py-3 sm:py-4 rounded-2xl border-2 bg-white active:scale-95 transition hover:-translate-y-0.5 hover:shadow-md ${v === ss.myRoll ? 'border-emerald-400' : 'border-slate-200 hover:border-amber-400'}`}>
-                      <DiceFace v={v} size={40} />
-                      <span className={`text-[10px] font-extrabold leading-none ${v === ss.myRoll ? 'text-emerald-600' : 'text-transparent'}`}>진실</span>
+                      className={`flex flex-col items-center gap-1 lg:gap-2 py-3 sm:py-4 lg:py-6 rounded-2xl border-2 bg-white active:scale-95 transition hover:-translate-y-0.5 hover:shadow-md ${v === ss.myRoll ? 'border-emerald-400' : 'border-slate-200 hover:border-amber-400'}`}>
+                      <DiceFace v={v} size={40} cls="lg:[--d:64px]" />
+                      <span className={`text-[10px] lg:text-sm font-extrabold leading-none ${v === ss.myRoll ? 'text-emerald-600' : 'text-transparent'}`}>진실</span>
                     </button>
                   ))}
                 </div>
@@ -392,67 +394,67 @@ export default function CiaoPage() {
 
             {/* 내 차례: 의심 대기 */}
             {!ended && ss.myTurn && ss.turnPhase === 'CHALLENGE' && (
-              <div className="rounded-2xl border-2 border-amber-300 bg-white p-4 text-center space-y-2 shadow">
-                <p className="font-extrabold flex items-center justify-center gap-2">「{ss.declared}」 선언 완료 <DiceFace v={ss.declared} size={30} /></p>
-                <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
+              <div className="rounded-2xl border-2 border-amber-300 bg-white p-4 lg:p-6 text-center space-y-2 lg:space-y-4 shadow">
+                <p className="font-extrabold lg:text-2xl flex items-center justify-center gap-2 lg:gap-3">「{ss.declared}」 선언 완료 <DiceFace v={ss.declared} size={30} cls="lg:[--d:52px]" /></p>
+                <div className="h-2 lg:h-3 bg-slate-100 rounded-full overflow-hidden">
                   <div className="h-full bg-amber-500 transition-[width] duration-200 ease-linear rounded-full" style={{ width: `${challengePct}%` }} />
                 </div>
-                <p className="text-sm text-slate-400">아무도 의심 안 하면 {ss.declared}칸 전진! ({remainSec}초)</p>
+                <p className="text-sm lg:text-base text-slate-400">아무도 의심 안 하면 {ss.declared}칸 전진! ({remainSec}초)</p>
               </div>
             )}
 
             {/* 남의 차례: 의심 기회 */}
             {!ended && ss.turnPhase === 'CHALLENGE' && !ss.myTurn && (
-              <div className="rounded-2xl border-2 border-rose-300 bg-gradient-to-b from-rose-50/60 to-white p-4 sm:p-5 space-y-3 shadow" style={{ animation: 'ciao-pop .25s ease' }}>
-                <div className="flex items-center justify-center gap-3">
-                  <DiceFace v={0} size={48} hidden />
-                  <p className="font-extrabold text-lg sm:text-xl">{ss.turnName} ▸ 「{ss.declared}」 선언!</p>
-                  <DiceFace v={ss.declared} size={48} />
+              <div className="rounded-2xl border-2 border-rose-300 bg-gradient-to-b from-rose-50/60 to-white p-4 sm:p-5 lg:p-7 space-y-3 lg:space-y-5 shadow" style={{ animation: 'ciao-pop .25s ease' }}>
+                <div className="flex items-center justify-center gap-3 lg:gap-5">
+                  <DiceFace v={0} size={48} hidden cls="lg:[--d:72px]" />
+                  <p className="font-extrabold text-lg sm:text-xl lg:text-3xl">{ss.turnName} ▸ 「{ss.declared}」 선언!</p>
+                  <DiceFace v={ss.declared} size={48} cls="lg:[--d:72px]" />
                 </div>
-                <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
+                <div className="h-2 lg:h-3 bg-slate-100 rounded-full overflow-hidden">
                   <div className="h-full bg-rose-500 transition-[width] duration-200 ease-linear rounded-full" style={{ width: `${challengePct}%` }} />
                 </div>
                 {ss.canChallenge ? (
                   <button onClick={challenge}
-                    className="w-full bg-gradient-to-b from-rose-500 to-rose-600 text-white font-extrabold text-base sm:text-lg py-3.5 rounded-2xl shadow-lg active:scale-[0.98] transition animate-pulse">
+                    className="w-full bg-gradient-to-b from-rose-500 to-rose-600 text-white font-extrabold text-base sm:text-lg lg:text-2xl py-3.5 lg:py-6 rounded-2xl shadow-lg active:scale-[0.98] transition animate-pulse">
                     🔍 의심하기! ({remainSec}초)
                   </button>
-                ) : <p className="text-center text-sm text-slate-400">의심 창 진행 중… ({remainSec}초)</p>}
-                <p className="text-center text-[11px] sm:text-xs text-slate-400">의심 성공: 상대 말 추락 💦 + 내가 {ss.declared}칸 전진 · 실패: 내 말 추락</p>
+                ) : <p className="text-center text-sm lg:text-base text-slate-400">의심 창 진행 중… ({remainSec}초)</p>}
+                <p className="text-center text-[11px] sm:text-xs lg:text-sm text-slate-400">의심 성공: 상대 말 추락 💦 + 내가 {ss.declared}칸 전진 · 실패: 내 말 추락</p>
               </div>
             )}
 
             {/* 남의 차례: 대기 */}
             {!ended && !ss.myTurn && ss.turnPhase !== 'CHALLENGE' && (
-              <div className="rounded-2xl border-2 border-slate-200 bg-white p-4 text-center text-sm text-slate-400 font-bold">
-                <span className="inline-block mr-1" style={{ animation: 'ciao-shake 1.2s ease-in-out infinite' }}>🎲</span>
+              <div className="rounded-2xl border-2 border-slate-200 bg-white p-4 lg:p-6 text-center text-sm lg:text-lg text-slate-400 font-bold">
+                <span className="inline-block mr-1 lg:text-2xl" style={{ animation: 'ciao-shake 1.2s ease-in-out infinite' }}>🎲</span>
                 {ss.turnName}님이 {ss.turnPhase === 'ROLL' ? '주사위를 굴리는 중' : '선언을 고민하는 중'}…
               </div>
             )}
           </div>
 
           {/* ── 오른쪽: 플레이어 + 로그 ── */}
-          <div className="space-y-3 sm:space-y-4">
-            <div className="rounded-2xl border-2 border-slate-200 overflow-hidden bg-white">
-              <p className="px-3 py-2 text-xs font-extrabold text-slate-400 bg-slate-50 border-b border-slate-100">플레이어</p>
+          <div className="flex flex-col gap-3 sm:gap-4 min-h-0">
+            <div className="rounded-2xl border-2 border-slate-200 overflow-hidden bg-white flex-none">
+              <p className="px-3 py-2 lg:py-2.5 text-xs lg:text-sm font-extrabold text-slate-400 bg-slate-50 border-b border-slate-100">플레이어</p>
               {activePlayers.map((p) => (
-                <div key={p.seat} className={`px-3 py-2 border-b border-slate-50 last:border-b-0 ${p.seat === ss.turnSeat && !ended ? 'bg-amber-50' : ''} ${p.eliminated ? 'opacity-40' : ''}`}>
+                <div key={p.seat} className={`px-3 py-2 lg:py-3 border-b border-slate-50 last:border-b-0 ${p.seat === ss.turnSeat && !ended ? 'bg-amber-50' : ''} ${p.eliminated ? 'opacity-40' : ''}`}>
                   <div className="flex items-center justify-between">
-                    <span className="font-bold text-sm flex items-center gap-1.5">
-                      <span className="w-3 h-3 rounded-full border border-white shadow flex-none" style={{ background: SEAT_COLORS[p.seat % SEAT_COLORS.length] }} />
+                    <span className="font-bold text-sm lg:text-base flex items-center gap-1.5">
+                      <span className="w-3 h-3 lg:w-3.5 lg:h-3.5 rounded-full border border-white shadow flex-none" style={{ background: SEAT_COLORS[p.seat % SEAT_COLORS.length] }} />
                       {p.bot ? '🤖 ' : ''}{p.name}{p.me ? ' (나)' : ''}
                       {p.eliminated && ' ☠️'}
                     </span>
-                    {p.seat === ss.turnSeat && !ended && <span className="text-[10px] font-extrabold text-amber-600 bg-amber-100 rounded-full px-2 py-0.5">차례</span>}
+                    {p.seat === ss.turnSeat && !ended && <span className="text-[10px] lg:text-xs font-extrabold text-amber-600 bg-amber-100 rounded-full px-2 py-0.5">차례</span>}
                   </div>
-                  <div className="flex items-center justify-between mt-1">
-                    <span className="flex gap-0.5 items-center">
+                  <div className="flex items-center justify-between mt-1 lg:mt-1.5">
+                    <span className="flex gap-0.5 lg:gap-1 items-center">
                       {Array.from({ length: p.pawnsLeft }).map((_, i) => (
-                        <span key={i} className="w-2 h-2 rounded-full" style={{ background: SEAT_COLORS[p.seat % SEAT_COLORS.length] }} />
+                        <span key={i} className="w-2 h-2 lg:w-2.5 lg:h-2.5 rounded-full" style={{ background: SEAT_COLORS[p.seat % SEAT_COLORS.length] }} />
                       ))}
-                      {p.pawnsLeft === 0 && <span className="text-[10px] text-slate-300">말 없음</span>}
+                      {p.pawnsLeft === 0 && <span className="text-[10px] lg:text-xs text-slate-300">말 없음</span>}
                     </span>
-                    <span className="flex gap-0.5 text-[11px]">
+                    <span className="flex gap-0.5 text-[11px] lg:text-sm">
                       {Array.from({ length: ss.goal }).map((_, i) => (
                         <span key={i} className={i < p.crossed ? '' : 'opacity-20 grayscale'}>🏁</span>
                       ))}
@@ -463,9 +465,9 @@ export default function CiaoPage() {
             </div>
 
             {ss.log.length > 0 && (
-              <div className="rounded-2xl border-2 border-slate-200 bg-white overflow-hidden">
-                <p className="px-3 py-2 text-xs font-extrabold text-slate-400 bg-slate-50 border-b border-slate-100">진행 로그</p>
-                <div className="p-2.5 max-h-48 lg:max-h-72 overflow-y-auto text-xs text-slate-500 space-y-1">
+              <div className="rounded-2xl border-2 border-slate-200 bg-white overflow-hidden flex flex-col lg:flex-1 lg:min-h-0">
+                <p className="px-3 py-2 lg:py-2.5 text-xs lg:text-sm font-extrabold text-slate-400 bg-slate-50 border-b border-slate-100 flex-none">진행 로그</p>
+                <div className="p-2.5 lg:p-3 max-h-48 lg:max-h-none lg:flex-1 overflow-y-auto text-xs lg:text-sm text-slate-500 space-y-1 lg:space-y-1.5">
                   {[...ss.log].reverse().map((l, i) => <p key={ss.log.length - i}>{l}</p>)}
                 </div>
               </div>
