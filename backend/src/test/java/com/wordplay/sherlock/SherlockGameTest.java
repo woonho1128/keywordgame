@@ -70,6 +70,41 @@ class SherlockGameTest {
         assertThat(s.phase()).isEqualTo("PLAYING");
     }
 
+    /** 봇이 먼저 맞혀도 모든 사람이 "누가 범인이었는지" 알 수 있어야 한다. */
+    @Test
+    void 게임이_끝나면_범인이_공개된다() {
+        SherlockGame g = withPlayers(3);
+        g.start("host");
+        int culprit = g.culpritForTest();
+
+        assertThat(g.me("host").culpritId()).as("진행 중엔 비공개").isEqualTo(-1);
+        assertThat(g.me("host").culpritName()).isNull();
+
+        g.accuse("host", culprit);
+        SherlockState s = g.me("host");
+        assertThat(s.phase()).isEqualTo("ENDED");
+        assertThat(s.culpritId()).isEqualTo(culprit);
+        assertThat(s.culpritName()).isNotBlank();
+    }
+
+    /** 다른 사람이 맞혀서 끝난 경우에도(내가 진 판) 범인이 보여야 한다. */
+    @Test
+    void 남이_맞혀서_끝나도_범인이_공개된다() {
+        SherlockGame g = withPlayers(3);
+        g.start("host");
+        int culprit = g.culpritForTest();
+        g.me("host");                       // 좌석 확인용 호출
+        String other = "p1";                // host가 아닌 참가자
+        // host 차례를 넘겨 p1이 지목하도록 진행
+        g.askAll("host", 0);
+        g.accuse(other, culprit);
+
+        SherlockState mine = g.me("host");  // 진 사람 화면에서도
+        assertThat(mine.phase()).isEqualTo("ENDED");
+        assertThat(mine.culpritId()).isEqualTo(culprit);
+        assertThat(mine.culpritName()).isNotBlank();
+    }
+
     @Test
     void 전체조사_단서가_기록된다() {
         SherlockGame g = withPlayers(3);

@@ -14,7 +14,8 @@ type State = {
   players: PlayerView[]; deck: CharView[]; myCards: number[]; items: string[];
   turnSeat: number; turnName: string | null; myTurn: boolean; mySeat: number;
   clues: Clue[]; lastAction: string | null; log: string[];
-  winnerSeat: number; winnerLabel: string | null; deadline: number; serverNow: number;
+  winnerSeat: number; winnerLabel: string | null; culpritId: number; culpritName: string | null;
+  deadline: number; serverNow: number;
 };
 type Room = { code: string; status: string; playerCount: number; host: string };
 
@@ -209,7 +210,17 @@ export default function SherlockPage() {
             {/* 상단 상태 */}
             <div className="rounded-xl border border-slate-200 dark:border-slate-700 p-3 flex flex-wrap items-center gap-2">
               {ended ? (
-                <span className="font-extrabold text-lg">🏆 {ss.winnerLabel} 승리!{ss.winnerSeat < 0 ? '' : ''}</span>
+                <div className="w-full">
+                  <span className="font-extrabold text-lg">🏆 {ss.winnerLabel} 승리!</span>
+                  {/* 누가 범인이었는지 반드시 공개한다 — 봇이 먼저 맞혀도 결과를 알 수 있어야 한다. */}
+                  {ss.culpritName && (
+                    <p className="mt-1 text-sm">
+                      <span className="text-slate-400">범인은 </span>
+                      <b className="text-rose-600 dark:text-rose-400">🔪 {ss.culpritName}</b>
+                      <span className="text-slate-400">였습니다</span>
+                    </p>
+                  )}
+                </div>
               ) : (
                 <>
                   <span className="w-3.5 h-3.5 rounded-full" style={{ background: PCOL[ss.turnSeat % PCOL.length] }} />
@@ -252,11 +263,12 @@ export default function SherlockPage() {
                     {ss.deck.map((c) => {
                       const nt = notes[c.id]; const mine = ss.myCards.includes(c.id);
                       const rowX = nt === 'x'; // 제외한 인물 → 줄 전체 빨간 ✗
+                      const isCulprit = ended && ss.culpritId === c.id; // 종료 후 정답 표시
                       return (
-                        <tr key={c.id}>
+                        <tr key={c.id} className={isCulprit ? 'ring-2 ring-rose-500' : ''}>
                           <td onClick={() => cycleNote(c.id)}
-                            className={`sticky left-0 z-10 text-left text-[11px] font-bold px-1 py-0.5 whitespace-nowrap cursor-pointer max-w-[92px] truncate ${rowX ? 'bg-rose-100 dark:bg-rose-500/25 text-rose-600 dark:text-rose-300 line-through' : 'bg-white dark:bg-slate-900'} ${nt === 'star' ? 'text-amber-500' : ''}`}>
-                            {nt === 'star' ? '⭐' : rowX ? '✗' : mine ? '🟢' : ''}{c.name}
+                            className={`sticky left-0 z-10 text-left text-[11px] font-bold px-1 py-0.5 whitespace-nowrap cursor-pointer max-w-[92px] truncate ${isCulprit ? 'bg-rose-500 text-white' : rowX ? 'bg-rose-100 dark:bg-rose-500/25 text-rose-600 dark:text-rose-300 line-through' : 'bg-white dark:bg-slate-900'} ${nt === 'star' && !isCulprit ? 'text-amber-500' : ''}`}>
+                            {isCulprit ? '🔪' : nt === 'star' ? '⭐' : rowX ? '✗' : mine ? '🟢' : ''}{c.name}
                           </td>
                           {ss.items.map((_, i) => {
                             const has = c.items.includes(i);

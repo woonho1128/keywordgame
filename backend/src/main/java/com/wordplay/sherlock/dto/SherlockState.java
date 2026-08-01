@@ -22,6 +22,8 @@ public record SherlockState(
         List<String> log,
         int winnerSeat,
         String winnerLabel,
+        int culpritId,          // 범인 캐릭터 id — 게임이 끝난 뒤에만 채운다(-1 = 비공개)
+        String culpritName,     // 범인 이름 — 게임이 끝난 뒤에만 채운다
         long deadline,
         long serverNow
 ) {
@@ -35,6 +37,6 @@ public record SherlockState(
 
     public static SherlockState notFound(long now) {
         return new SherlockState("NONE", 60, false, false, false, List.of(), List.of(), List.of(), List.of(),
-                -1, null, false, -1, List.of(), null, List.of(), -1, null, 0, now);
+                -1, null, false, -1, List.of(), null, List.of(), -1, null, -1, null, 0, now);
     }
 }

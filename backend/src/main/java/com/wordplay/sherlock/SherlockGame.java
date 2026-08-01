@@ -214,7 +214,7 @@ public class SherlockGame implements RoomGame {
         for (P q : players) if (q.alive && !q.left) { aliveN++; last = q; }
         if (aliveN == 1 && last != null) {
             phase = Phase.ENDED; winnerSeat = last.seat; winnerLabel = last.nick;
-            note("🏆 " + last.nick + " 최후 생존 · 승리!");
+            note("🏆 " + last.nick + " 최후 생존 · 승리! (범인은 " + MASTER[culprit].name() + "였다)");
             turnEndsAt = 0; return;
         }
         if (aliveN == 0) { phase = Phase.ENDED; winnerSeat = -1; winnerLabel = "무승부"; turnEndsAt = 0; return; }
@@ -309,7 +309,11 @@ public class SherlockGame implements RoomGame {
                 pv, deck, myCards, List.of(ITEMS),
                 turnSeat, turnName, myTurn, meSeat,
                 shownClues, lastAction, new ArrayList<>(log),
-                winnerSeat, winnerLabel, turnEndsAt, now());
+                winnerSeat, winnerLabel,
+                // 범인은 게임이 끝난 뒤에만 공개한다(진행 중 노출되면 게임이 성립하지 않는다).
+                phase == Phase.ENDED ? culprit : -1,
+                phase == Phase.ENDED && culprit >= 0 ? MASTER[culprit].name() : null,
+                turnEndsAt, now());
     }
 
     // ── RoomGame ──
