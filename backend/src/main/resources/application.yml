@@ -59,6 +59,10 @@ app:
     resend-api-key: ${RESEND_API_KEY:}
     mail-from: ${FEEDBACK_MAIL_FROM:gg 건의함 <onboarding@resend.dev>}
     mail-to: ${FEEDBACK_MAIL_TO:}
+    # 무료 한도(하루 100통·월 3000통)를 넘겨 과금되지 않도록 여유를 두고 스스로 막는다.
+    # 한도를 넘으면 메일만 건너뛰고 접수는 계속 받는다(/admin/feedback에서 확인).
+    mail-daily-limit: ${FEEDBACK_MAIL_DAILY_LIMIT:80}
+    mail-monthly-limit: ${FEEDBACK_MAIL_MONTHLY_LIMIT:2500}
   wordsim:
     # WordSim 참고용 벡터 사전 위치 (rank 비교 기준)
     vectors-path: ${WORDSIM_VECTORS_PATH:/etc/wordplay/word_vectors.bin}

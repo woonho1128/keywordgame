@@ -5,11 +5,14 @@ import com.wordplay.common.exception.ErrorCode;
 import com.wordplay.feedback.dto.FeedbackRequest;
 import com.wordplay.feedback.dto.FeedbackView;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
 import java.time.ZoneId;
+import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayDeque;
 import java.util.Deque;
@@ -18,6 +21,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class FeedbackService {
@@ -30,6 +34,13 @@ public class FeedbackService {
 
     private static final DateTimeFormatter FMT =
             DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm").withZone(ZoneId.of("Asia/Seoul"));
+
+    /** Resend 무료 한도는 하루 100통·월 3000통. 초과 결제가 없도록 여유를 두고 막는다. */
+    @Value("${app.feedback.mail-daily-limit:80}")
+    private int dailyLimit;
+
+    @Value("${app.feedback.mail-monthly-limit:2500}")
+    private int monthlyLimit;
 
     private final FeedbackRepository repo;
     private final FeedbackMailer mailer;
@@ -58,8 +69,23 @@ public class FeedbackService {
                 .createdAt(Instant.now())
                 .build());
 
-        // 메일이 실패해도 접수는 성공이다(내용은 이미 DB에 있음).
-        if (mailer.send(f)) f.setMailSent(true);
+        // 메일이 실패하거나 한도를 넘겨도 접수는 성공이다(내용은 이미 DB에 있음).
+        if (withinMailQuota() && mailer.send(f)) f.setMailSent(true);
+    }
+
+    /**
+     * 무료 한도(하루 100통·월 3000통)를 넘지 않도록 여유를 두고 스스로 막는다.
+     * 한도를 넘으면 메일만 건너뛰고 접수는 계속 받는다(/admin/feedback에서 확인 가능).
+     */
+    private boolean withinMailQuota() {
+        ZoneId kst = ZoneId.of("Asia/Seoul");
+        ZonedDateTime now = ZonedDateTime.now(kst);
+        long today = repo.countByMailSentTrueAndCreatedAtAfter(now.toLocalDate().atStartOfDay(kst).toInstant());
+        if (today >= dailyLimit) { log.warn("[feedback] 오늘 메일 한도 도달({}건) — 접수만 저장", today); return false; }
+        long month = repo.countByMailSentTrueAndCreatedAtAfter(
+                now.toLocalDate().withDayOfMonth(1).atStartOfDay(kst).toInstant());
+        if (month >= monthlyLimit) { log.warn("[feedback] 이번 달 메일 한도 도달({}건) — 접수만 저장", month); return false; }
+        return true;
     }
 
     private synchronized void checkRate(String ip) {

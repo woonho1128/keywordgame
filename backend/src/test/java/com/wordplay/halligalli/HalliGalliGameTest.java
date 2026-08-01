@@ -90,14 +90,26 @@ class HalliGalliGameTest {
         g.start("host");
         assertThat(g.tick()).isFalse();  // host(사람) 차례 → 봇 무동작
         g.flip("host");                  // 봇(seat1) 차례로 넘어감
-        setLong(g, "flipReadyAt", 1L);   // 봇 생각시간 지난 것으로 강제
-        assertThat(g.tick()).isTrue();   // 봇이 자동으로 한 장 넘김
+        // 뒤집은 카드로 '같은 과일 5개'가 뜨면 tick은 넘기기가 아니라 종 치기를 한다.
+        // 어느 쪽이든 봇이 시간이 지나면 스스로 행동해야 하므로 두 타이머를 모두 앞당긴다.
+        // (한쪽만 강제하면 셔플 결과에 따라 간헐적으로 실패했다.)
+        setLong(g, "flipReadyAt", 1L);
+        forceBotRingDeadlines(g);
+        assertThat(g.tick()).isTrue();   // 봇이 자동으로 행동(넘기기 또는 종)
     }
 
     private void setLong(HalliGalliGame g, String field, long v) throws Exception {
         java.lang.reflect.Field f = HalliGalliGame.class.getDeclaredField(field);
         f.setAccessible(true);
         f.setLong(g, v);
+    }
+
+    @SuppressWarnings("unchecked")
+    private void forceBotRingDeadlines(HalliGalliGame g) throws Exception {
+        java.lang.reflect.Field f = HalliGalliGame.class.getDeclaredField("botRingAt");
+        f.setAccessible(true);
+        java.util.Map<Integer, Long> m = (java.util.Map<Integer, Long>) f.get(g);
+        m.replaceAll((seat, at) -> 1L);
     }
 
     @Test
