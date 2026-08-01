@@ -235,6 +235,20 @@ public class MonopolyGame implements RoomGame {
 
     private void sendToIsland(P p) { p.pos = ISLAND; p.inIsland = true; p.islandTurns = 0; extraRoll = false; }
 
+    /**
+     * 세계여행 순간이동. 목적지가 현재 칸보다 뒤 번호면 판을 한 바퀴 돌아 출발 칸을
+     * 지나친 것이므로 일반 이동과 똑같이 월급을 준다(예: 세계여행 24칸 → 용인 19칸).
+     */
+    private void teleport(P p, int dest) {
+        if (dest < 0 || dest >= N || dest == p.pos) dest = START_TILE;
+        boolean passedStart = dest < p.pos;
+        p.pos = dest;
+        note(p.nick + " → " + BOARD[dest].name() + " 순간이동");
+        if (passedStart) { p.cash += SALARY; note(p.nick + " 출발 통과 · 월급 +" + SALARY + "만"); }
+        clearPending();
+        resolveLanding(p); // 도착 칸 효과 적용
+    }
+
     // ── 착지 처리 ──
     private void resolveLanding(P p) {
         Tile t = BOARD[p.pos];
@@ -334,13 +348,7 @@ public class MonopolyGame implements RoomGame {
                 else if (!payTollOrSettle(p, pendTile)) afterResolve(p); // 정산(매각/파산) 대기면 afterResolve 보류
             }
             case "SETTLE" -> applySettle(p, action, arg);
-            case "TRAVEL" -> {
-                int dest = arg;
-                if (dest < 0 || dest >= N || dest == p.pos) dest = START_TILE;
-                p.pos = dest; note(p.nick + " → " + BOARD[dest].name() + " 순간이동");
-                clearPending();
-                resolveLanding(p); // 도착 칸 효과 적용
-            }
+            case "TRAVEL" -> teleport(p, arg);
             case "OLYMPIC" -> {
                 if (arg >= 0 && arg < N && owner[arg] == p.seat) { festivalTile = arg; note(p.nick + " " + BOARD[arg].name() + " 축제 개최! 통행료 2배 🏅"); }
                 afterResolve(p);
@@ -536,7 +544,7 @@ public class MonopolyGame implements RoomGame {
             case "UPGRADE" -> { if ("build".equals(action)) doBuild(p, pendTile); else note(p.nick + " 건설 안 함"); afterResolve(p); }
             case "TOLL" -> { if ("takeover".equals(action) && canTakeover(p, pendTile)) { doTakeover(p, pendTile); afterResolve(p); } else if (!payTollOrSettle(p, pendTile)) afterResolve(p); }
             case "SETTLE" -> applySettle(p, action, arg);
-            case "TRAVEL" -> { int d = (arg < 0 || arg >= N || arg == p.pos) ? START_TILE : arg; p.pos = d; note(p.nick + " → " + BOARD[d].name() + " 순간이동"); clearPending(); resolveLanding(p); }
+            case "TRAVEL" -> teleport(p, arg);
             case "OLYMPIC" -> { if (arg >= 0 && arg < N && owner[arg] == p.seat) { festivalTile = arg; note(p.nick + " " + BOARD[arg].name() + " 축제 개최! 통행료 2배 🏅"); } afterResolve(p); }
             case "CARD" -> { clearPending(); afterResolve(p); }
             default -> afterResolve(p);

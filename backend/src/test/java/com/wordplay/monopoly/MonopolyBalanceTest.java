@@ -72,6 +72,39 @@ class MonopolyBalanceTest {
         assertThat(builtTollPerLap).isGreaterThan(MonopolyGame.SALARY * 1.4);
     }
 
+    /** 세계여행으로 판을 한 바퀴 돌아 출발 칸을 지나치면 월급을 받아야 한다. */
+    @Test
+    void 세계여행이_출발을_지나면_월급을_준다() throws Exception {
+        MonopolyGame g = new MonopolyGame("h", "호스트", false);
+        g.addBot("h", "NORMAL");
+        g.start("h");
+        MonopolyGame.P p = players(g).get(0);
+        set(g, "turnSeat", 0);
+
+        // 세계여행(24칸) → 용인(19칸): 뒤 번호이므로 출발을 지나친 것
+        p.pos = 24; p.cash = 1000;
+        set(g, "pendType", "TRAVEL"); set(g, "step", MonopolyGame.Step.DECIDE);
+        g.decide("h", "travel", 19);
+        assertThat(p.pos).isEqualTo(19);
+        assertThat(p.cash).isEqualTo(1000 + MonopolyGame.SALARY);
+    }
+
+    @Test
+    void 세계여행이_앞으로만_가면_월급이_없다() throws Exception {
+        MonopolyGame g = new MonopolyGame("h", "호스트", false);
+        g.addBot("h", "NORMAL");
+        g.start("h");
+        MonopolyGame.P p = players(g).get(0);
+        set(g, "turnSeat", 0);
+
+        // 5칸 → 강릉(25칸): 출발을 지나지 않음
+        p.pos = 5; p.cash = 1000;
+        set(g, "pendType", "TRAVEL"); set(g, "step", MonopolyGame.Step.DECIDE);
+        g.decide("h", "travel", 25);
+        assertThat(p.pos).isEqualTo(25);
+        assertThat(p.cash).isEqualTo(1000);
+    }
+
     @Test
     void 전_도시를_뺏긴_봇은_결국_파산한다() throws Exception {
         MonopolyGame g = new MonopolyGame("h", "호스트", false);
