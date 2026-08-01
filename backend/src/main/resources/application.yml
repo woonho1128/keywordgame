@@ -53,6 +53,12 @@ app:
   mafia:
     # 마피아 AI 봇 추가(관리자) 코드. 전체 초기화 코드와는 다르게 둔다.
     bot-admin-code: ${MAFIA_BOT_ADMIN_CODE:1q2w3e4r5t!}
+  feedback:
+    # 건의사항 메일 발송(Resend HTTPS API). 비어 있으면 DB 저장만 하고 메일은 건너뛴다.
+    # 운영 서버는 아웃바운드 SMTP가 막혀 있어 SMTP 대신 HTTPS API를 쓴다.
+    resend-api-key: ${RESEND_API_KEY:}
+    mail-from: ${FEEDBACK_MAIL_FROM:gg 건의함 <onboarding@resend.dev>}
+    mail-to: ${FEEDBACK_MAIL_TO:}
   wordsim:
     # WordSim 참고용 벡터 사전 위치 (rank 비교 기준)
     vectors-path: ${WORDSIM_VECTORS_PATH:/etc/wordplay/word_vectors.bin}
