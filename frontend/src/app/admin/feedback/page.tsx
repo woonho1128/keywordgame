@@ -17,6 +17,18 @@ export default function AdminFeedbackPage() {
   const [items, setItems] = useState<Item[] | null>(null);
   const [err, setErr] = useState('');
   const [loading, setLoading] = useState(false);
+  const [mailTest, setMailTest] = useState('');
+
+  const testMail = async () => {
+    const key = code.trim();
+    if (!key) return;
+    setMailTest('보내는 중…');
+    try {
+      setMailTest(await api<string>(`/api/v1/feedback/test-mail?code=${encodeURIComponent(key)}`, { method: 'POST', body: '{}' }));
+    } catch (e) {
+      setMailTest(e instanceof Error ? e.message : '테스트 실패');
+    }
+  };
 
   const load = async (c?: string) => {
     const key = (c ?? code).trim();
@@ -51,6 +63,16 @@ export default function AdminFeedbackPage() {
         </button>
       </div>
       {err && <p className="text-red-500 text-sm mb-3">{err}</p>}
+
+      <div className="mb-4">
+        <button onClick={testMail} disabled={!code.trim()}
+          className="text-xs border-2 border-gray-200 rounded-lg px-3 py-1.5 font-bold text-gray-500 disabled:opacity-40 hover:border-hit">
+          📧 메일 설정 테스트
+        </button>
+        {mailTest && (
+          <pre className="mt-2 whitespace-pre-wrap break-all text-xs bg-gray-50 border border-gray-200 rounded-lg p-2.5 text-gray-600">{mailTest}</pre>
+        )}
+      </div>
 
       {items && (
         <>

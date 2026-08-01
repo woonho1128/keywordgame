@@ -31,8 +31,22 @@ public class FeedbackController {
     /** 관리자 조회(최근 200건). */
     @GetMapping
     public ApiResponse<List<FeedbackView>> list(@RequestParam String code) {
-        if (!adminCode.equals(code)) throw new BusinessException(ErrorCode.INVALID_INPUT, "관리자 코드가 올바르지 않습니다");
+        requireAdmin(code);
         return ApiResponse.success(service.list());
+    }
+
+    /**
+     * 관리자 진단: 메일을 실제로 한 통 보내보고 결과·설정을 응답으로 돌려준다.
+     * 로그를 뒤지지 않아도 실패 사유(키 미설정, 수신자 제한 등)를 바로 확인할 수 있다.
+     */
+    @PostMapping("/test-mail")
+    public ApiResponse<String> testMail(@RequestParam String code) {
+        requireAdmin(code);
+        return ApiResponse.success(service.testMail());
+    }
+
+    private void requireAdmin(String code) {
+        if (!adminCode.equals(code)) throw new BusinessException(ErrorCode.INVALID_INPUT, "관리자 코드가 올바르지 않습니다");
     }
 
     private static String clientIp(HttpServletRequest r) {

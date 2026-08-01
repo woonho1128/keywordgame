@@ -5,6 +5,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
+import org.springframework.web.client.RestClientResponseException;
 
 import java.time.Duration;
 import java.util.List;
@@ -49,11 +50,16 @@ public class FeedbackMailer {
     public boolean enabled() { return !apiKey.isBlank() && !to.isBlank(); }
 
     /** 발송 성공 여부. 실패해도 예외를 던지지 않는다(접수 자체는 성공시켜야 하므로). */
-    public boolean send(Feedback f) {
-        if (!enabled()) {
-            log.info("[feedback] 메일 설정이 없어 발송 생략 (id={})", f.getId());
-            return false;
-        }
+    public boolean send(Feedback f) { return describeSend(f) == null; }
+
+    /**
+     * 발송을 시도하고 실패 사유를 돌려준다(성공이면 null).
+     * 메일 API가 거절한 이유(도메인 미인증, 수신자 제한 등)를 그대로 담아야
+     * 로그·진단 화면에서 바로 원인을 알 수 있다.
+     */
+    public String describeSend(Feedback f) {
+        if (apiKey.isBlank()) return "RESEND_API_KEY가 설정되지 않았습니다";
+        if (to.isBlank()) return "FEEDBACK_MAIL_TO(받는 주소)가 설정되지 않았습니다";
         try {
             String subject = "[gg 건의] " + label(f.getCategory()) + " · " + oneLine(f.getMessage(), 30);
             http.post()
@@ -66,11 +72,25 @@ public class FeedbackMailer {
                             "html", html(f)))
                     .retrieve()
                     .toBodilessEntity();
-            return true;
+            log.info("[feedback] 메일 발송 성공 (id={}, to={})", f.getId(), to);
+            return null;
+        } catch (RestClientResponseException e) {
+            // Resend가 돌려준 본문에 실제 사유가 들어 있다.
+            String body = e.getResponseBodyAsString();
+            String why = e.getStatusCode() + (body == null || body.isBlank() ? " " + e.getMessage() : " " + body);
+            log.warn("[feedback] 메일 발송 실패 (id={}, from={}, to={}): {}", f.getId(), from, to, why);
+            return why;
         } catch (Exception e) {
-            log.warn("[feedback] 메일 발송 실패 (id={}): {}", f.getId(), e.getMessage());
-            return false;
+            String why = e.getClass().getSimpleName() + ": " + e.getMessage();
+            log.warn("[feedback] 메일 발송 실패 (id={}, to={}): {}", f.getId(), to, why);
+            return why;
         }
+    }
+
+    /** 설정 점검용 요약(키 값은 노출하지 않는다). */
+    public String config() {
+        return "from=" + from + " · to=" + (to.isBlank() ? "(미설정)" : to)
+                + " · apiKey=" + (apiKey.isBlank() ? "(미설정)" : "설정됨(" + apiKey.length() + "자)");
     }
 
     static String label(String category) {

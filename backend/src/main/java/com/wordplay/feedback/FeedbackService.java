@@ -97,6 +97,17 @@ public class FeedbackService {
         if (recent.size() > 5000) recent.clear();   // 메모리 방어
     }
 
+    /** 관리자 진단: 실제로 한 통 보내보고 설정 상태와 실패 사유를 그대로 돌려준다. */
+    public String testMail() {
+        Feedback probe = Feedback.builder()
+                .category("ETC").nickname("설정 점검").message("메일 설정 점검용 테스트 발송입니다.")
+                .page("/admin/feedback").mailSent(false).createdAt(Instant.now())
+                .build();
+        String err = mailer.describeSend(probe);
+        return (err == null ? "✅ 발송 성공 — 메일함을 확인하세요" : "❌ 발송 실패 — " + err)
+                + "\n설정: " + mailer.config();
+    }
+
     @Transactional(readOnly = true)
     public List<FeedbackView> list() {
         return repo.findTop200ByOrderByIdDesc().stream()
