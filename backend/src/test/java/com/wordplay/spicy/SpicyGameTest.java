@@ -216,6 +216,35 @@ class SpicyGameTest {
                 .hasMessageContaining("스파이스");
     }
 
+    /** 제한시간 없음 모드: 타이머가 안 돌고, 도전할 사람이 모두 '통과'해야 넘어간다. */
+    @Test
+    void 제한시간_없음이면_모두_통과해야_넘어간다() {
+        SpicyGame g = new SpicyGame("host", "방장", 0, null);   // 0 = 제한 없음
+        g.join("p1", "친구1");
+        g.join("p2", "친구2");
+        g.start("host");
+        assertThat(g.me("host").noTimeLimit()).isTrue();
+        assertThat(g.me("host").deadline()).isZero();
+
+        SpicyGame.P a = cur(g);
+        SpicyGame.P b = other(g, a);
+        SpicyGame.P c = null;
+        for (SpicyGame.P p : g.playersList()) if (p != a && p != b) c = p;
+
+        SpicyGame.Card card = giveCard(g, a, 0, 2);
+        g.play(a.clientId, card.id(), 0, 2);
+        int seatBefore = g.turnSeat();
+
+        g.passChallenge(b.clientId);
+        assertThat(g.turnSeat()).as("아직 한 명이 안 눌렀으면 그대로").isEqualTo(seatBefore);
+        assertThat(g.me("host").passedCount()).isEqualTo(1);
+        assertThat(g.me("host").challengerCount()).isEqualTo(2);
+
+        g.passChallenge(c.clientId);
+        assertThat(g.pileForTest()).as("모두 통과 → 더미는 쌓인 채 다음 차례로").hasSize(1);
+        assertThat(g.turnSeat()).isNotEqualTo(seatBefore);
+    }
+
     @Test
     void 자기_카드에는_도전할_수_없다() {
         SpicyGame g = withPlayers(2); g.start("host");

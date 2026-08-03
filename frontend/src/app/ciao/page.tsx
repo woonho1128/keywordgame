@@ -9,6 +9,7 @@ type PlayerView = { seat: number; name: string; bot: boolean; host: boolean; me:
 type Reveal = { seat: number; challengerSeat: number; declared: number; actual: number; lie: boolean };
 type State = {
   phase: string; turnPhase: string | null; bridgeLen: number; pawnsPer: number; goal: number; challengeSec: number;
+  noTimeLimit: boolean; passedCount: number; challengerCount: number; iPassed: boolean;
   isHost: boolean; joined: boolean; players: PlayerView[];
   turnSeat: number; turnName: string | null; myTurn: boolean; mySeat: number;
   declared: number; myRoll: number; canChallenge: boolean; lastReveal: Reveal | null;
@@ -128,6 +129,7 @@ export default function CiaoPage() {
   const roll = async () => { try { setSs(await api(`/api/v1/ciao/roll?roomCode=${roomCode}&clientId=${id.current}`, { method: 'POST', body: '{}' })); } catch (e: any) { alert(e?.message); } };
   const declareVal = async (v: number) => { try { setSs(await api(`/api/v1/ciao/declare?roomCode=${roomCode}&clientId=${id.current}&value=${v}`, { method: 'POST', body: '{}' })); } catch (e: any) { alert(e?.message); } };
   const challenge = async () => { try { setSs(await api(`/api/v1/ciao/challenge?roomCode=${roomCode}&clientId=${id.current}`, { method: 'POST', body: '{}' })); } catch (e: any) { alert(e?.message); } };
+  const passChallenge = async () => { try { setSs(await api(`/api/v1/ciao/pass-challenge?roomCode=${roomCode}&clientId=${id.current}`, { method: 'POST', body: '{}' })); } catch (e: any) { alert(e?.message); } };
   const leave = async () => { const rc = roomRef.current; if (rc) { try { await api(`/api/v1/ciao/leave?roomCode=${rc}&clientId=${id.current}`, { method: 'POST', body: '{}' }); } catch {} } setScreen('entry'); setRoomCode(null); setSs(null); };
 
   // 홈으로 나갈 때도 방에서 빠져나가야 '진행중'으로 남지 않는다(sendBeacon은 이동 중에도 전송됨).
@@ -143,7 +145,8 @@ export default function CiaoPage() {
   const localNow = syncRef.current.at ? syncRef.current.serverNow + (Date.now() - syncRef.current.at) : (ss?.serverNow ?? 0);
   const remainMs = ss && ss.deadline > 0 ? Math.max(0, ss.deadline - localNow) : 0;
   const remainSec = Math.ceil(remainMs / 1000);
-  const challengePct = ss && ss.turnPhase === 'CHALLENGE' ? Math.min(100, (remainMs / (ss.challengeSec * 1000)) * 100) : 0;
+  const challengePct = ss && ss.turnPhase === 'CHALLENGE' && !ss.noTimeLimit
+    ? Math.min(100, (remainMs / (ss.challengeSec * 1000)) * 100) : 0;
 
   const activePlayers = ss ? ss.players.filter((p) => !p.left) : [];
   const seatName = (seat: number) => activePlayers.find((p) => p.seat === seat)?.name ?? '?';
@@ -204,6 +207,7 @@ export default function CiaoPage() {
                 <option value={8}>8초 (기본)</option>
                 <option value={12}>12초 (여유)</option>
                 <option value={20}>20초 (느긋)</option>
+                <option value={0}>제한 없음</option>
               </select>
             </label>
             <button onClick={create} disabled={!nick.trim()}
@@ -252,7 +256,7 @@ export default function CiaoPage() {
           <div className="text-center rounded-2xl border-2 border-amber-200 bg-gradient-to-b from-amber-50 to-white py-4">
             <p className="text-sm text-slate-400">방 코드</p>
             <p className="text-4xl font-extrabold tracking-[0.3em] text-amber-600 pl-2">{roomCode}</p>
-            <p className="text-xs text-slate-400 mt-1">의심 대기 {ss.challengeSec}초 · {ss.players.length}/10명</p>
+            <p className="text-xs text-slate-400 mt-1">{ss.noTimeLimit ? '⏳ 제한시간 없음' : `의심 대기 ${ss.challengeSec}초`} · {ss.players.length}/10명</p>
           </div>
           <div className="rounded-2xl border-2 border-slate-200 p-3 space-y-1">
             {ss.players.map((p, i) => (
@@ -405,10 +409,18 @@ export default function CiaoPage() {
             {!ended && ss.myTurn && ss.turnPhase === 'CHALLENGE' && (
               <div className="rounded-2xl border-2 border-amber-300 bg-white p-4 lg:p-6 text-center space-y-2 lg:space-y-4 shadow">
                 <p className="font-extrabold lg:text-2xl flex items-center justify-center gap-2 lg:gap-3">「{ss.declared}」 선언 완료 <DiceFace v={ss.declared} size={30} cls="lg:[--d:52px]" /></p>
-                <div className="h-2 lg:h-3 bg-slate-100 rounded-full overflow-hidden">
-                  <div className="h-full bg-amber-500 transition-[width] duration-200 ease-linear rounded-full" style={{ width: `${challengePct}%` }} />
-                </div>
-                <p className="text-sm lg:text-base text-slate-400">아무도 의심 안 하면 {ss.declared}칸 전진! ({remainSec}초)</p>
+                {ss.noTimeLimit ? (
+                  <p className="text-sm lg:text-base text-slate-400">
+                    아무도 의심 안 하면 {ss.declared}칸 전진! · 통과 <b>{ss.passedCount}/{ss.challengerCount}</b>명 대기 중
+                  </p>
+                ) : (
+                  <>
+                    <div className="h-2 lg:h-3 bg-slate-100 rounded-full overflow-hidden">
+                      <div className="h-full bg-amber-500 transition-[width] duration-200 ease-linear rounded-full" style={{ width: `${challengePct}%` }} />
+                    </div>
+                    <p className="text-sm lg:text-base text-slate-400">아무도 의심 안 하면 {ss.declared}칸 전진! ({remainSec}초)</p>
+                  </>
+                )}
               </div>
             )}
 
@@ -420,15 +432,29 @@ export default function CiaoPage() {
                   <p className="font-extrabold text-lg sm:text-xl lg:text-3xl">{ss.turnName} ▸ 「{ss.declared}」 선언!</p>
                   <DiceFace v={ss.declared} size={48} cls="lg:[--d:72px]" />
                 </div>
-                <div className="h-2 lg:h-3 bg-slate-100 rounded-full overflow-hidden">
-                  <div className="h-full bg-rose-500 transition-[width] duration-200 ease-linear rounded-full" style={{ width: `${challengePct}%` }} />
-                </div>
+                {ss.noTimeLimit ? (
+                  <p className="text-center text-xs lg:text-sm font-bold text-slate-400">
+                    ⏳ 제한시간 없음 · 통과 {ss.passedCount}/{ss.challengerCount}명
+                  </p>
+                ) : (
+                  <div className="h-2 lg:h-3 bg-slate-100 rounded-full overflow-hidden">
+                    <div className="h-full bg-rose-500 transition-[width] duration-200 ease-linear rounded-full" style={{ width: `${challengePct}%` }} />
+                  </div>
+                )}
                 {ss.canChallenge ? (
-                  <button onClick={challenge}
-                    className="w-full bg-gradient-to-b from-rose-500 to-rose-600 text-white font-extrabold text-base sm:text-lg lg:text-2xl py-3.5 lg:py-6 rounded-2xl shadow-lg active:scale-[0.98] transition animate-pulse">
-                    🔍 의심하기! ({remainSec}초)
-                  </button>
-                ) : <p className="text-center text-sm lg:text-base text-slate-400">의심 창 진행 중… ({remainSec}초)</p>}
+                  <div className={ss.noTimeLimit ? 'grid grid-cols-1 sm:grid-cols-[1fr_auto] gap-2 lg:gap-3' : ''}>
+                    <button onClick={challenge}
+                      className="w-full bg-gradient-to-b from-rose-500 to-rose-600 text-white font-extrabold text-base sm:text-lg lg:text-2xl py-3.5 lg:py-6 rounded-2xl shadow-lg active:scale-[0.98] transition animate-pulse">
+                      🔍 의심하기!{ss.noTimeLimit ? '' : ` (${remainSec}초)`}
+                    </button>
+                    {ss.noTimeLimit && (
+                      <button onClick={passChallenge} disabled={ss.iPassed}
+                        className="px-6 lg:px-10 border-2 border-slate-300 font-bold rounded-2xl text-slate-500 hover:border-slate-400 disabled:opacity-40 lg:text-lg">
+                        {ss.iPassed ? '통과함 ✓' : '🤝 통과'}
+                      </button>
+                    )}
+                  </div>
+                ) : <p className="text-center text-sm lg:text-base text-slate-400">의심 창 진행 중…{ss.noTimeLimit ? '' : ` (${remainSec}초)`}</p>}
                 <p className="text-center text-[11px] sm:text-xs lg:text-sm text-slate-400">의심 성공: 상대 말 추락 💦 + 내가 {ss.declared}칸 전진 · 실패: 내 말 추락</p>
               </div>
             )}

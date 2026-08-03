@@ -44,6 +44,7 @@ public class CiaoGame implements RoomGame {
     }
 
     private final String hostClientId;
+    /** 0이면 제한시간 없음 — 아무도 재촉당하지 않고, 의심 창은 모두가 '통과'를 눌러야 넘어간다. */
     private final int challengeSec;
     private Phase phase = Phase.LOBBY;
     private TurnPhase turnPhase = null;
@@ -59,11 +60,14 @@ public class CiaoGame implements RoomGame {
     private String winnerLabel = null;
     private long deadline = 0, botAt = 0, lastActive = System.currentTimeMillis();
     private boolean botChallengeDone = false; // 이번 의심 창에서 봇 판단을 이미 했는가
+    /** 제한시간 없음 모드에서 이번 의심 창을 '통과'한 좌석들. */
+    private final java.util.Set<Integer> passVotes = new java.util.HashSet<>();
 
     public CiaoGame(String hostClientId, String nick, Integer challengeSecOpt) {
         this.hostClientId = hostClientId;
         int cs = challengeSecOpt == null ? DEFAULT_CHALLENGE_SEC : challengeSecOpt;
-        this.challengeSec = Math.max(MIN_CHALLENGE_SEC, Math.min(MAX_CHALLENGE_SEC, cs));
+        // 0은 '제한 없음'이라는 뜻이라 그대로 둔다.
+        this.challengeSec = cs <= 0 ? 0 : Math.max(MIN_CHALLENGE_SEC, Math.min(MAX_CHALLENGE_SEC, cs));
         P host = new P(); host.clientId = hostClientId; host.nick = clean(nick); host.host = true; host.lastSeen = now();
         players.add(host);
     }
@@ -106,9 +110,14 @@ public class CiaoGame implements RoomGame {
         beginTurn();
     }
 
+    /** 제한시간 없음 모드인가. */
+    boolean noTimeLimit() { return challengeSec <= 0; }
+
     private void beginTurn() {
         turnPhase = TurnPhase.ROLL; actual = -1; declared = -1; botChallengeDone = false;
-        deadline = now() + TURN_SEC * 1000L; botAt = now() + BOT_DELAY_MS;
+        passVotes.clear();
+        deadline = noTimeLimit() ? 0 : now() + TURN_SEC * 1000L;
+        botAt = now() + BOT_DELAY_MS;
     }
 
     // ── 행동 ──
@@ -133,20 +142,46 @@ public class CiaoGame implements RoomGame {
         resolveChallenge(ch);
     }
 
+    /**
+     * 제한시간 없음 모드에서 '의심하지 않겠다'를 알린다.
+     * 의심할 수 있는 사람이 모두 통과하면 선언이 그대로 통과된다(타이머 대신 쓰는 진행 장치).
+     */
+    public synchronized void passChallenge(String clientId) {
+        touch(); tick();
+        if (phase != Phase.PLAYING || turnPhase != TurnPhase.CHALLENGE) throw bad("지금은 통과할 수 없습니다");
+        P p = byClient(clientId);
+        if (p == null || p.left || p.eliminated) throw bad("통과할 수 없습니다");
+        if (p.seat == turnSeat) throw bad("자기 선언은 통과할 수 없습니다");
+        passVotes.add(p.seat);
+        if (allPassed()) resolveNoChallenge();
+    }
+
+    /** 의심 가능한 사람 수(선언자 제외, 생존자만). */
+    private int challengerCount() {
+        int n = 0;
+        for (P p : players) if (!p.eliminated && !p.left && p.seat != turnSeat) n++;
+        return n;
+    }
+    private boolean allPassed() {
+        for (P p : players) if (!p.eliminated && !p.left && p.seat != turnSeat && !passVotes.contains(p.seat)) return false;
+        return true;
+    }
+
     private boolean actualIsX() { return actual == 0; }
 
     private void doRoll() {
         int f = ThreadLocalRandom.current().nextInt(6); // 0~3 → 1~4, 4~5 → X
         actual = f <= 3 ? f + 1 : 0;
         turnPhase = TurnPhase.DECLARE;
-        deadline = now() + TURN_SEC * 1000L;
+        deadline = noTimeLimit() ? 0 : now() + TURN_SEC * 1000L;
     }
     private void doDeclare(int value) {
         declared = value;
         turnPhase = TurnPhase.CHALLENGE;
-        deadline = now() + challengeSec * 1000L;
+        deadline = noTimeLimit() ? 0 : now() + challengeSec * 1000L;
         botAt = now() + BOT_DELAY_MS;
         botChallengeDone = false;
+        passVotes.clear();
         note("🎲 " + players.get(turnSeat).nick + " ▸ 「" + value + "」 선언!");
     }
 
@@ -223,10 +258,14 @@ public class CiaoGame implements RoomGame {
         long t = now();
         if (turnPhase == TurnPhase.ROLL || turnPhase == TurnPhase.DECLARE) {
             if (cur.bot) { if (t >= botAt) botRollDeclare(cur); }
-            else if (t >= deadline) autoRollDeclare();
+            // 제한시간 없음 모드에서는 사람을 재촉하지 않는다.
+            else if (!noTimeLimit() && t >= deadline) autoRollDeclare();
         } else if (turnPhase == TurnPhase.CHALLENGE) {
             if (!botChallengeDone && t >= botAt) botChallengeDecision();
-            if (phase == Phase.PLAYING && turnPhase == TurnPhase.CHALLENGE && t >= deadline) resolveNoChallenge();
+            if (phase != Phase.PLAYING || turnPhase != TurnPhase.CHALLENGE) return;
+            // 제한시간이 있으면 마감으로, 없으면 모두가 '통과'했을 때 넘어간다.
+            if (noTimeLimit()) { if (allPassed()) resolveNoChallenge(); }
+            else if (t >= deadline) resolveNoChallenge();
         }
     }
 
@@ -282,6 +321,7 @@ public class CiaoGame implements RoomGame {
             if (b.pawnsLeft <= 2) agg *= 0.4;   // 말이 얼마 안 남으면 몸을 사린다
             double per = 1 - Math.pow(1 - Math.min(0.85, agg), 1.0 / bots.size());
             if (ThreadLocalRandom.current().nextDouble() < per) { resolveChallenge(b); return; }
+            passVotes.add(b.seat);   // 의심 안 하기로 했으면 '통과'로 기록(제한시간 없음 모드 진행용)
         }
     }
 
@@ -307,6 +347,10 @@ public class CiaoGame implements RoomGame {
                 phase.name(),
                 phase == Phase.PLAYING && turnPhase != null ? turnPhase.name() : null,
                 BRIDGE_LEN, pawnsPer, goal, challengeSec,
+                noTimeLimit(),
+                turnPhase == TurnPhase.CHALLENGE ? passVotes.size() : 0,
+                turnPhase == TurnPhase.CHALLENGE ? challengerCount() : 0,
+                me != null && passVotes.contains(meSeat),
                 clientId != null && clientId.equals(hostClientId),
                 me != null,
                 pv, turnSeat, turnName, myTurn, meSeat,

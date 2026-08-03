@@ -74,6 +74,7 @@ public class SpicyGame implements RoomGame {
     }
 
     private final String hostClientId;
+    /** 0이면 제한시간 없음 — 아무도 재촉당하지 않고, 도전 창은 모두가 '통과'를 눌러야 넘어간다. */
     private final int challengeSec;
     private final boolean handPenalty;
 
@@ -94,11 +95,14 @@ public class SpicyGame implements RoomGame {
     private String winnerLabel = null;
     private long deadline = 0, botAt = 0, lastActive = System.currentTimeMillis();
     private boolean botChallengeDone = false;
+    /** 제한시간 없음 모드에서 이번 도전 창을 '통과'한 좌석들. */
+    private final java.util.Set<Integer> passVotes = new java.util.HashSet<>();
 
     public SpicyGame(String hostClientId, String nick, Integer challengeSecOpt, Boolean handPenaltyOpt) {
         this.hostClientId = hostClientId;
         int cs = challengeSecOpt == null ? DEFAULT_CHALLENGE_SEC : challengeSecOpt;
-        this.challengeSec = Math.max(MIN_CHALLENGE_SEC, Math.min(MAX_CHALLENGE_SEC, cs));
+        // 0은 '제한 없음'이라는 뜻이라 그대로 둔다.
+        this.challengeSec = cs <= 0 ? 0 : Math.max(MIN_CHALLENGE_SEC, Math.min(MAX_CHALLENGE_SEC, cs));
         this.handPenalty = handPenaltyOpt == null || handPenaltyOpt;   // 원작 룰이라 기본 켬
         P host = new P(); host.clientId = hostClientId; host.nick = clean(nick); host.host = true; host.lastSeen = now();
         players.add(host);
@@ -172,11 +176,15 @@ public class SpicyGame implements RoomGame {
         p.hand.add(c);
     }
 
+    /** 제한시간 없음 모드인가. */
+    boolean noTimeLimit() { return challengeSec <= 0; }
+
     private void beginPlay() {
         turnPhase = TurnPhase.PLAY;
-        deadline = now() + TURN_SEC * 1000L;
+        deadline = noTimeLimit() ? 0 : now() + TURN_SEC * 1000L;
         botAt = now() + BOT_DELAY_MS;
         botChallengeDone = false;
+        passVotes.clear();
     }
 
     // ── 선언 가능한 값 ──
@@ -237,9 +245,10 @@ public class SpicyGame implements RoomGame {
         lastReveal = null;
         note("🃏 " + p.nick + " ▸ " + SPICE_NAMES[spice] + " " + number + " 선언 (더미 " + pile.size() + "장)");
         turnPhase = TurnPhase.CHALLENGE;
-        deadline = now() + challengeSec * 1000L;
+        deadline = noTimeLimit() ? 0 : now() + challengeSec * 1000L;
         botAt = now() + BOT_DELAY_MS;
         botChallengeDone = false;
+        passVotes.clear();
     }
 
     /** 직전 카드에 도전. kind: "NUMBER"(숫자 도전) 또는 "SPICE"(스파이스 도전). */
@@ -251,6 +260,31 @@ public class SpicyGame implements RoomGame {
         if (ch.seat == lastPlayerSeat) throw bad("자기 카드에는 도전할 수 없습니다");
         String k = "SPICE".equalsIgnoreCase(kind) ? "SPICE" : "NUMBER";
         resolveChallenge(ch, k);
+    }
+
+    /**
+     * 제한시간 없음 모드에서 '도전하지 않겠다'를 알린다.
+     * 도전할 수 있는 사람이 모두 통과하면 선언이 그대로 통과된다(타이머 대신 쓰는 진행 장치).
+     */
+    public synchronized void passChallenge(String clientId) {
+        touch(); tick();
+        if (phase != Phase.PLAYING || turnPhase != TurnPhase.CHALLENGE) throw bad("지금은 통과할 수 없습니다");
+        P p = byClient(clientId);
+        if (p == null || p.left) throw bad("통과할 수 없습니다");
+        if (p.seat == lastPlayerSeat) throw bad("자기 카드는 통과할 수 없습니다");
+        passVotes.add(p.seat);
+        if (allPassed()) resolveNoChallenge();
+    }
+
+    /** 도전 가능한 사람 수(낸 사람 제외). */
+    private int challengerCount() {
+        int n = 0;
+        for (P p : players) if (!p.left && p.seat != lastPlayerSeat) n++;
+        return n;
+    }
+    private boolean allPassed() {
+        for (P p : players) if (!p.left && p.seat != lastPlayerSeat && !passVotes.contains(p.seat)) return false;
+        return true;
     }
 
     private void resolveChallenge(P challenger, String kind) {
@@ -293,7 +327,7 @@ public class SpicyGame implements RoomGame {
     }
 
     /** 아무도 도전하지 않으면 다음 사람 차례로 넘어간다(더미는 쌓인 채 유지). */
-    private void passChallenge() {
+    private void resolveNoChallenge() {
         P last = lastPlayerSeat >= 0 ? players.get(lastPlayerSeat) : null;
         if (last != null) {
             checkTrophy(last);
@@ -349,10 +383,14 @@ public class SpicyGame implements RoomGame {
         long t = now();
         if (turnPhase == TurnPhase.PLAY) {
             if (cur.bot) { if (t >= botAt) botPlay(cur); }
-            else if (t >= deadline) autoPlay(cur);
+            // 제한시간 없음 모드에서는 사람을 재촉하지 않는다.
+            else if (!noTimeLimit() && t >= deadline) autoPlay(cur);
         } else if (turnPhase == TurnPhase.CHALLENGE) {
             if (!botChallengeDone && t >= botAt) botChallengeDecision();
-            if (phase == Phase.PLAYING && turnPhase == TurnPhase.CHALLENGE && t >= deadline) passChallenge();
+            if (phase != Phase.PLAYING || turnPhase != TurnPhase.CHALLENGE) return;
+            // 제한시간이 있으면 마감으로, 없으면 모두가 '통과'했을 때 넘어간다.
+            if (noTimeLimit()) { if (allPassed()) resolveNoChallenge(); }
+            else if (t >= deadline) resolveNoChallenge();
         }
     }
 
@@ -427,6 +465,7 @@ public class SpicyGame implements RoomGame {
                 resolveChallenge(b, kind);
                 return;
             }
+            passVotes.add(b.seat);   // 도전 안 하기로 했으면 '통과'로 기록(제한시간 없음 모드 진행용)
         }
     }
 
@@ -454,7 +493,11 @@ public class SpicyGame implements RoomGame {
         return new SpicyState(
                 phase.name(),
                 phase == Phase.PLAYING && turnPhase != null ? turnPhase.name() : null,
-                challengeSec, handPenalty, deckSize, trophyTotal,
+                challengeSec, noTimeLimit(),
+                turnPhase == TurnPhase.CHALLENGE ? passVotes.size() : 0,
+                turnPhase == TurnPhase.CHALLENGE ? challengerCount() : 0,
+                me != null && passVotes.contains(meSeat),
+                handPenalty, deckSize, trophyTotal,
                 clientId != null && clientId.equals(hostClientId),
                 me != null,
                 pv, hand,
@@ -503,7 +546,7 @@ public class SpicyGame implements RoomGame {
     int declaredNumberForTest() { return declaredNumber; }
     int declaredSpiceForTest() { return declaredSpice; }
     void setDeclaredForTest(int spice, int number) { declaredSpice = spice; declaredNumber = number; }
-    void forcePassChallengeForTest() { if (turnPhase == TurnPhase.CHALLENGE) passChallenge(); }
+    void forcePassChallengeForTest() { if (turnPhase == TurnPhase.CHALLENGE) resolveNoChallenge(); }
 
     public P byClient(String clientId) { if (clientId == null) return null; for (P p : players) if (clientId.equals(p.clientId)) return p; return null; }
 

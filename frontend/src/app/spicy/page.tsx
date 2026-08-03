@@ -10,6 +10,7 @@ type PlayerView = { seat: number; name: string; bot: boolean; host: boolean; me:
 type Reveal = { challengerSeat: number; accusedSeat: number; kind: string; declaredSpice: number; declaredNumber: number; actualSpice: number; actualNumber: number; success: boolean; pileTaken: number };
 type State = {
   phase: string; turnPhase: string | null; challengeSec: number; handPenalty: boolean;
+  noTimeLimit: boolean; passedCount: number; challengerCount: number; iPassed: boolean;
   deckSize: number; trophyTotal: number; isHost: boolean; joined: boolean;
   players: PlayerView[]; myHand: CardView[];
   turnSeat: number; turnName: string | null; myTurn: boolean; mySeat: number;
@@ -237,6 +238,7 @@ export default function SpicyPage() {
   };
   const passTurn = async () => { try { setSs(await api(`/api/v1/spicy/pass?roomCode=${roomCode}&clientId=${id.current}`, { method: 'POST', body: '{}' })); } catch (e: any) { alert(e?.message); } };
   const challenge = async (kind: 'NUMBER' | 'SPICE') => { try { setSs(await api(`/api/v1/spicy/challenge?roomCode=${roomCode}&clientId=${id.current}&kind=${kind}`, { method: 'POST', body: '{}' })); } catch (e: any) { alert(e?.message); } };
+  const passChallenge = async () => { try { setSs(await api(`/api/v1/spicy/pass-challenge?roomCode=${roomCode}&clientId=${id.current}`, { method: 'POST', body: '{}' })); } catch (e: any) { alert(e?.message); } };
   const leave = async () => { const rc = roomRef.current; if (rc) { try { await api(`/api/v1/spicy/leave?roomCode=${rc}&clientId=${id.current}`, { method: 'POST', body: '{}' }); } catch {} } setScreen('entry'); setRoomCode(null); setSs(null); };
 
   const beaconLeave = () => {
@@ -250,7 +252,8 @@ export default function SpicyPage() {
   const localNow = syncRef.current.at ? syncRef.current.serverNow + (Date.now() - syncRef.current.at) : (ss?.serverNow ?? 0);
   const remainMs = ss && ss.deadline > 0 ? Math.max(0, ss.deadline - localNow) : 0;
   const remainSec = Math.ceil(remainMs / 1000);
-  const challengePct = ss && ss.turnPhase === 'CHALLENGE' ? Math.min(100, (remainMs / (ss.challengeSec * 1000)) * 100) : 0;
+  const challengePct = ss && ss.turnPhase === 'CHALLENGE' && !ss.noTimeLimit
+    ? Math.min(100, (remainMs / (ss.challengeSec * 1000)) * 100) : 0;
   const seatName = (s: number) => ss?.players.find((p) => p.seat === s)?.name ?? '?';
   const ranked = ss ? [...ss.players].filter((p) => !p.left).sort((a, b) => b.score - a.score) : [];
 
@@ -299,6 +302,7 @@ export default function SpicyPage() {
               <select value={challengeSec} onChange={(e) => setChallengeSec(Number(e.target.value))} className="border-2 border-slate-200 rounded-lg px-2 py-1.5 font-bold">
                 <option value={5}>5초 (스피드)</option><option value={8}>8초 (기본)</option>
                 <option value={12}>12초 (여유)</option><option value={20}>20초 (느긋)</option>
+                <option value={0}>제한 없음</option>
               </select>
             </label>
             <label className="flex items-center justify-between text-sm cursor-pointer">
@@ -350,7 +354,7 @@ export default function SpicyPage() {
           <div className="text-center rounded-2xl border-2 border-rose-200 bg-gradient-to-b from-rose-50 to-white py-4">
             <p className="text-sm text-slate-400">방 코드</p>
             <p className="text-4xl font-extrabold tracking-[0.3em] text-rose-600 pl-2">{roomCode}</p>
-            <p className="text-xs text-slate-400 mt-1">도전 대기 {ss.challengeSec}초 · {ss.handPenalty ? '손패 감점 있음' : '손패 감점 없음'} · {ss.players.length}/10명</p>
+            <p className="text-xs text-slate-400 mt-1">{ss.noTimeLimit ? '⏳ 제한시간 없음' : `도전 대기 ${ss.challengeSec}초`} · {ss.handPenalty ? '손패 감점 있음' : '손패 감점 없음'} · {ss.players.length}/10명</p>
           </div>
           <div className="rounded-2xl border-2 border-slate-200 p-3 space-y-1">
             {ss.players.map((p, i) => (
@@ -478,9 +482,15 @@ export default function SpicyPage() {
                 <p className="text-center font-extrabold lg:text-lg">
                   「{ss.declaredSpice >= 0 ? SPICE[ss.declaredSpice].name : ''} {ss.declaredNumber}」 — 어느 쪽이 거짓일까요?
                 </p>
-                <div className="h-2 lg:h-3 bg-slate-100 rounded-full overflow-hidden">
-                  <div className="h-full bg-amber-500 transition-[width] duration-200 ease-linear rounded-full" style={{ width: `${challengePct}%` }} />
-                </div>
+                {ss.noTimeLimit ? (
+                  <p className="text-center text-xs lg:text-sm font-bold text-slate-400">
+                    ⏳ 제한시간 없음 · 통과 {ss.passedCount}/{ss.challengerCount}명
+                  </p>
+                ) : (
+                  <div className="h-2 lg:h-3 bg-slate-100 rounded-full overflow-hidden">
+                    <div className="h-full bg-amber-500 transition-[width] duration-200 ease-linear rounded-full" style={{ width: `${challengePct}%` }} />
+                  </div>
+                )}
                 <div className="grid grid-cols-2 gap-3">
                   <button onClick={() => challenge('NUMBER')}
                     className="bg-gradient-to-b from-violet-500 to-violet-600 text-white font-extrabold py-3 lg:py-4 rounded-2xl shadow active:scale-95 transition lg:text-lg">
@@ -491,12 +501,18 @@ export default function SpicyPage() {
                     🌶️ 스파이스 도전
                   </button>
                 </div>
-                <p className="text-center text-[11px] lg:text-xs text-slate-400">지목한 쪽이 실제와 다르면 성공! 같으면 내가 더미를 뒤집어씁니다 ({remainSec}초)</p>
+                {ss.noTimeLimit && (
+                  <button onClick={passChallenge} disabled={ss.iPassed}
+                    className="w-full border-2 border-slate-300 font-bold rounded-2xl py-2.5 lg:py-3 text-slate-500 hover:border-slate-400 disabled:opacity-40 lg:text-lg">
+                    {ss.iPassed ? '통과함 ✓ — 다른 사람 기다리는 중' : '🤝 통과 (도전 안 함)'}
+                  </button>
+                )}
+                <p className="text-center text-[11px] lg:text-xs text-slate-400">지목한 쪽이 실제와 다르면 성공! 같으면 내가 더미를 뒤집어씁니다{ss.noTimeLimit ? '' : ` (${remainSec}초)`}</p>
               </div>
             )}
             {!ended && ss.turnPhase === 'CHALLENGE' && !ss.canChallenge && (
               <div className="rounded-2xl border-2 border-slate-200 bg-white p-4 text-center text-sm lg:text-base text-slate-400 font-bold">
-                도전 대기 중… ({remainSec}초)
+                도전 대기 중…{ss.noTimeLimit ? ` · 통과 ${ss.passedCount}/${ss.challengerCount}명` : ` (${remainSec}초)`}
               </div>
             )}
 

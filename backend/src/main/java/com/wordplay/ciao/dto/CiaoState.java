@@ -12,7 +12,11 @@ public record CiaoState(
         int bridgeLen,                // 다리 칸 수(10)
         int pawnsPer,                 // 인당 말 개수(인원 보정)
         int goal,                     // 승리에 필요한 건넌 말 수(인원 보정)
-        int challengeSec,             // 의심 대기 시간(초)
+        int challengeSec,             // 의심 대기 시간(초). 0이면 제한 없음
+        boolean noTimeLimit,          // 제한시간 없음 모드
+        int passedCount,              // 이번 의심 창에서 '통과'한 사람 수
+        int challengerCount,          // 의심할 수 있는 사람 수
+        boolean iPassed,              // 내가 이미 통과했는가
         boolean isHost,
         boolean joined,
         List<PlayerView> players,
@@ -37,7 +41,7 @@ public record CiaoState(
     public record Reveal(int seat, int challengerSeat, int declared, int actual, boolean lie) {}
 
     public static CiaoState notFound(long now) {
-        return new CiaoState("NONE", null, 10, 0, 0, 8, false, false, List.of(),
+        return new CiaoState("NONE", null, 10, 0, 0, 8, false, 0, 0, false, false, false, List.of(),
                 -1, null, false, -1, -1, -1, false, null, null, List.of(), -1, null, 0, now);
     }
 }

@@ -87,6 +87,14 @@ public class SpicyController {
         return ApiResponse.success(g.me(clientId));
     }
 
+    @PostMapping("/pass-challenge")
+    public ApiResponse<SpicyState> passChallenge(@RequestParam String roomCode, @RequestParam String clientId) {
+        validateClientId(clientId);
+        SpicyGame g = rooms.require(roomCode);
+        g.passChallenge(clientId);
+        return ApiResponse.success(g.me(clientId));
+    }
+
     @GetMapping("/me")
     public ApiResponse<SpicyState> me(@RequestParam String roomCode, @RequestParam String clientId) {
         validateClientId(clientId);

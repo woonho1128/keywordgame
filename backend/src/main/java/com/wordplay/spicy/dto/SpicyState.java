@@ -9,7 +9,11 @@ import java.util.List;
 public record SpicyState(
         String phase,                 // LOBBY / PLAYING / ENDED
         String turnPhase,             // PLAY / CHALLENGE (PLAYING 중에만)
-        int challengeSec,
+        int challengeSec,             // 0이면 제한 없음
+        boolean noTimeLimit,          // 제한시간 없음 모드
+        int passedCount,              // 이번 도전 창에서 '통과'한 사람 수
+        int challengerCount,          // 도전할 수 있는 사람 수
+        boolean iPassed,              // 내가 이미 통과했는가
         boolean handPenalty,
         int deckSize,                 // 이번 판 총 카드 수(인원별 확장 결과)
         int trophyTotal,              // 이번 판 트로피 개수
@@ -49,7 +53,7 @@ public record SpicyState(
                          boolean success, int pileTaken) {}
 
     public static SpicyState notFound(long now) {
-        return new SpicyState("NONE", null, 8, false, 0, 0, false, false, List.of(), List.of(),
+        return new SpicyState("NONE", null, 8, false, 0, 0, false, false, 0, 0, false, false, List.of(), List.of(),
                 -1, null, false, -1, 0, -1, -1, -1, List.of(), List.of(), false, null, 0, 0,
                 null, List.of(), -1, null, 0, now);
     }

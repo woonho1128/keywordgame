@@ -147,6 +147,48 @@ class CiaoGameTest {
         assertThat(a.eliminated).as("2+1 = 3 이므로 아직 가능").isFalse();
     }
 
+    /** 제한시간 없음 모드: 타이머가 안 돌고, 의심할 사람이 모두 '통과'해야 넘어간다. */
+    @Test
+    void 제한시간_없음이면_모두_통과해야_넘어간다() {
+        CiaoGame g = new CiaoGame("h", "호스트", 0);   // 0 = 제한 없음
+        g.join("b", "친구1");
+        g.join("c", "친구2");
+        g.start("h");
+        assertThat(g.me("h").noTimeLimit()).isTrue();
+        assertThat(g.me("h").deadline()).isZero();     // 마감 시각이 없다
+
+        CiaoGame.P a = cur(g);
+        CiaoGame.P b = someoneElse(g, a);
+        CiaoGame.P c = null;
+        for (CiaoGame.P p : g.playersList()) if (p != a && p != b) c = p;
+
+        g.setRollForTest(3);
+        g.declare(a.clientId, 3);
+        int seatBefore = g.turnSeat();
+
+        g.passChallenge(b.clientId);
+        assertThat(g.turnSeat()).as("아직 한 명이 안 눌렀으면 그대로").isEqualTo(seatBefore);
+        assertThat(g.me("h").passedCount()).isEqualTo(1);
+        assertThat(g.me("h").challengerCount()).isEqualTo(2);
+
+        g.passChallenge(c.clientId);
+        assertThat(a.bridgePos).as("모두 통과 → 선언대로 전진").isEqualTo(3);
+        assertThat(g.turnSeat()).isNotEqualTo(seatBefore);
+    }
+
+    @Test
+    void 제한시간_없음이어도_의심은_바로_처리된다() {
+        CiaoGame g = new CiaoGame("h", "호스트", 0);
+        g.join("b", "친구1");
+        g.start("h");
+        CiaoGame.P a = cur(g), b = someoneElse(g, a);
+        g.setRollForTest(0);                  // X → 무조건 거짓말
+        g.declare(a.clientId, 4);
+        g.challenge(b.clientId);
+        assertThat(a.pawnsLeft).isEqualTo(6); // 거짓말 들통 → 추락
+        assertThat(b.bridgePos).isEqualTo(4);
+    }
+
     @Test
     void 말이_모두_사라지면_탈락하고_남은_한명이_승리() {
         CiaoGame g = twoHumans();

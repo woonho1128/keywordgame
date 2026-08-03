@@ -86,6 +86,14 @@ public class CiaoController {
         return ApiResponse.success(g.me(clientId));
     }
 
+    @PostMapping("/pass-challenge")
+    public ApiResponse<CiaoState> passChallenge(@RequestParam String roomCode, @RequestParam String clientId) {
+        validateClientId(clientId);
+        CiaoGame g = rooms.require(roomCode);
+        g.passChallenge(clientId);
+        return ApiResponse.success(g.me(clientId));
+    }
+
     @GetMapping("/me")
     public ApiResponse<CiaoState> me(@RequestParam String roomCode, @RequestParam String clientId) {
         validateClientId(clientId);
