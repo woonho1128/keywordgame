@@ -238,7 +238,8 @@ export default function CiaoPage() {
               <p>· 아무도 의심 안 하면 선언 값 그대로 전진 (뻥이 통한 것!).</p>
               <p>· 다리(10칸) 끝을 넘어가면 1개 건넘. <b>목표 수만큼 먼저 건너면 승리!</b></p>
               <p>· <b>건넌 말은 반대편에 남아 다시 쓸 수 없어요.</b> 말 7개로 3개를 건너보내야 하니, 추락은 4번까지만 버팁니다.</p>
-              <p>· 말이 다 떨어지면 탈락 — 헛의심으로 말을 낭비하면 건널 말이 모자라요!</p>
+              <p>· <b>남은 말로 목표를 못 채우게 되면 그 즉시 탈락</b>이에요(예: 목표 3개인데 건넌 말 0개·남은 말 2개).</p>
+              <p>· 헛의심으로 말을 낭비하면 건널 말이 모자라니 조심!</p>
               <p>· 인원에 따라 말·목표가 자동 조정돼요(2~4인은 원작: 말7·3건넘).</p>
             </div>
           </details>
@@ -466,10 +467,16 @@ export default function CiaoPage() {
                       ))}
                       {p.pawnsLeft === 0 && <span className="ml-1 text-[10px] lg:text-xs text-slate-400">말 없음</span>}
                     </span>
-                    <span className="flex gap-0.5 text-[11px] lg:text-sm">
-                      {Array.from({ length: ss.goal }).map((_, i) => (
-                        <span key={i} className={i < p.crossed ? '' : 'opacity-20 grayscale'}>🏁</span>
-                      ))}
+                    <span className="flex items-center gap-1">
+                      {/* 남은 말로 목표를 아슬아슬하게 채울 수 있는 상태면 경고 */}
+                      {!p.eliminated && !ended && p.crossed + p.pawnsLeft === ss.goal && (
+                        <span className="text-[9px] lg:text-[10px] font-extrabold text-rose-600 bg-rose-100 rounded px-1 py-px">벼랑끝</span>
+                      )}
+                      <span className="flex gap-0.5 text-[11px] lg:text-sm">
+                        {Array.from({ length: ss.goal }).map((_, i) => (
+                          <span key={i} className={i < p.crossed ? '' : 'opacity-20 grayscale'}>🏁</span>
+                        ))}
+                      </span>
                     </span>
                   </div>
                 </div>

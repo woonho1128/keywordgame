@@ -188,11 +188,15 @@ public class CiaoGame implements RoomGame {
     /** 말 1개 추락(다리 위 말이 있으면 그 말, 없으면 대기 말). */
     private void fall(P p) {
         p.pawnsLeft--; p.bridgePos = 0;
-        if (p.pawnsLeft <= 0) eliminate(p);
+        // 남은 말을 전부 건너보내도 목표에 못 미치면 이미 진 것이므로 그 자리에서 탈락시킨다.
+        // (말이 0개가 될 때까지 붙잡아 두면 이길 수 없는 사람이 계속 판을 끌게 된다.)
+        if (p.crossed + p.pawnsLeft < goal) eliminate(p);
     }
     private void eliminate(P p) {
         p.eliminated = true;
-        note("☠️ " + p.nick + " 말이 다 떨어져 탈락! (건넌 말 " + p.crossed + "개 · 추락 " + (pawnsPer - p.crossed) + "개)");
+        note(p.pawnsLeft <= 0
+                ? "☠️ " + p.nick + " 말이 다 떨어져 탈락! (건넌 말 " + p.crossed + "개)"
+                : "☠️ " + p.nick + " 남은 말 " + p.pawnsLeft + "개로는 " + goal + "개를 채울 수 없어 탈락! (건넌 말 " + p.crossed + "개)");
         P last = null; int n = 0;
         for (P q : players) if (!q.eliminated && !q.left) { n++; last = q; }
         if (n == 1 && last != null) { win(last); return; }

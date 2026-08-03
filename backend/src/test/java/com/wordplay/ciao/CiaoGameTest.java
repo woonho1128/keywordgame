@@ -102,6 +102,51 @@ class CiaoGameTest {
         assertThat(g.winnerSeat()).isEqualTo(p.seat);
     }
 
+    /**
+     * 목표가 3개인데 남은 말로 3개를 채울 수 없으면 이미 진 것이므로 그 자리에서 탈락해야 한다.
+     * (말이 0개가 될 때까지 계속 플레이되던 문제)
+     */
+    /** 사람 3명 방(봇은 clientId가 없어 직접 호출할 수 없다). */
+    private CiaoGame threeHumans() {
+        CiaoGame g = new CiaoGame("h", "호스트", 8);
+        g.join("b", "친구1");
+        g.join("c", "친구2");
+        g.start("h");
+        return g;
+    }
+    /** 현재 차례가 아닌 아무 사람. */
+    private CiaoGame.P someoneElse(CiaoGame g, CiaoGame.P not) {
+        for (CiaoGame.P p : g.playersList()) if (p != not) return p;
+        throw new IllegalStateException();
+    }
+
+    @Test
+    void 남은_말로_목표를_채울_수_없으면_즉시_탈락한다() {
+        CiaoGame g = threeHumans();
+        CiaoGame.P a = cur(g), b = someoneElse(g, a);
+        assertThat(g.goal()).isEqualTo(3);
+
+        a.crossed = 0; a.pawnsLeft = 3;      // 3개 남음 → 아직 가능(3개 다 건너면 달성)
+        g.setRollForTest(2);
+        g.declare(a.clientId, 4);            // 거짓말
+        g.challenge(b.clientId);             // a 말 1개 추락 → 2개 남음 → 목표 불가
+        assertThat(a.pawnsLeft).isEqualTo(2);
+        assertThat(a.eliminated).as("남은 말 2개로는 3개를 못 채우므로 탈락").isTrue();
+    }
+
+    @Test
+    void 이미_건넌_말이_있으면_남은_말이_적어도_계속한다() {
+        CiaoGame g = threeHumans();
+        CiaoGame.P a = cur(g), b = someoneElse(g, a);
+
+        a.crossed = 2; a.pawnsLeft = 2;      // 2개 건넜고 2개 남음 → 1개만 더 건너면 승리
+        g.setRollForTest(2);
+        g.declare(a.clientId, 4);
+        g.challenge(b.clientId);             // 1개 추락 → 남은 1개, 건넌 2개 = 3 달성 가능
+        assertThat(a.pawnsLeft).isEqualTo(1);
+        assertThat(a.eliminated).as("2+1 = 3 이므로 아직 가능").isFalse();
+    }
+
     @Test
     void 말이_모두_사라지면_탈락하고_남은_한명이_승리() {
         CiaoGame g = twoHumans();
