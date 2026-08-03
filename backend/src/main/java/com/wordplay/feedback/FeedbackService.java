@@ -27,7 +27,8 @@ import java.util.Set;
 public class FeedbackService {
 
     private static final Set<String> CATEGORIES = Set.of("BUG", "IDEA", "GAME", "ETC");
-    private static final int MAX_MESSAGE = 2000, MIN_MESSAGE = 5;
+    // 캡처만 붙이고 "여기 깨짐"처럼 짧게 쓰는 경우가 많아 하한을 낮게 둔다(도배는 IP 제한으로 막는다).
+    private static final int MAX_MESSAGE = 2000, MIN_MESSAGE = 2;
     /** 도배 방지: 같은 IP에서 1시간에 5건까지. */
     private static final int RATE_LIMIT = 5;
     private static final long RATE_WINDOW_MS = 60 * 60_000L;

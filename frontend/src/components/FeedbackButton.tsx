@@ -16,6 +16,7 @@ const CATEGORIES: { key: Category; label: string; hint: string }[] = [
 type Shot = { id: number; filename: string; dataUrl: string; content: string; bytes: number };
 
 const MAX_IMAGES = 3;
+const MIN_MESSAGE = 2;
 
 /**
  * 이미지를 캔버스로 줄여 JPEG로 다시 굽는다.
@@ -121,7 +122,7 @@ export default function FeedbackButton() {
 
   const submit = async () => {
     const msg = message.trim();
-    if (msg.length < 5) { setErr('내용을 조금 더 자세히 적어주세요'); return; }
+    if (msg.length < MIN_MESSAGE) { setErr(`내용을 ${MIN_MESSAGE}자 이상 적어주세요`); return; }
     setSending(true); setErr('');
     try {
       await api('/api/v1/feedback', {
@@ -144,6 +145,7 @@ export default function FeedbackButton() {
   };
 
   const hint = CATEGORIES.find((c) => c.key === category)?.hint ?? '';
+  const tooShort = message.trim().length < MIN_MESSAGE;
 
   return (
     <>
@@ -207,8 +209,17 @@ export default function FeedbackButton() {
                   className="w-full border-2 border-gray-200 rounded-xl px-3 py-2.5 text-sm resize-none focus:outline-none focus:border-hit"
                 />
                 <div className="flex justify-between items-center -mt-2">
-                  <span className="text-[11px] text-gray-400">현재 화면: {pathname}</span>
-                  <span className="text-[11px] text-gray-400">{message.length}/2000</span>
+                  {/* 버튼이 왜 안 눌리는지 바로 보이게 부족한 글자 수를 알려준다. */}
+                  {tooShort ? (
+                    <span className="text-[11px] font-bold text-amber-600">
+                      {MIN_MESSAGE}자 이상 입력해주세요
+                    </span>
+                  ) : (
+                    <span className="text-[11px] text-gray-400">현재 화면: {pathname}</span>
+                  )}
+                  <span className={`text-[11px] ${tooShort ? 'text-amber-600 font-bold' : 'text-gray-400'}`}>
+                    {message.trim().length}/2000
+                  </span>
                 </div>
 
                 {/* 스크린샷 첨부: 붙여넣기 · 파일 선택 · 드래그&드롭 */}
@@ -281,10 +292,10 @@ export default function FeedbackButton() {
 
                 <button
                   onClick={submit}
-                  disabled={sending || message.trim().length < 5}
+                  disabled={sending || tooShort}
                   className="w-full bg-hit text-white font-extrabold py-3 rounded-xl disabled:opacity-40 active:scale-[0.98] transition"
                 >
-                  {sending ? '보내는 중…' : '보내기'}
+                  {sending ? '보내는 중…' : tooShort ? `내용을 ${MIN_MESSAGE}자 이상 적어주세요` : '보내기'}
                 </button>
                 <p className="text-[11px] text-gray-400 text-center">
                   버그 제보는 어떤 게임에서 무엇을 하다 생겼는지 적어주시면 큰 도움이 돼요.
