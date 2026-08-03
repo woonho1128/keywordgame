@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { usePathname } from 'next/navigation';
 import { api } from '@/lib/api';
 
@@ -24,10 +24,11 @@ export default function FeedbackButton() {
   const [sending, setSending] = useState(false);
   const [done, setDone] = useState(false);
   const [err, setErr] = useState('');
+  const downOnBackdrop = useRef(false);
 
+  // 닉네임은 비워 둔다(게임 닉네임을 자동으로 넣으면 익명으로 쓰고 싶은 사람이 곤란).
   useEffect(() => {
     if (!open) return;
-    try { setNickname((n) => n || localStorage.getItem('arcade_nick') || ''); } catch {}
     setDone(false); setErr('');
   }, [open]);
 
@@ -69,7 +70,13 @@ export default function FeedbackButton() {
       </button>
 
       {open && (
-        <div className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center bg-black/40 p-0 sm:p-4" onClick={() => setOpen(false)}>
+        <div
+          className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center bg-black/40 p-0 sm:p-4"
+          // 모달 안에서 텍스트를 드래그하다 바깥에서 손을 떼면 click이 배경에서 발생해
+          // 창이 닫히던 문제가 있었다. 누른 곳과 뗀 곳이 '모두' 배경일 때만 닫는다.
+          onMouseDown={(e) => { downOnBackdrop.current = e.target === e.currentTarget; }}
+          onClick={(e) => { if (e.target === e.currentTarget && downOnBackdrop.current) setOpen(false); }}
+        >
           <div
             className="w-full sm:max-w-lg bg-white rounded-t-3xl sm:rounded-3xl shadow-2xl max-h-[90vh] overflow-y-auto"
             onClick={(e) => e.stopPropagation()}
