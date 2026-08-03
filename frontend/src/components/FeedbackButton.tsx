@@ -13,6 +13,39 @@ const CATEGORIES: { key: Category; label: string; hint: string }[] = [
   { key: 'ETC', label: '💬 기타', hint: '무엇이든 편하게 적어주세요' },
 ];
 
+type Shot = { id: number; filename: string; dataUrl: string; content: string; bytes: number };
+
+const MAX_IMAGES = 3;
+
+/**
+ * 이미지를 캔버스로 줄여 JPEG로 다시 굽는다.
+ * 원본 스크린샷을 그대로 올리면 프록시(Nginx 기본 1MB)에서 막히므로,
+ * 목표 용량 이하가 될 때까지 크기·품질을 단계적으로 낮춘다.
+ */
+async function compress(file: File, targetBytes: number): Promise<{ dataUrl: string; bytes: number }> {
+  const bitmap = await createImageBitmap(file);
+  let maxSide = 1600;
+  let quality = 0.82;
+  for (let attempt = 0; attempt < 6; attempt++) {
+    const scale = Math.min(1, maxSide / Math.max(bitmap.width, bitmap.height));
+    const w = Math.max(1, Math.round(bitmap.width * scale));
+    const h = Math.max(1, Math.round(bitmap.height * scale));
+    const canvas = document.createElement('canvas');
+    canvas.width = w; canvas.height = h;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) break;
+    ctx.fillStyle = '#fff';           // 투명 배경이 검게 나오지 않도록
+    ctx.fillRect(0, 0, w, h);
+    ctx.drawImage(bitmap, 0, 0, w, h);
+    const dataUrl = canvas.toDataURL('image/jpeg', quality);
+    const bytes = Math.round((dataUrl.length - dataUrl.indexOf(',') - 1) * 0.75);
+    if (bytes <= targetBytes || attempt === 5) return { dataUrl, bytes };
+    if (quality > 0.5) quality -= 0.12; else maxSide = Math.round(maxSide * 0.75);
+  }
+  const dataUrl = URL.createObjectURL(file);
+  return { dataUrl, bytes: file.size };
+}
+
 /** 모든 페이지 우하단(채팅 버튼과 겹치지 않게 좌측)에 뜨는 건의하기 버튼 + 모달. */
 export default function FeedbackButton() {
   const pathname = usePathname();
@@ -24,13 +57,59 @@ export default function FeedbackButton() {
   const [sending, setSending] = useState(false);
   const [done, setDone] = useState(false);
   const [err, setErr] = useState('');
+  const [shots, setShots] = useState<Shot[]>([]);
+  const [dragging, setDragging] = useState(false);
   const downOnBackdrop = useRef(false);
+  const fileRef = useRef<HTMLInputElement>(null);
+  const shotId = useRef(0);
+
+  const addFiles = async (files: File[]) => {
+    const imgs = files.filter((f) => f.type.startsWith('image/'));
+    if (!imgs.length) return;
+    setErr('');
+    const room = MAX_IMAGES - shots.length;
+    if (room <= 0) { setErr(`이미지는 최대 ${MAX_IMAGES}장까지 첨부할 수 있어요`); return; }
+    // 전체 요청이 프록시 제한에 걸리지 않도록 장당 예산을 나눠 압축한다.
+    const budget = Math.floor(600 * 1024 / Math.min(MAX_IMAGES, shots.length + imgs.length));
+    for (const file of imgs.slice(0, room)) {
+      try {
+        const { dataUrl, bytes } = await compress(file, budget);
+        setShots((prev) => prev.length >= MAX_IMAGES ? prev : [...prev, {
+          id: ++shotId.current,
+          filename: file.name || `capture${shotId.current}.jpg`,
+          dataUrl,
+          content: dataUrl.slice(dataUrl.indexOf(',') + 1),
+          bytes,
+        }]);
+      } catch {
+        setErr('이미지를 읽을 수 없어요');
+      }
+    }
+  };
 
   // 닉네임은 비워 둔다(게임 닉네임을 자동으로 넣으면 익명으로 쓰고 싶은 사람이 곤란).
   useEffect(() => {
     if (!open) return;
     setDone(false); setErr('');
   }, [open]);
+
+  // 모달이 열려 있는 동안 어디서 Ctrl+V 해도 스크린샷이 붙도록 문서 전체에서 받는다.
+  useEffect(() => {
+    if (!open || done) return;
+    const onPaste = (e: ClipboardEvent) => {
+      const files: File[] = [];
+      for (const item of Array.from(e.clipboardData?.items ?? [])) {
+        if (item.kind === 'file') {
+          const f = item.getAsFile();
+          if (f && f.type.startsWith('image/')) files.push(f);
+        }
+      }
+      if (files.length) { e.preventDefault(); addFiles(files); }
+    };
+    document.addEventListener('paste', onPaste);
+    return () => document.removeEventListener('paste', onPaste);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, done, shots.length]);
 
   // 게임 중 실수로 닫히지 않도록 ESC만 허용
   useEffect(() => {
@@ -47,11 +126,18 @@ export default function FeedbackButton() {
     try {
       await api('/api/v1/feedback', {
         method: 'POST',
-        body: JSON.stringify({ category, nickname: nickname.trim(), contact: contact.trim(), message: msg, page: pathname }),
+        body: JSON.stringify({
+          category, nickname: nickname.trim(), contact: contact.trim(), message: msg, page: pathname,
+          images: shots.map((s) => ({ filename: s.filename, content: s.content })),
+        }),
       });
-      setDone(true); setMessage('');
+      setDone(true); setMessage(''); setShots([]);
     } catch (e) {
-      setErr(e instanceof Error ? e.message : '전송에 실패했어요. 잠시 후 다시 시도해주세요');
+      const m = e instanceof Error ? e.message : '';
+      // 프록시가 큰 요청을 막으면 JSON이 아닌 응답이 와서 파싱 단계에서 실패한다.
+      setErr(shots.length && (!m || /JSON|Unexpected|Failed to fetch/i.test(m))
+        ? '이미지 전송에 실패했어요. 장수를 줄이거나 이미지 없이 보내주세요'
+        : m || '전송에 실패했어요. 잠시 후 다시 시도해주세요');
     } finally {
       setSending(false);
     }
@@ -123,6 +209,55 @@ export default function FeedbackButton() {
                 <div className="flex justify-between items-center -mt-2">
                   <span className="text-[11px] text-gray-400">현재 화면: {pathname}</span>
                   <span className="text-[11px] text-gray-400">{message.length}/2000</span>
+                </div>
+
+                {/* 스크린샷 첨부: 붙여넣기 · 파일 선택 · 드래그&드롭 */}
+                <div
+                  onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
+                  onDragLeave={() => setDragging(false)}
+                  onDrop={(e) => { e.preventDefault(); setDragging(false); addFiles(Array.from(e.dataTransfer.files)); }}
+                  className={`rounded-xl border-2 border-dashed p-2.5 transition ${dragging ? 'border-hit bg-hit/5' : 'border-gray-200'}`}
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-[11px] text-gray-400">
+                      📎 화면 캡처 첨부 — <b>Ctrl+V로 붙여넣기</b>, 끌어다 놓기, 파일 선택 (최대 {MAX_IMAGES}장)
+                    </span>
+                    <button
+                      onClick={() => fileRef.current?.click()}
+                      disabled={shots.length >= MAX_IMAGES}
+                      className="shrink-0 text-[11px] font-bold border-2 border-gray-200 rounded-lg px-2 py-1 text-gray-500 disabled:opacity-40 hover:border-hit"
+                    >
+                      파일 선택
+                    </button>
+                  </div>
+                  <input
+                    ref={fileRef}
+                    type="file"
+                    accept="image/*"
+                    multiple
+                    hidden
+                    onChange={(e) => { addFiles(Array.from(e.target.files ?? [])); e.target.value = ''; }}
+                  />
+                  {shots.length > 0 && (
+                    <div className="flex flex-wrap gap-2 mt-2">
+                      {shots.map((s) => (
+                        <div key={s.id} className="relative">
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img src={s.dataUrl} alt={s.filename} className="w-20 h-20 object-cover rounded-lg border-2 border-gray-200" />
+                          <button
+                            onClick={() => setShots((prev) => prev.filter((x) => x.id !== s.id))}
+                            aria-label="이미지 삭제"
+                            className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-gray-800 text-white text-xs leading-none shadow"
+                          >
+                            ×
+                          </button>
+                          <span className="absolute bottom-0 inset-x-0 bg-black/50 text-white text-[9px] text-center rounded-b-lg">
+                            {Math.max(1, Math.round(s.bytes / 1024))}KB
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
 
                 <div className="flex gap-2">

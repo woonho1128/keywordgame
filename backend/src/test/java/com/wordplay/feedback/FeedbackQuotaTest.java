@@ -38,18 +38,18 @@ class FeedbackQuotaTest {
             saved.add(f);
             return f;
         });
-        when(mailer.send(any())).thenReturn(true);
+        when(mailer.send(any(), any())).thenReturn(true);
     }
 
     private FeedbackRequest req() {
-        return new FeedbackRequest("BUG", "우노", "a@b.com", "차오차오에서 의심 버튼이 안 눌려요", "/ciao");
+        return new FeedbackRequest("BUG", "우노", "a@b.com", "차오차오에서 의심 버튼이 안 눌려요", "/ciao", null);
     }
 
     @Test
     void 한도_안이면_메일을_보낸다() {
         when(repo.countByMailSentTrueAndCreatedAtAfter(any(Instant.class))).thenReturn(3L);
         service.submit(req(), "1.1.1.1", "UA");
-        verify(mailer).send(any());
+        verify(mailer).send(any(), any());
         assertThat(saved).hasSize(1);
         assertThat(saved.get(0).isMailSent()).isTrue();
     }
@@ -58,7 +58,7 @@ class FeedbackQuotaTest {
     void 하루_한도를_넘으면_메일은_건너뛰고_접수는_저장된다() {
         when(repo.countByMailSentTrueAndCreatedAtAfter(any(Instant.class))).thenReturn(80L);
         service.submit(req(), "1.1.1.1", "UA");
-        verify(mailer, never()).send(any());
+        verify(mailer, never()).send(any(), any());
         assertThat(saved).hasSize(1);                       // 내용은 남는다
         assertThat(saved.get(0).isMailSent()).isFalse();
     }
@@ -76,7 +76,7 @@ class FeedbackQuotaTest {
     @Test
     void 너무_짧은_내용은_거부한다() {
         assertThatThrownBy(() -> service.submit(
-                new FeedbackRequest("BUG", null, null, "짧", null), "2.2.2.2", "UA"))
+                new FeedbackRequest("BUG", null, null, "짧", null, null), "2.2.2.2", "UA"))
                 .isInstanceOf(BusinessException.class);
         assertThat(saved).isEmpty();
     }
@@ -84,7 +84,7 @@ class FeedbackQuotaTest {
     @Test
     void 알_수_없는_분류는_기타로_처리한다() {
         when(repo.countByMailSentTrueAndCreatedAtAfter(any(Instant.class))).thenReturn(0L);
-        service.submit(new FeedbackRequest("HACK", null, null, "분류값 검증 테스트입니다", null), "3.3.3.3", "UA");
+        service.submit(new FeedbackRequest("HACK", null, null, "분류값 검증 테스트입니다", null, null), "3.3.3.3", "UA");
         assertThat(saved.get(0).getCategory()).isEqualTo("ETC");
     }
 }

@@ -8,6 +8,8 @@ import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientResponseException;
 
 import java.time.Duration;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -52,27 +54,41 @@ public class FeedbackMailer {
     /** 발송 성공 여부. 실패해도 예외를 던지지 않는다(접수 자체는 성공시켜야 하므로). */
     public boolean send(Feedback f) { return describeSend(f) == null; }
 
+    public boolean send(Feedback f, List<FeedbackAttachments.Attachment> images) {
+        return describeSend(f, images) == null;
+    }
+
+    public String describeSend(Feedback f) { return describeSend(f, List.of()); }
+
     /**
      * 발송을 시도하고 실패 사유를 돌려준다(성공이면 null).
      * 메일 API가 거절한 이유(도메인 미인증, 수신자 제한 등)를 그대로 담아야
      * 로그·진단 화면에서 바로 원인을 알 수 있다.
      */
-    public String describeSend(Feedback f) {
+    public String describeSend(Feedback f, List<FeedbackAttachments.Attachment> images) {
         if (apiKey.isBlank()) return "RESEND_API_KEY가 설정되지 않았습니다";
         if (to.isBlank()) return "FEEDBACK_MAIL_TO(받는 주소)가 설정되지 않았습니다";
         try {
             String subject = "[gg 건의] " + label(f.getCategory()) + " · " + oneLine(f.getMessage(), 30);
+            Map<String, Object> body = new LinkedHashMap<>();
+            body.put("from", from);
+            body.put("to", List.of(to));
+            body.put("subject", subject);
+            body.put("html", html(f) + attachmentNote(images));
+            if (images != null && !images.isEmpty()) {
+                List<Map<String, String>> atts = new ArrayList<>();
+                for (FeedbackAttachments.Attachment a : images)
+                    atts.add(Map.of("filename", a.filename(), "content", a.content()));
+                body.put("attachments", atts);
+            }
             http.post()
                     .header("Authorization", "Bearer " + apiKey)
                     .header("Content-Type", "application/json")
-                    .body(Map.of(
-                            "from", from,
-                            "to", List.of(to),
-                            "subject", subject,
-                            "html", html(f)))
+                    .body(body)
                     .retrieve()
                     .toBodilessEntity();
-            log.info("[feedback] 메일 발송 성공 (id={}, to={})", f.getId(), to);
+            log.info("[feedback] 메일 발송 성공 (id={}, to={}, 첨부={}장)", f.getId(), to,
+                    images == null ? 0 : images.size());
             return null;
         } catch (RestClientResponseException e) {
             // Resend가 돌려준 본문에 실제 사유가 들어 있다.
@@ -128,6 +144,15 @@ public class FeedbackMailer {
                 esc(blankTo(f.getContact(), "-")),
                 esc(blankTo(f.getPage(), "-")),
                 esc(blankTo(f.getUserAgent(), "-")));
+    }
+
+    /** 이미지는 메일 첨부로만 전달되고 서버에 남지 않으므로 본문에 안내를 덧붙인다. */
+    private static String attachmentNote(List<FeedbackAttachments.Attachment> images) {
+        if (images == null || images.isEmpty()) return "";
+        StringBuilder sb = new StringBuilder("<p style=\"margin-top:16px;font-size:13px;color:#475569\">📎 첨부 이미지 "
+                + images.size() + "장:");
+        for (FeedbackAttachments.Attachment a : images) sb.append(" <b>").append(esc(a.filename())).append("</b>");
+        return sb.append("</p>").toString();
     }
 
     private static String blankTo(String s, String alt) { return s == null || s.isBlank() ? alt : s; }

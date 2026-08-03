@@ -56,6 +56,9 @@ public class FeedbackService {
         if (message.length() < MIN_MESSAGE) throw bad("내용을 조금 더 자세히 적어주세요");
         if (message.length() > MAX_MESSAGE) message = message.substring(0, MAX_MESSAGE);
 
+        // 이미지는 저장하지 않고 메일 첨부로만 전달한다(용량 부담 없이 화면 캡처를 받기 위함).
+        List<FeedbackAttachments.Attachment> images = FeedbackAttachments.validate(req.images());
+
         checkRate(ip);
 
         Feedback f = repo.save(Feedback.builder()
@@ -70,7 +73,7 @@ public class FeedbackService {
                 .build());
 
         // 메일이 실패하거나 한도를 넘겨도 접수는 성공이다(내용은 이미 DB에 있음).
-        if (withinMailQuota() && mailer.send(f)) f.setMailSent(true);
+        if (withinMailQuota() && mailer.send(f, images)) f.setMailSent(true);
     }
 
     /**
