@@ -25,10 +25,12 @@ const ALL = -1, NONE = -2;
 
 // 스파이스별 테마 — 고추(빨강) · 와사비(초록) · 후추(파랑)
 const SPICE = [
-  { name: '고추', emoji: '🌶️', ink: '#dc2626', soft: '#fee2e2', edge: '#fca5a5' },
-  { name: '와사비', emoji: '🥬', ink: '#16a34a', soft: '#dcfce7', edge: '#86efac' },
-  { name: '후추', emoji: '🧂', ink: '#2563eb', soft: '#dbeafe', edge: '#93c5fd' },
+  { name: '고추', emoji: '🌶️', ink: '#c0392b', soft: '#fde8e4', edge: '#e8a598' },
+  { name: '와사비', emoji: '🥬', ink: '#3d8b40', soft: '#e6f2e0', edge: '#a3c99a' },
+  { name: '후추', emoji: '🧂', ink: '#2b6cb0', soft: '#e3edf8', edge: '#9dbde0' },
 ];
+// 실물 카드처럼 크림색 종이 바탕 + 굵은 먹선 테두리
+const PAPER = '#f7f2e6', INK = '#1a1a1a';
 const SEAT_COLORS = ['#f43f5e', '#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899', '#14b8a6', '#f97316', '#6366f1', '#84cc16'];
 
 function cid(): string {
@@ -39,80 +41,107 @@ function cid(): string {
 }
 
 /**
- * 스파이시 카드. 흰 바탕에 스파이스 색으로 테두리·잉크를 주고 모서리에 숫자를 넣어
- * 실물 카드처럼 보이게 한다. size 로 손패/더미/공개 연출에 재사용.
+ * 스파이시 카드.
+ * 실물 카드의 조형을 따랐다 — 크림색 종이 바탕, 굵은 먹선 이중 테두리,
+ * 좌상단/우하단(180° 회전)에 원형 뱃지, 가운데 큰 숫자.
+ * '모든 숫자' 카드는 흑백 줄무늬에 1-10 뱃지, '모든 스파이스' 카드는 삼색 불꽃 바탕이다.
  */
 function SpicyCard({ c, size = 'md', selected, onClick, dim }: {
   c: CardView; size?: 'sm' | 'md' | 'lg'; selected?: boolean; onClick?: () => void; dim?: boolean;
 }) {
   const dims = {
-    sm: { w: 'w-12 sm:w-14', h: 'h-[68px] sm:h-20', num: 'text-lg sm:text-xl', emo: 'text-base sm:text-lg', corner: 'text-[8px]' },
-    md: { w: 'w-16 sm:w-20 lg:w-[88px]', h: 'h-24 sm:h-28 lg:h-32', num: 'text-2xl sm:text-3xl lg:text-4xl', emo: 'text-xl sm:text-2xl lg:text-3xl', corner: 'text-[9px] sm:text-[10px]' },
-    lg: { w: 'w-24 lg:w-28', h: 'h-36 lg:h-40', num: 'text-4xl lg:text-5xl', emo: 'text-3xl lg:text-4xl', corner: 'text-xs' },
+    sm: { w: 'w-12 sm:w-14', h: 'h-[68px] sm:h-20', num: 'text-xl sm:text-2xl', emo: 'text-sm sm:text-base', badge: 'w-4 h-4 text-[7px]', label: 'text-[6px] sm:text-[7px]' },
+    md: { w: 'w-16 sm:w-20 lg:w-[92px]', h: 'h-24 sm:h-28 lg:h-[132px]', num: 'text-3xl sm:text-4xl lg:text-5xl', emo: 'text-lg sm:text-xl lg:text-2xl', badge: 'w-5 h-5 lg:w-6 lg:h-6 text-[8px] lg:text-[9px]', label: 'text-[8px] lg:text-[9px]' },
+    lg: { w: 'w-24 lg:w-28', h: 'h-36 lg:h-[168px]', num: 'text-5xl lg:text-6xl', emo: 'text-2xl lg:text-3xl', badge: 'w-6 h-6 lg:w-7 lg:h-7 text-[9px] lg:text-[10px]', label: 'text-[10px] lg:text-xs' },
   }[size];
 
-  const allSpice = c.spice === ALL, noSpice = c.spice === NONE;
-  const allNumber = c.number === ALL, noNumber = c.number === NONE;
-  const wild = allSpice || allNumber;
-  const th = !wild && c.spice >= 0 ? SPICE[c.spice] : null;
+  const allSpice = c.spice === ALL;
+  const allNumber = c.number === ALL;
+  const th = !allSpice && !allNumber && c.spice >= 0 ? SPICE[c.spice] : null;
+
+  // 배경: 일반 카드는 종이결, 와일드는 실물처럼 삼색 불꽃 / 흑백 줄무늬
+  const bg = allSpice
+    ? `repeating-linear-gradient(115deg, ${SPICE[0].ink} 0 10px, ${SPICE[1].ink} 10px 20px, ${SPICE[2].ink} 20px 30px, #e8c33a 30px 40px)`
+    : allNumber
+      ? `repeating-linear-gradient(125deg, ${INK} 0 7px, ${PAPER} 7px 15px)`
+      : PAPER;
+
+  const badge = (rotated?: boolean) => (
+    <span
+      className={`absolute ${rotated ? 'bottom-1 right-1 rotate-180' : 'top-1 left-1'} ${dims.badge}
+        rounded-full flex items-center justify-center font-black leading-none shadow-sm`}
+      style={{ background: PAPER, border: `2px solid ${INK}`, color: th ? th.ink : INK }}
+    >
+      {allNumber ? '1-10' : allSpice ? '🌶' : c.number}
+    </span>
+  );
 
   return (
     <button
       onClick={onClick}
       disabled={!onClick}
-      className={`relative shrink-0 rounded-xl bg-white overflow-hidden transition ${dims.w} ${dims.h}
-        ${selected ? '-translate-y-3 shadow-xl ring-4' : 'shadow-md'} ${dim ? 'opacity-40' : ''}
+      className={`relative shrink-0 rounded-lg overflow-hidden transition ${dims.w} ${dims.h}
+        ${selected ? '-translate-y-3 shadow-2xl' : 'shadow-md'} ${dim ? 'opacity-40' : ''}
         ${onClick ? 'cursor-pointer hover:-translate-y-1.5 active:scale-95' : ''}`}
       style={{
-        border: `3px solid ${th ? th.ink : '#0f172a'}`,
-        // 와일드는 무지개/별 느낌으로 확실히 구분되게
-        background: allSpice
-          ? 'linear-gradient(135deg,#fee2e2 0%,#fef9c3 35%,#dcfce7 65%,#dbeafe 100%)'
-          : allNumber
-            ? 'linear-gradient(135deg,#f5f3ff 0%,#ede9fe 50%,#fae8ff 100%)'
-            : `linear-gradient(160deg,#ffffff 55%,${th ? th.soft : '#f8fafc'} 100%)`,
-        boxShadow: selected ? undefined : undefined,
-        ...(selected ? { boxShadow: `0 0 0 4px ${th ? th.edge : '#c4b5fd'}` } : {}),
+        background: bg,
+        border: `3px solid ${INK}`,
+        ...(selected ? { boxShadow: `0 0 0 4px ${th ? th.ink : '#e8c33a'}` } : {}),
       }}
     >
-      {/* 모서리 숫자(실물 카드 느낌) */}
-      <span className={`absolute top-1 left-1.5 font-black leading-none ${dims.corner}`} style={{ color: th ? th.ink : '#334155' }}>
-        {allNumber ? '★' : noNumber ? '—' : c.number}
-      </span>
-      <span className={`absolute bottom-1 right-1.5 font-black leading-none rotate-180 ${dims.corner}`} style={{ color: th ? th.ink : '#334155' }}>
-        {allNumber ? '★' : noNumber ? '—' : c.number}
-      </span>
+      {/* 안쪽 먹선 한 겹 더(실물 카드의 이중 프레임) */}
+      <span className="absolute inset-[3px] rounded-[5px] pointer-events-none" style={{ border: `1.5px solid ${INK}` }} />
 
-      <span className="absolute inset-0 flex flex-col items-center justify-center gap-0.5">
+      {/* 가운데 흰 종이 패널 — 와일드도 숫자/글자가 읽히게 */}
+      <span className="absolute inset-[7px] rounded-[3px] flex flex-col items-center justify-center gap-0.5"
+        style={{ background: allSpice || allNumber ? 'rgba(247,242,230,0.92)' : 'transparent' }}>
         {allSpice ? (
           <>
-            <span className={dims.emo}>🌈</span>
-            <span className="text-[9px] lg:text-[11px] font-extrabold text-slate-600 leading-tight text-center px-1">모든<br />스파이스</span>
+            <span className={dims.emo}>🌶️🥬🧂</span>
+            <span className={`${dims.label} font-black leading-tight text-center`} style={{ color: INK }}>모든<br />스파이스</span>
           </>
         ) : allNumber ? (
           <>
-            <span className={dims.emo}>✨</span>
-            <span className="text-[9px] lg:text-[11px] font-extrabold text-violet-600 leading-tight text-center px-1">모든<br />숫자</span>
+            <span className={`${dims.num} font-black leading-none`} style={{ color: INK }}>1-10</span>
+            <span className={`${dims.label} font-black leading-tight`} style={{ color: INK }}>모든 숫자</span>
           </>
         ) : (
           <>
             <span className={dims.emo}>{th?.emoji}</span>
-            <span className={`${dims.num} font-black leading-none`} style={{ color: th?.ink }}>{c.number}</span>
-            <span className="text-[9px] lg:text-[11px] font-bold" style={{ color: th?.ink }}>{th?.name}</span>
+            <span className={`${dims.num} font-black leading-none tracking-tight`} style={{ color: th?.ink }}>{c.number}</span>
+            <span className={`${dims.label} font-black`} style={{ color: th?.ink }}>{th?.name}</span>
           </>
         )}
       </span>
+
+      {badge()}
+      {badge(true)}
     </button>
   );
 }
 
-/** 뒷면(더미에 깔린 카드). */
-function CardBack({ size = 'md', style }: { size?: 'sm' | 'md' | 'lg'; style?: React.CSSProperties }) {
-  const dims = { sm: 'w-12 sm:w-14 h-[68px] sm:h-20', md: 'w-16 sm:w-20 lg:w-[88px] h-24 sm:h-28 lg:h-32', lg: 'w-24 lg:w-28 h-36 lg:h-40' }[size];
+/** 트로피(+10) 카드 — 실물처럼 '+10'을 크게 박은 카드. */
+function TrophyCard({ size = 'xs' }: { size?: 'xs' | 'sm' }) {
+  const d = size === 'xs'
+    ? { w: 'w-6 h-[34px] rounded', num: 'text-[8px]', pad: 'inset-[2px]' }
+    : { w: 'w-12 h-[68px] rounded-lg', num: 'text-base', pad: 'inset-[3px]' };
   return (
-    <div className={`absolute rounded-xl border-[3px] border-slate-800 shadow-md flex items-center justify-center ${dims}`}
-      style={{ background: 'repeating-linear-gradient(45deg,#1e293b 0 8px,#334155 8px 16px)', ...style }}>
-      <span className="text-lg lg:text-2xl opacity-80">🌶️</span>
+    <span className={`relative inline-flex items-center justify-center shadow-sm ${d.w}`}
+      style={{ background: PAPER, border: `2px solid ${INK}` }}>
+      <span className={`absolute ${d.pad} rounded-sm pointer-events-none`} style={{ border: `1px solid ${INK}` }} />
+      <span className={`${d.num} font-black leading-none`} style={{ color: INK }}>+10</span>
+    </span>
+  );
+}
+
+/** 뒷면(더미에 깔린 카드) — 박스 아트처럼 짙은 카키 바탕에 먹선 프레임. */
+function CardBack({ size = 'md', style }: { size?: 'sm' | 'md' | 'lg'; style?: React.CSSProperties }) {
+  const dims = { sm: 'w-12 sm:w-14 h-[68px] sm:h-20', md: 'w-16 sm:w-20 lg:w-[92px] h-24 sm:h-28 lg:h-[132px]', lg: 'w-24 lg:w-28 h-36 lg:h-[168px]' }[size];
+  return (
+    <div className={`absolute rounded-lg shadow-md flex items-center justify-center ${dims}`}
+      style={{ background: '#6b6134', border: `3px solid ${INK}`, ...style }}>
+      <span className="absolute inset-[3px] rounded-[5px] pointer-events-none" style={{ border: `1.5px solid ${PAPER}` }} />
+      <span className="text-xl lg:text-3xl">🐯</span>
     </div>
   );
 }
@@ -536,7 +565,9 @@ export default function SpicyPage() {
                   </div>
                   <div className="flex items-center justify-between mt-1 text-[11px] lg:text-xs text-slate-400">
                     <span>🃏 손패 {p.handCount} · 획득 {p.won}</span>
-                    <span>{'🏆'.repeat(p.trophies) || '—'}</span>
+                    <span className="flex items-center gap-0.5">
+                      {p.trophies > 0 ? Array.from({ length: p.trophies }).map((_, i) => <TrophyCard key={i} size="sm" />) : '—'}
+                    </span>
                   </div>
                 </div>
               ))}
