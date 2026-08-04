@@ -85,7 +85,8 @@ app:
     # 출력은 짧아도 사고량은 다르다 — 토론 발언은 지금까지 나온 주장·모순·커밍아웃을
     # 추적해야 해서 추론을 켜야 대화가 굴러간다. 끄면 같은 반박만 반복한다.
     chat-reasoning-effort: ${OPENAI_CHAT_REASONING_EFFORT:low}   # 기본값(개별 설정이 없을 때)
-    chat-effort: ${OPENAI_CHAT_EFFORT:low}                       # 토론 발언용
+    # 발언은 medium — low로는 "쟤 수상해"만 반복하고 앞사람 말의 모순을 못 짚는다.
+    chat-effort: ${OPENAI_CHAT_EFFORT:medium}                    # 토론 발언용
     vote-effort: ${OPENAI_VOTE_EFFORT:low}                       # 투표 판단용
     # 숨은 추론 토큰이 답변 예산을 먹어 빈 응답이 오지 않도록 더해주는 여유분.
     chat-reasoning-headroom: ${OPENAI_CHAT_REASONING_HEADROOM:2000}

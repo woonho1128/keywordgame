@@ -725,6 +725,7 @@ public class MafiaService implements RoomGame {
                 + "\n- 의심하거나 언급할 수 있는 상대는 너를 뺀 이들뿐: " + String.join(", ", others) + "."
                 + "\n- 이미 대화에 나온 말을 그대로 반복하지 마라. 매번 새로운 내용이나 앞사람 말에 대한 반응을 말해라."
                 + (last != null ? "\n- 방금 '" + last + "'가 말했다. 특히 너에게 묻거나 너를 지목한 말이 있으면 회피하지 말고 그 말에 직접 대꾸해라." : "")
+                + "\n[이번 발언에서 할 일] " + chatIntent(p)
                 + "\n지금 토론방에 사람처럼 딱 한 줄만 보내라. 설명·따옴표 없이 대사만.";
     }
 
@@ -758,6 +759,32 @@ public class MafiaService implements RoomGame {
             for (ChatMsg c : today) sb.append("\n").append(c.nick()).append(": ").append(c.text());
         }
         return sb.toString();
+    }
+
+    /**
+     * 이번 턴에 무엇을 할지 정해준다.
+     *
+     * <p>지시가 없으면 봇이 매번 "쟤 수상해"만 반복해서 추리에 필요한 정보가 전혀 쌓이지 않는다
+     * (근거 없이 서로 몰다가 아무나 지목하는 판이 된다). 그래서 발언 목적을 돌려가며 준다 —
+     * 지목당했으면 변호, 초반엔 사실 정리와 질문, 근거가 모인 뒤에야 의견 제시.
+     */
+    private String chatIntent(Player p) {
+        int mySeat = seatOf(p);
+        for (int i = chat.size() - 1; i >= 0; i--) {
+            ChatMsg c = chat.get(i);
+            if (c.round() != round || c.seat() == mySeat) continue;
+            if (c.text().contains(p.nick))
+                return "누가 너를 지목하거나 언급했다. 딴소리 말고 그 말에 직접 반박하거나 해명하고, "
+                        + "네가 아닌 이유를 하나라도 구체적으로 대라.";
+        }
+        return switch (botChatCount.getOrDefault(mySeat, 0)) {
+            case 0 -> "아직 근거가 없다. 남을 지목하지 말고, 밤에 일어난 일이나 어제 투표에서 드러난 "
+                    + "사실을 짚어 정리해라(누가 죽었는지, 평화로운 밤이었는지 등).";
+            case 1 -> "특정한 한 사람에게 구체적으로 질문해라(어젯밤 뭘 했는지, 왜 그 사람한테 투표했는지, "
+                    + "역할이 뭔지 등). 이번엔 의심한다는 말은 쓰지 마라.";
+            default -> "지금까지 나온 말을 근거로 의견을 내라. 근거를 댈 수 없으면 지목하지 말고 "
+                    + "판단을 미루거나 더 물어봐라.";
+        };
     }
 
     /** 이번 라운드에서 나 아닌 사람이 마지막으로 한 발언자 닉네임. 없으면 null. */
