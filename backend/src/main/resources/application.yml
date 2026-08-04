@@ -80,9 +80,10 @@ app:
     chat-timeout-ms: ${OPENAI_CHAT_TIMEOUT_MS:20000}
     # 추론 모델 파라미터 분기(auto=모델명으로 판단, true/false 로 강제 가능).
     chat-reasoning: ${OPENAI_CHAT_REASONING:auto}
-    # 봇은 한 줄 대사/번호 하나만 내놓으면 되므로 추론은 최소로 둔다.
+    # 봇은 한 줄 대사/번호 하나만 내놓으면 되므로 추론은 끈다.
     # 추론 토큰은 출력 요금으로 과금되고 응답도 느려진다.
-    chat-reasoning-effort: ${OPENAI_CHAT_REASONING_EFFORT:minimal}
+    # 허용값: none / low / medium / high / xhigh / max (그 외 값은 400이 나므로 생략 처리된다)
+    chat-reasoning-effort: ${OPENAI_CHAT_REASONING_EFFORT:none}
     # 숨은 추론 토큰이 답변 예산을 먹어 빈 응답이 오지 않도록 더해주는 여유분.
     chat-reasoning-headroom: ${OPENAI_CHAT_REASONING_HEADROOM:2000}
 

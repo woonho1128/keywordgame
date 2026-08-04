@@ -43,9 +43,25 @@ public class OpenAiChatClient {
     @Value("${app.openai.chat-timeout-ms:15000}")
     private long timeoutMs;
 
-    /** 추론 모델일 때 노력 수준(minimal/low/medium/high). 빈 값이면 파라미터를 보내지 않는다. */
-    @Value("${app.openai.chat-reasoning-effort:minimal}")
+    /** 추론 모델일 때 노력 수준. 빈 값이거나 모르는 값이면 파라미터를 보내지 않는다(모델 기본값 사용). */
+    @Value("${app.openai.chat-reasoning-effort:none}")
     private String reasoningEffort;
+
+    /** 허용되는 노력 수준. 목록에 없는 값을 보내면 400이 나고 봇이 통째로 침묵한다. */
+    private static final java.util.Set<String> EFFORTS =
+            java.util.Set.of("none", "low", "medium", "high", "xhigh", "max");
+
+    /** 실제로 보낼 노력 수준. 유효하지 않으면 null(=파라미터 생략). */
+    String effortOrNull() {
+        if (reasoningEffort == null) return null;
+        String e = reasoningEffort.trim().toLowerCase();
+        if (e.isEmpty()) return null;
+        if (!EFFORTS.contains(e)) {
+            log.warn("알 수 없는 reasoning_effort '{}' — 파라미터를 생략한다(허용: {})", reasoningEffort, EFFORTS);
+            return null;
+        }
+        return e;
+    }
 
     /** 추론 모델에서 숨은 추론 토큰이 답변 예산을 먹지 않도록 더해주는 여유분. */
     @Value("${app.openai.chat-reasoning-headroom:2000}")
@@ -105,7 +121,8 @@ public class OpenAiChatClient {
                  *   출력 요금으로 과금되고 응답도 느려지므로 노력 수준을 최소로 둔다.
                  */
                 payload.put("max_completion_tokens", maxTokens + reasoningHeadroom);
-                if (!reasoningEffort.isBlank()) payload.put("reasoning_effort", reasoningEffort);
+                String effort = effortOrNull();
+                if (effort != null) payload.put("reasoning_effort", effort);
             } else {
                 payload.put("max_tokens", maxTokens);
                 payload.put("temperature", temperature);

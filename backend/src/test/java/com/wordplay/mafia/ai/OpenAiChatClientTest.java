@@ -40,6 +40,29 @@ class OpenAiChatClientTest {
         assertThat(client("gpt-5.6-luna", "false").reasoningModel()).isFalse();
     }
 
+    /** 허용되지 않는 값을 보내면 400이 나서 봇이 통째로 침묵한다(실제로 'minimal'로 겪었다). */
+    @Test
+    void 허용된_노력_수준만_보낸다() {
+        for (String ok : new String[]{"none", "low", "medium", "high", "xhigh", "max"}) {
+            OpenAiChatClient c = client("gpt-5.6-luna", "auto");
+            ReflectionTestUtils.setField(c, "reasoningEffort", ok);
+            assertThat(c.effortOrNull()).isEqualTo(ok);
+        }
+        // 대소문자·공백은 정규화
+        OpenAiChatClient c = client("gpt-5.6-luna", "auto");
+        ReflectionTestUtils.setField(c, "reasoningEffort", "  HIGH ");
+        assertThat(c.effortOrNull()).isEqualTo("high");
+    }
+
+    @Test
+    void 모르는_노력_수준은_파라미터를_생략한다() {
+        for (String bad : new String[]{"minimal", "off", "", "  ", "ultra"}) {
+            OpenAiChatClient c = client("gpt-5.6-luna", "auto");
+            ReflectionTestUtils.setField(c, "reasoningEffort", bad);
+            assertThat(c.effortOrNull()).as("'%s' 는 생략돼야 함", bad).isNull();
+        }
+    }
+
     @Test
     void 키가_없으면_호출하지_않는다() {
         OpenAiChatClient c = client("gpt-5.6-luna", "auto");
