@@ -120,7 +120,7 @@ public class MafiaController {
         return ApiResponse.success(botCodes.issue());
     }
 
-    /** AI 봇 추가(대기방, 최대 3명). 마스터 봇 관리자 코드 또는 1회성 코드 필요. */
+    /** AI 봇 추가(대기방, 최대 5명). 마스터 봇 관리자 코드 또는 1회성 코드 필요. */
     @PostMapping("/add-bots")
     public ApiResponse<MafiaStateResponse> addBots(@RequestParam String roomCode, @RequestParam String clientId,
                                                    @RequestParam String code, @RequestParam(defaultValue = "1") int count) {

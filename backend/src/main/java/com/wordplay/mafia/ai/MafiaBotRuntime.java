@@ -36,7 +36,9 @@ public class MafiaBotRuntime {
             t.setDaemon(true);
             return t;
         };
-        this.pool = Executors.newFixedThreadPool(6, tf);
+        // 한 방에 봇 5명 + 방 여러 개가 동시에 돌 수 있다. 스레드가 모자라면 발언이 밀려
+        // 토론이 끝난 뒤에 응답이 도착한다(= 그냥 버려진다).
+        this.pool = Executors.newFixedThreadPool(12, tf);
     }
 
     /** OpenAI 키가 설정되어 봇을 쓸 수 있는지. */

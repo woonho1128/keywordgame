@@ -24,17 +24,28 @@ class MafiaBotTest {
     }
 
     @Test
-    void 봇추가_대기방에서_최대3명() {
+    void 봇추가_대기방에서_최대5명() {
+        MafiaService svc = new MafiaService(fakeRuntime());
+        svc.newGame("host", new NewMafiaRequest("방장", null, null, null, null, null, null, null));
+
+        svc.addBots(5);
+        MafiaStateResponse st = svc.me("host");
+        assertThat(st.playerCount()).isEqualTo(6);
+        assertThat(st.players().stream().filter(MafiaStateResponse.PlayerView::bot).count()).isEqualTo(5);
+
+        // 6번째 봇은 초과 → 예외
+        assertThatThrownBy(() -> svc.addBots(1)).hasMessageContaining("최대");
+    }
+
+    @Test
+    void 한번에_상한을_넘겨_요청해도_상한까지만_들어간다() {
         MafiaService svc = new MafiaService(fakeRuntime());
         svc.newGame("host", new NewMafiaRequest("방장", null, null, null, null, null, null, null));
 
         svc.addBots(3);
-        MafiaStateResponse st = svc.me("host");
-        assertThat(st.playerCount()).isEqualTo(4);
-        assertThat(st.players().stream().filter(MafiaStateResponse.PlayerView::bot).count()).isEqualTo(3);
-
-        // 4번째 봇은 초과 → 예외
-        assertThatThrownBy(() -> svc.addBots(1)).hasMessageContaining("최대");
+        svc.addBots(5);   // 남은 자리는 2개뿐
+        assertThat(svc.me("host").players().stream()
+                .filter(MafiaStateResponse.PlayerView::bot).count()).isEqualTo(5);
     }
 
     @Test

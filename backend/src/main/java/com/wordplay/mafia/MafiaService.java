@@ -35,7 +35,7 @@ public class MafiaService implements RoomGame {
 
     private static final long MORNING_MS = 6_000;
     private static final long EXECUTE_MS = 6_000;
-    private static final int MAX_BOTS = 3;
+    private static final int MAX_BOTS = 5;
     private static final int MAX_BOT_CHAT_PER_DISCUSS = 10; // 봇당 토론 발언 총상한(비용 방어)
     private static final int BOT_PROACTIVE_CHAT = 3;        // 봇이 스스로 여는 발언 수(그 이상은 사람 말에 반응해서만)
     // 봇 발언 사이 최소 간격. 봇마다 따로 예약하면 여러 명이 겹쳐 1~2초 만에 도배되어
@@ -112,6 +112,7 @@ public class MafiaService implements RoomGame {
     private final Set<Integer> botInFlight = new HashSet<>();           // LLM 호출 진행 중인 봇 좌석
     private final Map<Integer, Long> botNightAt = new HashMap<>();      // 봇 좌석 -> 밤 행동 시각
     private final Map<Integer, Long> botChatAt = new HashMap<>();       // 봇 좌석 -> 다음 발언 시각
+    private final Map<Integer, String> botHeldChat = new HashMap<>();   // 봇 좌석 -> 간격 때문에 미뤄둔 발언
     private final Map<Integer, Integer> botChatCount = new HashMap<>(); // 봇 좌석 -> 이번 토론 발언 수
     private final Map<Integer, Long> botVoteAt = new HashMap<>();       // 봇 좌석 -> 투표 시각
     private long botPacingRound = -1;                                   // 토론 페이싱 초기화 기준 라운드
@@ -247,7 +248,7 @@ public class MafiaService implements RoomGame {
         return me(clientId);
     }
 
-    /** 관리자: AI 봇 추가(대기방에서만, 최대 3명). */
+    /** 관리자: AI 봇 추가(대기방에서만, 최대 {@value #MAX_BOTS}명). */
     public synchronized MafiaStateResponse addBots(int count) {
         if (bot == null || !bot.available())
             throw new BusinessException(ErrorCode.INVALID_INPUT, "AI 봇이 설정되어 있지 않습니다(OpenAI 키 필요)");
@@ -586,6 +587,7 @@ public class MafiaService implements RoomGame {
         lastBotChatMs = 0;
         botChatCount.clear();
         botChatAt.clear();
+        botHeldChat.clear();
         long now = System.currentTimeMillis();
         int i = 0;
         for (int seat : aliveSeats()) {
@@ -601,6 +603,9 @@ public class MafiaService implements RoomGame {
             if (!p.ai || botInFlight.contains(seat)) continue;
             if (botChatCount.getOrDefault(seat, MAX_BOT_CHAT_PER_DISCUSS) >= MAX_BOT_CHAT_PER_DISCUSS) continue;
             if (now < botChatAt.getOrDefault(seat, Long.MAX_VALUE)) continue;
+            // 간격 때문에 미뤄둔 말이 있으면 새로 물어보지 말고 그걸 내보낸다(호출 낭비 방지).
+            String held = botHeldChat.remove(seat);
+            if (held != null) { postBotChat(seat, p, held, now); continue; }
             botChatAt.put(seat, Long.MAX_VALUE);       // 응답 올 때까지 정지
             botInFlight.add(seat);
             long r = round;
@@ -617,10 +622,17 @@ public class MafiaService implements RoomGame {
         long now = System.currentTimeMillis();
         String t = cleanChat(text);
         // 직전 봇 발언과 너무 붙으면 조금 미뤘다가 말한다(여러 봇이 겹쳐 도배되는 것 방지).
+        // 봇이 늘수록 이 충돌이 잦아지므로, 받아둔 말을 버리지 말고 들고 있다가 그대로 내보낸다.
         if (!t.isEmpty() && now - lastBotChatMs < BOT_CHAT_MIN_GAP_MS) {
+            botHeldChat.put(seat, t);
             botChatAt.put(seat, lastBotChatMs + BOT_CHAT_MIN_GAP_MS + rnd(1500));
             return;
         }
+        postBotChat(seat, p, t, now);
+    }
+
+    /** 정리된 발언을 실제로 채팅에 올리고 다음 발언을 예약한다. */
+    private void postBotChat(int seat, Player p, String t, long now) {
         if (!t.isEmpty() && isRepetitive(t)) t = "";   // 방금 나온 말과 사실상 같은 말은 버린다
         if (!t.isEmpty()) {
             chat.add(new ChatMsg(seat, p.nick, t, true, round, System.currentTimeMillis()));
@@ -628,6 +640,7 @@ public class MafiaService implements RoomGame {
             lastBotChatMs = now;
         }
         // 스스로 여는 발언은 BOT_PROACTIVE_CHAT까지만. 그 이상은 사람이 말 걸 때(poke) 반응.
+        botChatAt.put(seat, Long.MAX_VALUE);
         if (botChatCount.getOrDefault(seat, 0) < BOT_PROACTIVE_CHAT && phaseEndsAt - now > 6000)
             botChatAt.put(seat, now + 6000 + rnd(8000));
     }
@@ -647,8 +660,10 @@ public class MafiaService implements RoomGame {
         if (idle.isEmpty()) return;
         Collections.shuffle(idle);
         int replies = Math.min(idle.size(), 1 + rnd(2)); // 1~2명만 반응(전원이 우르르 답하면 어색)
-        for (int k = 0; k < replies; k++)
+        for (int k = 0; k < replies; k++) {
+            botHeldChat.remove(idle.get(k));  // 방금 사람이 한 말에 답해야 하니 미뤄둔 옛 발언은 버린다
             botChatAt.put(idle.get(k), now + 2000 + 2500L * k + rnd(1500));
+        }
     }
 
     // --- 투표: LLM 결정(비동기), 실패·마감임박 시 규칙 폴백 ---
@@ -1035,6 +1050,7 @@ public class MafiaService implements RoomGame {
         botNightAt.clear();
         botChatAt.clear();
         botChatCount.clear();
+        botHeldChat.clear();
         botVoteAt.clear();
         botPacingRound = -1;
     }

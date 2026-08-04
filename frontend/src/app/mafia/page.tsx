@@ -587,7 +587,7 @@ export default function MafiaPage() {
               🤖 AI 봇 추가 <span className="text-xs font-normal text-gray-400">(관리자)</span>
             </p>
             <p className="text-xs text-gray-500 leading-relaxed">
-              혼자여도 봇과 즐길 수 있어요. 봇은 토론 채팅에 참여하고 투표해요. 최대 3명.
+              혼자여도 봇과 즐길 수 있어요. 봇은 토론 채팅에 참여하고 투표해요. 최대 5명.
             </p>
             <input
               type="password"
@@ -596,8 +596,8 @@ export default function MafiaPage() {
               placeholder="봇 관리자 코드 또는 1회성 코드"
               className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-purple-400"
             />
-            <div className="grid grid-cols-3 gap-2">
-              {[1, 2, 3].map((n) => (
+            <div className="grid grid-cols-5 gap-2">
+              {[1, 2, 3, 4, 5].map((n) => (
                 <button
                   key={n}
                   onClick={() => handleAddBots(n)}
