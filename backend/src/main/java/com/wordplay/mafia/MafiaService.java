@@ -38,6 +38,9 @@ public class MafiaService implements RoomGame {
     private static final int MAX_BOTS = 3;
     private static final int MAX_BOT_CHAT_PER_DISCUSS = 10; // 봇당 토론 발언 총상한(비용 방어)
     private static final int BOT_PROACTIVE_CHAT = 3;        // 봇이 스스로 여는 발언 수(그 이상은 사람 말에 반응해서만)
+    // 봇 발언 사이 최소 간격. 봇마다 따로 예약하면 여러 명이 겹쳐 1~2초 만에 도배되어
+    // 사람이 읽을 틈이 없다. 실제 전송 직전에 이 간격을 강제한다.
+    private static final long BOT_CHAT_MIN_GAP_MS = 4500;
 
     private static final class Player {
         final String clientId;
@@ -575,8 +578,12 @@ public class MafiaService implements RoomGame {
     }
 
     // --- 토론: LLM 채팅(비동기, 페이싱) ---
+    /** 마지막으로 봇 발언이 실제로 표시된 시각(전역 간격 강제용). */
+    private long lastBotChatMs = 0;
+
     private void initBotDiscuss() {
         botPacingRound = round;
+        lastBotChatMs = 0;
         botChatCount.clear();
         botChatAt.clear();
         long now = System.currentTimeMillis();
@@ -584,7 +591,7 @@ public class MafiaService implements RoomGame {
         for (int seat : aliveSeats()) {
             if (!players.get(seat).ai) continue;
             botChatCount.put(seat, 0);
-            botChatAt.put(seat, now + 1200 + 2600L * (i++) + rnd(1500));
+            botChatAt.put(seat, now + 2500 + 4500L * (i++) + rnd(2000));
         }
     }
 
@@ -607,15 +614,22 @@ public class MafiaService implements RoomGame {
         if (phase != Phase.DISCUSS || r != round || seat >= players.size()) return;
         Player p = players.get(seat);
         if (!p.alive || !p.ai) return;
+        long now = System.currentTimeMillis();
         String t = cleanChat(text);
+        // 직전 봇 발언과 너무 붙으면 조금 미뤘다가 말한다(여러 봇이 겹쳐 도배되는 것 방지).
+        if (!t.isEmpty() && now - lastBotChatMs < BOT_CHAT_MIN_GAP_MS) {
+            botChatAt.put(seat, lastBotChatMs + BOT_CHAT_MIN_GAP_MS + rnd(1500));
+            return;
+        }
+        if (!t.isEmpty() && isRepetitive(t)) t = "";   // 방금 나온 말과 사실상 같은 말은 버린다
         if (!t.isEmpty()) {
             chat.add(new ChatMsg(seat, p.nick, t, true, round, System.currentTimeMillis()));
             botChatCount.merge(seat, 1, Integer::sum);
+            lastBotChatMs = now;
         }
-        long now = System.currentTimeMillis();
         // 스스로 여는 발언은 BOT_PROACTIVE_CHAT까지만. 그 이상은 사람이 말 걸 때(poke) 반응.
         if (botChatCount.getOrDefault(seat, 0) < BOT_PROACTIVE_CHAT && phaseEndsAt - now > 6000)
-            botChatAt.put(seat, now + 2500 + rnd(6000));
+            botChatAt.put(seat, now + 6000 + rnd(8000));
     }
 
     /** 사람이 토론 중 발언하면 봇 1~2명이 곧 반응하도록 예약. */
@@ -634,7 +648,7 @@ public class MafiaService implements RoomGame {
         Collections.shuffle(idle);
         int replies = Math.min(idle.size(), 1 + rnd(2)); // 1~2명만 반응(전원이 우르르 답하면 어색)
         for (int k = 0; k < replies; k++)
-            botChatAt.put(idle.get(k), now + 700 + 900L * k + rnd(1200));
+            botChatAt.put(idle.get(k), now + 2000 + 2500L * k + rnd(1500));
     }
 
     // --- 투표: LLM 결정(비동기), 실패·마감임박 시 규칙 폴백 ---
@@ -799,7 +813,34 @@ public class MafiaService implements RoomGame {
     private static String cleanChat(String s) {
         if (s == null) return "";
         String t = s.trim().replaceAll("^[\"'\\s]+|[\"'\\s]+$", "").replaceAll("\\s+", " ");
+        // 모델이 가끔 다른 문자체계(예: 데바나가리·구자라트)를 섞어 뱉는다. 한국어 채팅에
+        // 쓰이지 않는 글자는 통째로 지운다(한글/영숫자/기본 문장부호/이모지만 남김).
+        t = t.replaceAll("[^\\p{IsHangul}\\p{IsLatin}0-9\\s.,!?~…·:;'\"()\\-\\u1100-\\u11FF\\uD83C-\\uDBFF\\uDC00-\\uDFFF\\u2600-\\u27BF]", "");
+        // "음…", "흠..", "아…" 처럼 매번 같은 감탄사로 시작하면 말투가 단조로워진다.
+        t = t.replaceFirst("^(음+|흠+|아+|어+)[\\s.…·,~]*", "").trim();
+        t = t.replaceAll("\\s+", " ").trim();
         return t.length() > 120 ? t.substring(0, 120) : t;
+    }
+
+    /** 최근 봇 발언과 사실상 같은 말인지(도입부가 겹치거나 단어가 대부분 겹치면 중복). */
+    private boolean isRepetitive(String t) {
+        String key = normForCompare(t);
+        if (key.length() < 4) return false;
+        int checked = 0;
+        for (int i = chat.size() - 1; i >= 0 && checked < 6; i--) {
+            ChatMsg m = chat.get(i);
+            if (!m.ai() || m.round() != round) continue;
+            checked++;
+            String prev = normForCompare(m.text());
+            if (prev.isEmpty()) continue;
+            if (prev.equals(key)) return true;
+            if (key.length() >= 8 && prev.length() >= 8
+                    && key.substring(0, 8).equals(prev.substring(0, 8))) return true;
+        }
+        return false;
+    }
+    private static String normForCompare(String s) {
+        return s == null ? "" : s.replaceAll("[^\\p{IsHangul}0-9]", "");
     }
 
     // =================== 응답 빌드 ===================
