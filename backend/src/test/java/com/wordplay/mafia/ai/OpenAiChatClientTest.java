@@ -1,0 +1,50 @@
+package com.wordplay.mafia.ai;
+
+import org.junit.jupiter.api.Test;
+import org.springframework.test.util.ReflectionTestUtils;
+
+import static org.assertj.core.api.Assertions.assertThat;
+
+/**
+ * 추론 모델과 일반 모델은 요청 규격이 달라, 모델명에 따라 분기가 제대로 되는지 확인한다.
+ * (분기가 틀리면 400 에러가 나거나 추론 토큰이 답변 예산을 먹어 빈 응답이 온다.)
+ */
+class OpenAiChatClientTest {
+
+    private OpenAiChatClient client(String model, String mode) {
+        OpenAiChatClient c = new OpenAiChatClient();
+        ReflectionTestUtils.setField(c, "model", model);
+        ReflectionTestUtils.setField(c, "reasoningMode", mode);
+        return c;
+    }
+
+    @Test
+    void gpt5_계열과_o시리즈는_추론_모델로_판단한다() {
+        assertThat(client("gpt-5.6-luna", "auto").reasoningModel()).isTrue();
+        assertThat(client("gpt-5", "auto").reasoningModel()).isTrue();
+        assertThat(client("o3-mini", "auto").reasoningModel()).isTrue();
+        assertThat(client("o4-mini", "auto").reasoningModel()).isTrue();
+    }
+
+    @Test
+    void gpt4_계열은_일반_모델로_판단한다() {
+        assertThat(client("gpt-4o", "auto").reasoningModel()).isFalse();
+        assertThat(client("gpt-4o-mini", "auto").reasoningModel()).isFalse();
+        assertThat(client("gpt-4.1", "auto").reasoningModel()).isFalse();
+    }
+
+    /** 새 모델명이 나와도 재배포 없이 환경변수로 규격을 강제할 수 있어야 한다. */
+    @Test
+    void 환경변수로_강제할_수_있다() {
+        assertThat(client("gpt-4o", "true").reasoningModel()).isTrue();
+        assertThat(client("gpt-5.6-luna", "false").reasoningModel()).isFalse();
+    }
+
+    @Test
+    void 키가_없으면_호출하지_않는다() {
+        OpenAiChatClient c = client("gpt-5.6-luna", "auto");
+        ReflectionTestUtils.setField(c, "apiKey", "");
+        assertThat(c.isConfigured()).isFalse();
+        assertThat(c.complete("sys", "user", 80, 0.9)).isNull();
+    }
+}

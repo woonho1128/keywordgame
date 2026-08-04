@@ -75,9 +75,16 @@ app:
     model: ${OPENAI_MODEL:text-embedding-3-large}
     timeout-ms: 10000
     # 마피아 AI 봇 대화/투표용 채팅 모델(임베딩 모델과 별개).
-    # 기본 gpt-4o(대화 품질↑). 비용 아끼려면 OPENAI_CHAT_MODEL=gpt-4o-mini 로 내릴 수 있음.
-    chat-model: ${OPENAI_CHAT_MODEL:gpt-4o}
-    chat-timeout-ms: 15000
+    # gpt-5.6-luna 는 gpt-4o 대비 입력 1/12·출력 1/8 가격이라 기본으로 쓴다.
+    chat-model: ${OPENAI_CHAT_MODEL:gpt-5.6-luna}
+    chat-timeout-ms: ${OPENAI_CHAT_TIMEOUT_MS:20000}
+    # 추론 모델 파라미터 분기(auto=모델명으로 판단, true/false 로 강제 가능).
+    chat-reasoning: ${OPENAI_CHAT_REASONING:auto}
+    # 봇은 한 줄 대사/번호 하나만 내놓으면 되므로 추론은 최소로 둔다.
+    # 추론 토큰은 출력 요금으로 과금되고 응답도 느려진다.
+    chat-reasoning-effort: ${OPENAI_CHAT_REASONING_EFFORT:minimal}
+    # 숨은 추론 토큰이 답변 예산을 먹어 빈 응답이 오지 않도록 더해주는 여유분.
+    chat-reasoning-headroom: ${OPENAI_CHAT_REASONING_HEADROOM:2000}
 
 ---
 # 로컬 개발 프로필
