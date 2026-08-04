@@ -113,6 +113,8 @@ public class MafiaService implements RoomGame {
     private final Map<Integer, Long> botNightAt = new HashMap<>();      // 봇 좌석 -> 밤 행동 시각
     private final Map<Integer, Long> botChatAt = new HashMap<>();       // 봇 좌석 -> 다음 발언 시각
     private final Map<Integer, String> botHeldChat = new HashMap<>();   // 봇 좌석 -> 간격 때문에 미뤄둔 발언
+    private final Map<Integer, Long> botFinalAt = new HashMap<>();      // 봇 좌석 -> 사형/생존 판단 시각
+    private final Set<Integer> botFinalInFlight = new HashSet<>();      // 사형/생존 LLM 호출 중인 봇 좌석
     private final Map<Integer, Integer> botChatCount = new HashMap<>(); // 봇 좌석 -> 이번 토론 발언 수
     private final Map<Integer, Long> botVoteAt = new HashMap<>();       // 봇 좌석 -> 투표 시각
     private long botPacingRound = -1;                                   // 토론 페이싱 초기화 기준 라운드
@@ -350,7 +352,7 @@ public class MafiaService implements RoomGame {
                 if (accusedSeat >= 0) { finalVotes.clear(); startPhase(Phase.DEFENSE); }
                 else { executedSeat = -1; startPhase(Phase.EXECUTE); }
             }
-            case DEFENSE -> { finalVotes.clear(); startPhase(Phase.FINAL_VOTE); }
+            case DEFENSE -> { finalVotes.clear(); startPhase(Phase.FINAL_VOTE); initBotFinalVote(); }
             case FINAL_VOTE -> { resolveFinalVote(); if (!checkWin()) startPhase(Phase.EXECUTE); }
             case EXECUTE -> { round++; prepareNight(); startPhase(Phase.NIGHT); }
             default -> { }
@@ -506,23 +508,71 @@ public class MafiaService implements RoomGame {
             case NIGHT -> driveBotNight(now);
             case DISCUSS -> driveBotDiscuss(now);
             case VOTE -> driveBotVote(now);
-            case FINAL_VOTE -> driveBotFinalVote();
+            case FINAL_VOTE -> driveBotFinalVote(now);
             default -> { }
         }
     }
 
-    /** 봇 사형/생존 투표: 마피아는 동료 보호(생존)·시민 처형(사형), 시민은 지목된 자를 사형. */
-    private void driveBotFinalVote() {
+    /**
+     * 봇 사형/생존 투표.
+     *
+     * <p>마피아는 정체를 아니까 규칙으로 즉시 정한다(동료면 생존, 시민이면 사형).
+     * 시민은 예전에 무조건 '사형'을 눌렀는데, 그러면 지목만 당하면 무조건 죽어서
+     * 마피아가 시민 하나만 몰면 이기는 판이 됐다. 이제 토론 내용을 보고 LLM이 정한다.
+     */
+    private void driveBotFinalVote(long now) {
         if (accusedSeat < 0) return;
         boolean accusedMafia = players.get(accusedSeat).role == Role.MAFIA;
+        boolean acted = false;
         for (int seat : aliveSeats()) {
             if (seat == accusedSeat) continue;
             Player p = players.get(seat);
             if (!p.ai || finalVotes.containsKey(seat)) continue;
-            boolean kill = p.role == Role.MAFIA ? !accusedMafia : true; // 마피아:동료면 생존 / 시민:사형
-            finalVotes.put(seat, kill);
+
+            if (p.role == Role.MAFIA) {                 // 동료면 살리고, 시민이면 죽인다
+                finalVotes.put(seat, !accusedMafia);
+                acted = true;
+                continue;
+            }
+            if (botFinalInFlight.contains(seat)) continue;
+            if (phaseEndsAt - now < 4000) {             // 마감 임박: 판단 못 했으면 사형(기존 동작)
+                finalVotes.put(seat, true);
+                acted = true;
+                continue;
+            }
+            if (now < botFinalAt.getOrDefault(seat, Long.MAX_VALUE)) continue;
+            botFinalAt.put(seat, Long.MAX_VALUE);
+            botFinalInFlight.add(seat);
+            long r = round;
+            String user = buildFinalVotePrompt(p);
+            bot.submit(() -> applyBotFinalVote(seat, r, bot.finalVote(user)));
         }
+        if (acted) maybeAdvanceFinalVote();
+    }
+
+    synchronized void applyBotFinalVote(int seat, long r, String out) {
+        botFinalInFlight.remove(seat);
+        if (phase != Phase.FINAL_VOTE || r != round || seat >= players.size()) return;
+        Player p = players.get(seat);
+        if (!p.alive || !p.ai || finalVotes.containsKey(seat) || seat == accusedSeat) return;
+        finalVotes.put(seat, parseFinalVote(out));
         maybeAdvanceFinalVote();
+    }
+
+    /** '생존'이라고 분명히 말했을 때만 살린다. 알아들을 수 없으면 사형(기존 동작 유지). */
+    static boolean parseFinalVote(String out) {
+        if (out == null) return true;
+        String t = out.replaceAll("\\s+", "");
+        if (t.contains("생존") || t.contains("살린") || t.contains("살려")) return false;
+        return true;
+    }
+
+    private void initBotFinalVote() {
+        botFinalAt.clear();
+        botFinalInFlight.clear();
+        long now = System.currentTimeMillis();
+        for (int seat : aliveSeats())
+            if (players.get(seat).ai) botFinalAt.put(seat, now + 800 + rnd(2500));
     }
 
     // --- 밤: 규칙 기반(즉시·무료) ---
@@ -752,7 +802,28 @@ public class MafiaService implements RoomGame {
                 + "\n\n[너의 정보] 너의 이름은 '" + p.nick + "'다. " + rolePrivate(p)
                 + (p.persona != null ? "\n[너의 성격] " + p.persona : "")
                 + "\n이제 처형 투표다. 후보(번호=이름): " + map.toString().trim()
+                + "\n[판단 기준] 누가 누구를 몰았고 그 지목에 실제 근거가 있었는지 따져라."
+                + " 분위기가 쏠린다는 이유만으로 따라 찍지 마라."
+                + " 추리를 열심히 하던 사람이 갑자기 몰리고 있다면 그 몰이를 시작한 쪽을 의심해라."
                 + "\n누굴 처형할지 위 번호 중 하나만 숫자로 답하라. 기권은 0. 다른 말 없이 숫자만 출력.";
+    }
+
+    /** 사형/생존 최종 판단(시민 봇만 씀. 마피아는 정체를 알아서 규칙으로 정한다). */
+    private String buildFinalVotePrompt(Player p) {
+        String accused = accusedSeat >= 0 ? players.get(accusedSeat).nick : "?";
+        StringBuilder who = new StringBuilder();
+        for (Map.Entry<Integer, Integer> e : votes.entrySet())
+            if (e.getValue() != null && e.getValue() == accusedSeat)
+                who.append(players.get(e.getKey()).nick).append(" ");
+        return chatContext()
+                + "\n\n[너의 정보] 너의 이름은 '" + p.nick + "'다. " + rolePrivate(p)
+                + (p.persona != null ? "\n[너의 성격] " + p.persona : "")
+                + "\n\n[최종 판단] 지금 '" + accused + "'가 재판대에 올랐다."
+                + (who.length() > 0 ? " 이 사람에게 투표한 건: " + who.toString().trim() + "." : "")
+                + "\n죽여도 될 만큼 확실한 근거가 있는지만 봐라. 근거가 말투·추측·분위기뿐이면 살려라."
+                + " 처형은 하루 한 명뿐이라 헛으로 쓰면 시민이 진다."
+                + " 반대로 네가 아는 정보로 마피아가 거의 확실하면 사형이다."
+                + "\n'사형' 또는 '생존' 둘 중 하나만 출력. 다른 말은 쓰지 마라.";
     }
 
     /** 이름(닉네임) 기준의 공개 상황·대화 로그. 좌석번호는 넣지 않아 혼동을 막는다. */
@@ -1051,6 +1122,8 @@ public class MafiaService implements RoomGame {
         botChatAt.clear();
         botChatCount.clear();
         botHeldChat.clear();
+        botFinalAt.clear();
+        botFinalInFlight.clear();
         botVoteAt.clear();
         botPacingRound = -1;
     }

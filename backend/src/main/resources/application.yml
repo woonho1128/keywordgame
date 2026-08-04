@@ -88,6 +88,8 @@ app:
     # 발언은 medium — low로는 "쟤 수상해"만 반복하고 앞사람 말의 모순을 못 짚는다.
     chat-effort: ${OPENAI_CHAT_EFFORT:medium}                    # 토론 발언용
     vote-effort: ${OPENAI_VOTE_EFFORT:low}                       # 투표 판단용
+    # 사형/생존은 틀리면 그날로 시민 한 명이 죽는다. 판단이 무거워서 더 높게 준다.
+    final-vote-effort: ${OPENAI_FINAL_VOTE_EFFORT:medium}
     # 숨은 추론 토큰이 답변 예산을 먹어 빈 응답이 오지 않도록 더해주는 여유분.
     chat-reasoning-headroom: ${OPENAI_CHAT_REASONING_HEADROOM:2000}
     # 사용량 로그의 어림 비용 계산 단가(1M 토큰당 달러). 기본값은 gpt-5.6-luna 기준이라
