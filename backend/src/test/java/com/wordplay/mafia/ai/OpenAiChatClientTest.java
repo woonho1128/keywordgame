@@ -63,6 +63,16 @@ class OpenAiChatClientTest {
         }
     }
 
+    /** 발언과 투표는 필요한 사고량이 달라 호출별로 다른 값을 줄 수 있어야 한다. */
+    @Test
+    void 호출별로_노력_수준을_다르게_줄_수_있다() {
+        OpenAiChatClient c = client("gpt-5.6-luna", "auto");
+        ReflectionTestUtils.setField(c, "reasoningEffort", "none");
+        assertThat(c.normEffort("medium")).isEqualTo("medium");   // 이 호출만 다르게
+        assertThat(c.effortOrNull()).isEqualTo("none");           // 기본값은 그대로
+        assertThat(c.normEffort("minimal")).isNull();             // 잘못된 값은 생략
+    }
+
     @Test
     void 키가_없으면_호출하지_않는다() {
         OpenAiChatClient c = client("gpt-5.6-luna", "auto");

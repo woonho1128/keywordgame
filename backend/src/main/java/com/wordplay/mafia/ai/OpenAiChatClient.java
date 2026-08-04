@@ -24,9 +24,8 @@ import java.util.Map;
  *
  * <p>모델은 추론 계열(gpt-5.x, o 시리즈)과 일반 계열로 요청 규격이 다르다.
  * 추론 계열은 {@code max_completion_tokens}를 쓰고 {@code temperature}를 받지 않으며,
- * 숨은 추론 토큰이 토큰 상한을 먼저 소모한다. 그래서 여유분을 더해 보내고 노력 수준을
- * 최소로 둔다 — 봇이 내놓는 건 한 줄 대사와 번호 하나뿐이라 깊은 추론이 이득이 없고,
- * 추론 토큰은 출력 요금으로 과금되며 응답도 느려진다.
+ * 숨은 추론 토큰이 토큰 상한을 먼저 소모한다. 그래서 여유분을 더해 보낸다.
+ * 노력 수준은 호출 종류별로 다르게 줄 수 있다 — 출력이 짧아도 필요한 사고량은 다르다.
  */
 @Slf4j
 @Component
@@ -51,13 +50,16 @@ public class OpenAiChatClient {
     private static final java.util.Set<String> EFFORTS =
             java.util.Set.of("none", "low", "medium", "high", "xhigh", "max");
 
-    /** 실제로 보낼 노력 수준. 유효하지 않으면 null(=파라미터 생략). */
-    String effortOrNull() {
-        if (reasoningEffort == null) return null;
-        String e = reasoningEffort.trim().toLowerCase();
+    /** 기본 설정값 기준으로 실제 보낼 노력 수준. */
+    String effortOrNull() { return normEffort(reasoningEffort); }
+
+    /** 값을 정규화해 돌려준다. 유효하지 않으면 null(=파라미터 생략). */
+    String normEffort(String raw) {
+        if (raw == null) return null;
+        String e = raw.trim().toLowerCase();
         if (e.isEmpty()) return null;
         if (!EFFORTS.contains(e)) {
-            log.warn("알 수 없는 reasoning_effort '{}' — 파라미터를 생략한다(허용: {})", reasoningEffort, EFFORTS);
+            log.warn("알 수 없는 reasoning_effort '{}' — 파라미터를 생략한다(허용: {})", raw, EFFORTS);
             return null;
         }
         return e;
@@ -101,6 +103,14 @@ public class OpenAiChatClient {
      * @return 어시스턴트 응답 문자열(트림). 실패 시 null.
      */
     public String complete(String system, String user, int maxTokens, double temperature) {
+        return complete(system, user, maxTokens, temperature, null);
+    }
+
+    /**
+     * @param effortOverride 추론 노력 수준을 이 호출에만 다르게 줄 때(null이면 기본 설정 사용).
+     *                       토론 발언과 투표는 필요한 사고량이 달라 따로 조절한다.
+     */
+    public String complete(String system, String user, int maxTokens, double temperature, String effortOverride) {
         if (!isConfigured()) return null;
         try {
             Map<String, Object> payload = new LinkedHashMap<>();
@@ -117,11 +127,10 @@ public class OpenAiChatClient {
                  * - 숨은 추론 토큰이 이 상한을 먼저 소모하므로, 눈에 보이는 답변 길이만큼만
                  *   주면 추론에 다 쓰이고 빈 응답이 온다. 그래서 여유분을 더해준다.
                  * - temperature 는 기본값만 허용하는 경우가 많아 아예 보내지 않는다.
-                 * - 마피아 봇은 한 줄 대사/번호 하나라 깊은 추론이 필요 없다. 추론 토큰은
-                 *   출력 요금으로 과금되고 응답도 느려지므로 노력 수준을 최소로 둔다.
+                 * - 노력 수준은 호출 종류별 설정을 따른다(추론 토큰은 출력 요금으로 과금된다).
                  */
                 payload.put("max_completion_tokens", maxTokens + reasoningHeadroom);
-                String effort = effortOrNull();
+                String effort = normEffort(effortOverride != null ? effortOverride : reasoningEffort);
                 if (effort != null) payload.put("reasoning_effort", effort);
             } else {
                 payload.put("max_tokens", maxTokens);

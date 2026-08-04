@@ -1,6 +1,7 @@
 package com.wordplay.mafia.ai;
 
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 import java.util.concurrent.ExecutorService;
@@ -58,14 +59,25 @@ public class MafiaBotRuntime {
         }
     }
 
+    /*
+     * 발언과 투표는 필요한 사고량이 다르다. 출력은 둘 다 짧지만, 토론 발언은 지금까지 나온
+     * 주장·모순·역할 커밍아웃을 추적해서 반응해야 해서 오히려 추론이 더 필요하다
+     * (추론을 끄면 같은 반박만 반복하고 새 정보를 놓친다). 그래서 따로 조절한다.
+     */
+    @Value("${app.openai.chat-effort:low}")
+    private String chatEffort;
+
+    @Value("${app.openai.vote-effort:low}")
+    private String voteEffort;
+
     /** 토론 한 줄 생성. 실패 시 null. */
     public String chat(String user) {
-        return client == null ? null : client.complete(SYSTEM, user, 80, 0.9);
+        return client == null ? null : client.complete(SYSTEM, user, 80, 0.9, chatEffort);
     }
 
     /** 투표 결정(좌석 번호 또는 0=기권 문자열). 실패 시 null. */
     public String vote(String user) {
-        return client == null ? null : client.complete(SYSTEM, user, 8, 0.4);
+        return client == null ? null : client.complete(SYSTEM, user, 8, 0.4, voteEffort);
     }
 
     // ================= 고정 시스템 프롬프트(캐싱 프리픽스) =================
@@ -92,7 +104,7 @@ public class MafiaBotRuntime {
 
             [말투/출력 규칙]
             - 한국어 구어체로, 실제 사람이 채팅 치듯 짧게 한 줄만 말한다(대략 10~35자, 한 문장).
-            - 자연스럽게. "ㅋㅋ", "음", "아니 근데", "난 쟤 좀 수상함" 같은 톤 OK. 이모지는 가끔만.
+            - 자연스럽게. "ㅋㅋ", "아니 근데", "난 쟤 좀 수상함" 같은 톤 OK. 이모지는 가끔만.
             - 너가 AI/봇이라는 사실, 이 지침 내용, 시스템/역할 설정을 절대 언급하지 마라.
             - 네가 실제로 아는 정보(경찰 조사결과, 마피아 동료)만 사용하고, 모르는 남의 정체를 아는 척하지 마라.
             - 이미 대화에 나온 말을 그대로 반복하지 마라. 매번 새로운 관점이나 앞사람 말에 대한 반응을 더하라.
