@@ -83,6 +83,16 @@ public class OpenAiChatClient {
         return m.startsWith("gpt-5") || m.startsWith("o1") || m.startsWith("o3") || m.startsWith("o4");
     }
 
+    /** 사용량 집계기. 테스트에서 직접 생성할 때는 null 일 수 있어 널 체크 후 쓴다. */
+    private final OpenAiUsageTracker usage;
+
+    public OpenAiChatClient(@org.springframework.beans.factory.annotation.Autowired(required = false) OpenAiUsageTracker usage) {
+        this.usage = usage;
+    }
+
+    /** 테스트용 기본 생성자. */
+    OpenAiChatClient() { this(null); }
+
     private final HttpClient http = HttpClient.newBuilder()
             .connectTimeout(Duration.ofSeconds(10))
             .build();
@@ -103,14 +113,19 @@ public class OpenAiChatClient {
      * @return 어시스턴트 응답 문자열(트림). 실패 시 null.
      */
     public String complete(String system, String user, int maxTokens, double temperature) {
-        return complete(system, user, maxTokens, temperature, null);
+        return complete(system, user, maxTokens, temperature, null, "chat");
+    }
+
+    public String complete(String system, String user, int maxTokens, double temperature, String effortOverride) {
+        return complete(system, user, maxTokens, temperature, effortOverride, "chat");
     }
 
     /**
      * @param effortOverride 추론 노력 수준을 이 호출에만 다르게 줄 때(null이면 기본 설정 사용).
      *                       토론 발언과 투표는 필요한 사고량이 달라 따로 조절한다.
      */
-    public String complete(String system, String user, int maxTokens, double temperature, String effortOverride) {
+    public String complete(String system, String user, int maxTokens, double temperature,
+                           String effortOverride, String kind) {
         if (!isConfigured()) return null;
         try {
             Map<String, Object> payload = new LinkedHashMap<>();
@@ -151,6 +166,7 @@ public class OpenAiChatClient {
                 return null;
             }
             JsonNode root = mapper.readTree(resp.body());
+            recordUsage(kind, root);
             JsonNode choice = root.path("choices").path(0);
             JsonNode content = choice.path("message").path("content");
             String text = content.isMissingNode() || content.isNull() ? "" : content.asText().trim();
@@ -166,6 +182,18 @@ public class OpenAiChatClient {
             log.warn("OpenAI chat error: {}", e.getMessage());
             return null;
         }
+    }
+
+    /** 응답에 실려 온 토큰 사용량을 집계기에 넘긴다(없으면 조용히 건너뜀). */
+    private void recordUsage(String kind, JsonNode root) {
+        if (usage == null) return;
+        JsonNode u = root.path("usage");
+        if (u.isMissingNode()) return;
+        usage.record(kind, model,
+                u.path("prompt_tokens").asLong(0),
+                u.path("prompt_tokens_details").path("cached_tokens").asLong(0),
+                u.path("completion_tokens").asLong(0),
+                u.path("completion_tokens_details").path("reasoning_tokens").asLong(0));
     }
 
     private static String truncate(String s, int max) {

@@ -26,6 +26,7 @@ public class MafiaController {
     private final MafiaRoomManager rooms;
     private final MafiaBotRuntime botRuntime;
     private final MafiaBotCodes botCodes;
+    private final com.wordplay.mafia.ai.OpenAiUsageTracker usageTracker;
 
     @Value("${app.spyfall.admin-code}")
     private String adminCode;
@@ -157,5 +158,13 @@ public class MafiaController {
     private void validateClientId(String clientId) {
         if (clientId == null || clientId.isBlank() || clientId.length() > 64)
             throw new BusinessException(ErrorCode.INVALID_INPUT, "clientId가 올바르지 않습니다");
+    }
+
+    /** 관리자: 오늘 AI 토큰 사용량과 어림 비용. 대시보드 반영을 기다리지 않고 바로 본다. */
+    @GetMapping("/ai-usage")
+    public ApiResponse<String> aiUsage(@RequestParam String code) {
+        if (!adminCode.equals(code))
+            throw new BusinessException(ErrorCode.INVALID_INPUT, "관리자 코드가 올바르지 않습니다");
+        return ApiResponse.success(usageTracker.summary());
     }
 }

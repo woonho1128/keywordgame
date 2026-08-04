@@ -72,12 +72,12 @@ public class MafiaBotRuntime {
 
     /** 토론 한 줄 생성. 실패 시 null. */
     public String chat(String user) {
-        return client == null ? null : client.complete(SYSTEM, user, 80, 0.9, chatEffort);
+        return client == null ? null : client.complete(SYSTEM, user, 80, 0.9, chatEffort, "발언");
     }
 
     /** 투표 결정(좌석 번호 또는 0=기권 문자열). 실패 시 null. */
     public String vote(String user) {
-        return client == null ? null : client.complete(SYSTEM, user, 8, 0.4, voteEffort);
+        return client == null ? null : client.complete(SYSTEM, user, 8, 0.4, voteEffort, "투표");
     }
 
     // ================= 고정 시스템 프롬프트(캐싱 프리픽스) =================

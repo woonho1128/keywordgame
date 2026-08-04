@@ -89,6 +89,12 @@ app:
     vote-effort: ${OPENAI_VOTE_EFFORT:low}                       # 투표 판단용
     # 숨은 추론 토큰이 답변 예산을 먹어 빈 응답이 오지 않도록 더해주는 여유분.
     chat-reasoning-headroom: ${OPENAI_CHAT_REASONING_HEADROOM:2000}
+    # 사용량 로그의 어림 비용 계산 단가(1M 토큰당 달러). 기본값은 gpt-5.6-luna 기준이라
+    # 모델을 바꾸면 같이 바꿔야 금액이 맞는다. 정산은 OpenAI 청구서가 기준이다.
+    price-input-per-mtok: ${OPENAI_PRICE_INPUT:0.20}
+    price-cached-input-per-mtok: ${OPENAI_PRICE_CACHED_INPUT:0.02}
+    price-output-per-mtok: ${OPENAI_PRICE_OUTPUT:1.20}
+    krw-per-usd: ${OPENAI_KRW_PER_USD:1400}
 
 ---
 # 로컬 개발 프로필
