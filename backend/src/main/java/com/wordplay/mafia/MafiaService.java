@@ -95,6 +95,13 @@ public class MafiaService implements RoomGame {
 
     // 낮 투표: 투표자 seat -> 대상 seat(-1 기권)
     private final Map<Integer, Integer> votes = new HashMap<>();
+    /**
+     * 지난 라운드들의 투표 기록(라운드 -> 투표자 seat -> 대상 seat).
+     *
+     * <p>{@link #votes}는 매 라운드 지워지는데, "어제 누가 나를 찍었나"는 마피아를 잡는
+     * 1순위 근거다. 봇 프롬프트에 넣으려면 남겨둬야 한다.
+     */
+    private final Map<Long, Map<Integer, Integer>> voteHistory = new LinkedHashMap<>();
     private int accusedSeat = -1;                                     // 재판대에 오른 좌석
     private final Map<Integer, Boolean> finalVotes = new HashMap<>(); // 좌석 -> 사형(true)/생존(false)
     private long defenseMs = 20_000, finalVoteMs = 20_000;
@@ -179,6 +186,7 @@ public class MafiaService implements RoomGame {
         this.copLog.clear();
         this.history.clear();
         this.myLogs.clear();
+        this.voteHistory.clear();
         history.add("🎬 게임 시작 · " + n + "명 (마피아 " + mafia + "명)");
         prepareNight();
         startPhase(Phase.NIGHT);
@@ -438,6 +446,7 @@ public class MafiaService implements RoomGame {
         for (int t : votes.values()) if (t != -1) tally.merge(t, 1, Integer::sum);
         for (var e : votes.entrySet())
             myLog(e.getKey()).add(round + "일차 🗳️ 투표: " + (e.getValue() < 0 ? "기권" : players.get(e.getValue()).nick));
+        voteHistory.put(round, new LinkedHashMap<>(votes));
         if (!tally.isEmpty()) {
             List<Map.Entry<Integer, Integer>> es = new ArrayList<>(tally.entrySet());
             es.sort((a, b) -> b.getValue() - a.getValue());
@@ -470,7 +479,8 @@ public class MafiaService implements RoomGame {
         if (accusedSeat >= 0 && kill > spare && players.get(accusedSeat).alive) {
             players.get(accusedSeat).alive = false;
             executedSeat = accusedSeat;
-            history.add(round + "일차 ☀️ " + players.get(accusedSeat).nick + "님 처형 (정체: " + roleKor(players.get(accusedSeat).role) + ")");
+            history.add(round + "일차 ☀️ " + players.get(accusedSeat).nick + "님 처형"
+                    + (revealOnDeath ? " (정체: " + roleKor(players.get(accusedSeat).role) + ")" : ""));
         } else {
             history.add(round + "일차 ☀️ " + (accusedSeat >= 0 ? players.get(accusedSeat).nick + "님 생존 (사형 부결)" : "처형 없음"));
         }
@@ -670,7 +680,7 @@ public class MafiaService implements RoomGame {
         Player p = players.get(seat);
         if (!p.alive || !p.ai) return;
         long now = System.currentTimeMillis();
-        String t = cleanChat(text);
+        String t = cleanBotChat(text);
         // 직전 봇 발언과 너무 붙으면 조금 미뤘다가 말한다(여러 봇이 겹쳐 도배되는 것 방지).
         // 봇이 늘수록 이 충돌이 잦아지므로, 받아둔 말을 버리지 말고 들고 있다가 그대로 내보낸다.
         if (!t.isEmpty() && now - lastBotChatMs < BOT_CHAT_MIN_GAP_MS) {
@@ -782,7 +792,7 @@ public class MafiaService implements RoomGame {
         List<String> others = new ArrayList<>();
         for (int i : aliveSeats()) if (i != seatOf(p)) others.add(players.get(i).nick);
         String last = lastOtherSpeaker(p);
-        return chatContext()
+        return chatContext(p)
                 + "\n\n[너의 정보] 이 대화에서 너의 이름은 '" + p.nick + "'다. " + rolePrivate(p)
                 + (p.persona != null ? "\n[너의 성격] " + p.persona + " 이 성격이 말투와 태도에 자연스럽게 드러나게 해라." : "")
                 + "\n[중요 규칙]"
@@ -798,7 +808,7 @@ public class MafiaService implements RoomGame {
         StringBuilder map = new StringBuilder();
         for (int i : aliveSeats()) if (i != seatOf(p))
             map.append(i + 1).append("=").append(players.get(i).nick).append("  ");
-        return chatContext()
+        return chatContext(p)
                 + "\n\n[너의 정보] 너의 이름은 '" + p.nick + "'다. " + rolePrivate(p)
                 + (p.persona != null ? "\n[너의 성격] " + p.persona : "")
                 + "\n이제 처형 투표다. 후보(번호=이름): " + map.toString().trim()
@@ -815,7 +825,7 @@ public class MafiaService implements RoomGame {
         for (Map.Entry<Integer, Integer> e : votes.entrySet())
             if (e.getValue() != null && e.getValue() == accusedSeat)
                 who.append(players.get(e.getKey()).nick).append(" ");
-        return chatContext()
+        return chatContext(p)
                 + "\n\n[너의 정보] 너의 이름은 '" + p.nick + "'다. " + rolePrivate(p)
                 + (p.persona != null ? "\n[너의 성격] " + p.persona : "")
                 + "\n\n[최종 판단] 지금 '" + accused + "'가 재판대에 올랐다."
@@ -826,8 +836,17 @@ public class MafiaService implements RoomGame {
                 + "\n'사형' 또는 '생존' 둘 중 하나만 출력. 다른 말은 쓰지 마라.";
     }
 
-    /** 이름(닉네임) 기준의 공개 상황·대화 로그. 좌석번호는 넣지 않아 혼동을 막는다. */
-    private String chatContext() {
+    /**
+     * 이름(닉네임) 기준의 공개 상황·대화 로그. 좌석번호는 넣지 않아 혼동을 막는다.
+     *
+     * <p>봇의 "기억"은 따로 저장하지 않고 매번 여기서 서버가 사실만으로 다시 만든다.
+     * LLM에게 의심도 같은 상태를 JSON으로 뱉게 하면 출력 토큰이 몇 배가 되는데다,
+     * 한번 굳은 의심 점수가 계속 되먹임돼서 몰이가 더 심해진다. 서버가 아는 사실
+     * (투표 기록, 발언 기록)을 그대로 넣어주면 공짜인데 근거는 더 정확하다.
+     *
+     * @param viewer 이 프롬프트를 받는 봇. null이면 개인화 블록 없이 공개 정보만.
+     */
+    private String chatContext(Player viewer) {
         StringBuilder sb = new StringBuilder();
         sb.append(round).append("일차 낮 토론. 지금 살아있는 사람: ");
         List<String> alive = new ArrayList<>();
@@ -838,12 +857,78 @@ public class MafiaService implements RoomGame {
             sb.append("\n[지금까지 밤·처형 결과]");
             for (int i = from; i < history.size(); i++) sb.append("\n- ").append(history.get(i));
         }
+        String votesBlock = voteRecordBlock();
+        if (!votesBlock.isEmpty()) sb.append("\n[지난 투표 기록 — 누가 누구를 찍었나]").append(votesBlock);
+        if (viewer != null) sb.append(personalBlock(viewer));
         List<ChatMsg> today = chat.stream().filter(c -> c.round() == round).toList();
         if (today.isEmpty()) sb.append("\n[대화] 아직 아무도 말하지 않았다. 네가 먼저 말을 꺼내라.");
         else {
             sb.append("\n[대화 내용]");
             for (ChatMsg c : today) sb.append("\n").append(c.nick()).append(": ").append(c.text());
         }
+        return sb.toString();
+    }
+
+    /** 최근 두 라운드의 개인별 투표(누가 누구를 찍었는지). 마피아 추리의 핵심 근거다. */
+    private String voteRecordBlock() {
+        StringBuilder sb = new StringBuilder();
+        List<Long> rounds = new ArrayList<>(voteHistory.keySet());
+        for (int i = Math.max(0, rounds.size() - 2); i < rounds.size(); i++) {
+            long r = rounds.get(i);
+            Map<Integer, Integer> v = voteHistory.get(r);
+            if (v == null || v.isEmpty()) continue;
+            // 대상별로 묶어야 "누구를 같이 몰았나"가 한눈에 보인다.
+            Map<Integer, List<String>> byTarget = new LinkedHashMap<>();
+            List<String> abstained = new ArrayList<>();
+            for (var e : v.entrySet()) {
+                if (e.getKey() >= players.size()) continue;
+                String voter = players.get(e.getKey()).nick;
+                if (e.getValue() == null || e.getValue() < 0) abstained.add(voter);
+                else byTarget.computeIfAbsent(e.getValue(), k -> new ArrayList<>()).add(voter);
+            }
+            sb.append("\n- ").append(r).append("일차: ");
+            List<String> parts = new ArrayList<>();
+            for (var e : byTarget.entrySet())
+                if (e.getKey() < players.size())
+                    parts.add(players.get(e.getKey()).nick + " ← " + String.join(", ", e.getValue()));
+            if (!abstained.isEmpty()) parts.add("기권: " + String.join(", ", abstained));
+            sb.append(String.join(" / ", parts));
+        }
+        return sb.toString();
+    }
+
+    /** 이 봇에게만 해당하는 것: 내가 전에 한 말, 나를 지목한 사람. */
+    private String personalBlock(Player viewer) {
+        int mySeat = seatOf(viewer);
+        StringBuilder sb = new StringBuilder();
+
+        // 지난 라운드에 내가 한 말 — 없으면 어제 주장과 오늘 주장이 따로 논다.
+        List<String> mine = new ArrayList<>();
+        for (ChatMsg c : chat)
+            if (c.seat() == mySeat && c.round() < round) mine.add(c.round() + "일차: " + c.text());
+        if (!mine.isEmpty()) {
+            sb.append("\n[전에 네가 한 말 — 말을 뒤집지 마라]");
+            for (String s : mine.subList(Math.max(0, mine.size() - 3), mine.size())) sb.append("\n- ").append(s);
+        }
+
+        // 오늘 나를 언급·지목한 사람
+        List<String> namedMe = new ArrayList<>();
+        for (ChatMsg c : chat)
+            if (c.round() == round && c.seat() != mySeat && c.text().contains(viewer.nick)
+                    && !namedMe.contains(c.nick())) namedMe.add(c.nick());
+        if (!namedMe.isEmpty())
+            sb.append("\n[오늘 너를 언급한 사람] ").append(String.join(", ", namedMe));
+
+        // 내가 지난 라운드에 누구를 찍었는지(일관성 확인용)
+        List<String> myVotes = new ArrayList<>();
+        for (var e : voteHistory.entrySet()) {
+            Integer t = e.getValue().get(mySeat);
+            if (t == null) continue;
+            myVotes.add(e.getKey() + "일차 " + (t < 0 || t >= players.size() ? "기권" : players.get(t).nick));
+        }
+        if (!myVotes.isEmpty())
+            sb.append("\n[네가 한 투표] ").append(String.join(", ", myVotes));
+
         return sb.toString();
     }
 
@@ -863,13 +948,40 @@ public class MafiaService implements RoomGame {
                 return "누가 너를 지목하거나 언급했다. 딴소리 말고 그 말에 직접 반박하거나 해명하고, "
                         + "네가 아닌 이유를 하나라도 구체적으로 대라.";
         }
-        return switch (botChatCount.getOrDefault(mySeat, 0)) {
-            case 0 -> "아직 근거가 없다. 남을 지목하지 말고, 밤에 일어난 일이나 어제 투표에서 드러난 "
-                    + "사실을 짚어 정리해라(누가 죽었는지, 평화로운 밤이었는지 등).";
-            case 1 -> "특정한 한 사람에게 구체적으로 질문해라(어젯밤 뭘 했는지, 왜 그 사람한테 투표했는지, "
-                    + "역할이 뭔지 등). 이번엔 의심한다는 말은 쓰지 마라.";
-            default -> "지금까지 나온 말을 근거로 의견을 내라. 근거를 댈 수 없으면 지목하지 말고 "
-                    + "판단을 미루거나 더 물어봐라.";
+        int turn = botChatCount.getOrDefault(mySeat, 0);
+        // 역할마다 이번 턴에 해야 할 일이 다르다. 같은 지시를 주면 마피아도 시민처럼
+        // 성실하게 추리해서 금방 들키고, 경찰은 정보를 언제 흘릴지 판단하지 못한다.
+        return switch (p.role) {
+            case MAFIA -> switch (turn) {
+                case 0 -> "시민인 척 사실 정리부터 해라. 동료 마피아는 절대 언급하지 말고, "
+                        + "아직 아무도 지목하지 마라. 성실해 보이는 게 목적이다.";
+                case 1 -> "누구 하나에게 질문을 던져 시선을 그쪽으로 옮겨라. 단 네가 앞장서서 "
+                        + "몰지는 마라 — 남이 먼저 의심한 사람을 슬쩍 거들어라.";
+                default -> "지금 누가 마피아 쪽으로 다가오고 있는지 보고, 그 사람의 신뢰를 "
+                        + "흔들어라. 근거는 실제 발언·투표에서 가져와야 티가 안 난다.";
+            };
+            case POLICE -> {
+                boolean hasFinding = copFindings.values().stream().anyMatch(Boolean::booleanValue);
+                yield switch (turn) {
+                    case 0 -> "조사 결과를 아직 꺼내지 마라. 먼저 밤 결과와 투표 기록을 정리해서 "
+                            + "네가 판을 읽고 있다는 인상만 남겨라.";
+                    case 1 -> hasFinding
+                            ? "조사에서 마피아를 찾았다. '경찰이다'라고 밝히지는 말고, 그 사람의 발언이나 "
+                              + "투표를 걸고 넘어져서 자연스럽게 의심이 쏠리게 만들어라."
+                            : "아직 조사에서 나온 게 없다. 특정인에게 구체적으로 질문해서 정보를 더 캐라.";
+                    default -> hasFinding
+                            ? "네가 아는 사실 쪽으로 표를 모아라. 다만 어떻게 아는지는 끝까지 흐려라."
+                            : "지금까지 나온 말 중 앞뒤가 안 맞는 지점을 짚어라.";
+                };
+            }
+            default -> switch (turn) {
+                case 0 -> "아직 근거가 없다. 남을 지목하지 말고, 밤에 일어난 일이나 지난 투표 기록에서 "
+                        + "드러난 사실을 짚어 정리해라(누가 죽었는지, 누가 누구를 같이 찍었는지 등).";
+                case 1 -> "특정한 한 사람에게 구체적으로 질문해라(어젯밤 뭘 했는지, 왜 그 사람한테 투표했는지 등). "
+                        + "이번엔 의심한다는 말은 쓰지 마라.";
+                default -> "지금까지 나온 말과 투표 기록을 근거로 의견을 내라. 근거를 댈 수 없으면 "
+                        + "지목하지 말고 판단을 미루거나 더 물어봐라.";
+            };
         };
     }
 
@@ -929,10 +1041,21 @@ public class MafiaService implements RoomGame {
         // 모델이 가끔 다른 문자체계(예: 데바나가리·구자라트)를 섞어 뱉는다. 한국어 채팅에
         // 쓰이지 않는 글자는 통째로 지운다(한글/영숫자/기본 문장부호/이모지만 남김).
         t = t.replaceAll("[^\\p{IsHangul}\\p{IsLatin}0-9\\s.,!?~…·:;'\"()\\-\\u1100-\\u11FF\\uD83C-\\uDBFF\\uDC00-\\uDFFF\\u2600-\\u27BF]", "");
-        // "음…", "흠..", "아…" 처럼 매번 같은 감탄사로 시작하면 말투가 단조로워진다.
-        t = t.replaceFirst("^(음+|흠+|아+|어+)[\\s.…·,~]*", "").trim();
         t = t.replaceAll("\\s+", " ").trim();
         return t.length() > 120 ? t.substring(0, 120) : t;
+    }
+
+    /**
+     * 봇 발언 전용 정리. 군말 제거는 봇에만 적용한다.
+     *
+     * <p>사람 발언까지 깎으면 "어제 봄이 찍었잖아"가 "제 봄이 찍었잖아"가 된다.
+     * 그래서 군말은 뒤에 구분자가 오거나 그 자체가 발언 전부일 때만 지운다.
+     */
+    private static String cleanBotChat(String s) {
+        String t = cleanChat(s);
+        // "음…", "흠..", "아, " 처럼 매번 같은 감탄사로 시작하면 말투가 단조로워진다.
+        t = t.replaceFirst("^(음+|흠+|아+|어+)([\\s.…·,~]+|$)", "").trim();
+        return t.replaceAll("\\s+", " ").trim();
     }
 
     /** 최근 봇 발언과 사실상 같은 말인지(도입부가 겹치거나 단어가 대부분 겹치면 중복). */
@@ -1105,6 +1228,7 @@ public class MafiaService implements RoomGame {
         copFindings.clear();
         skipVotes.clear();
         history.clear();
+        voteHistory.clear();
         myLogs.clear();
         mafiaPicks.clear();
         citizenPicks.clear();

@@ -4,6 +4,7 @@ import com.wordplay.mafia.ai.MafiaBotRuntime;
 import com.wordplay.mafia.dto.MafiaStateResponse;
 import com.wordplay.mafia.dto.NewMafiaRequest;
 import org.junit.jupiter.api.Test;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
@@ -65,7 +66,35 @@ class MafiaChatIntentTest {
 
         String first = bot.prompts.get(0);
         assertThat(first).contains("[이번 발언에서 할 일]");
-        assertThat(first).contains("남을 지목하지 말고");   // 근거 없는 첫 지목 방지
+        // 역할마다 문구는 달라도(마피아/경찰/시민) 첫 턴은 다 "정리부터" 하라고 시킨다.
+        assertThat(first).contains("정리");
+    }
+
+    @Test
+    void 역할마다_다른_지시를_준다() {
+        Capturing bot = new Capturing();
+        MafiaService svc = new MafiaService(bot);
+        svc.newGame("host", new NewMafiaRequest("방장", 20, 120, null, null, null, null, null));
+        svc.addBots(3);
+        svc.start("host");
+
+        List<?> players = (List<?>) ReflectionTestUtils.getField(svc, "players");
+        Object p = players.get(1);
+        Object citizen = intentFor(svc, p, "CITIZEN");
+        Object mafia = intentFor(svc, p, "MAFIA");
+        Object police = intentFor(svc, p, "POLICE");
+
+        assertThat(mafia).isNotEqualTo(citizen);
+        assertThat(police).isNotEqualTo(citizen);
+        assertThat(String.valueOf(mafia)).contains("동료 마피아는 절대 언급하지 말고");
+        assertThat(String.valueOf(police)).contains("조사 결과를 아직 꺼내지 마라");
+    }
+
+    /** 역할만 바꿔 끼우고 이번 턴 지시를 뽑아본다. */
+    private static Object intentFor(MafiaService svc, Object player, String role) {
+        ReflectionTestUtils.setField(player, "role",
+                Enum.valueOf(MafiaService.Role.class, role));
+        return ReflectionTestUtils.invokeMethod(svc, "chatIntent", player);
     }
 
     @Test

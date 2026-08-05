@@ -12,7 +12,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 class MafiaChatCleanTest {
 
     private String clean(String s) {
-        return (String) ReflectionTestUtils.invokeMethod(MafiaService.class, "cleanChat", s);
+        return (String) ReflectionTestUtils.invokeMethod(MafiaService.class, "cleanBotChat", s);
     }
 
     @Test
@@ -39,6 +39,22 @@ class MafiaChatCleanTest {
     void 따옴표와_공백을_정리하고_길이를_제한한다() {
         assertThat(clean("  \"봇1 수상함\"  ")).isEqualTo("봇1 수상함");
         assertThat(clean("가".repeat(200))).hasSize(120);
+    }
+
+    @Test
+    void 군말처럼_보이는_평범한_단어는_건드리지_않는다() {
+        // "어제", "아니", "아까"의 첫 글자를 군말로 오인해 깎아먹던 버그.
+        assertThat(clean("어제 봄이 찍었잖아")).isEqualTo("어제 봄이 찍었잖아");
+        assertThat(clean("아니 근데 그건 좀")).isEqualTo("아니 근데 그건 좀");
+        assertThat(clean("아까부터 말이 바뀌는데")).isEqualTo("아까부터 말이 바뀌는데");
+        assertThat(clean("음식 얘기 왜 나와")).isEqualTo("음식 얘기 왜 나와");
+    }
+
+    @Test
+    void 사람_발언은_군말을_깎지_않는다() {
+        String humanCleaned = (String) ReflectionTestUtils.invokeMethod(
+                MafiaService.class, "cleanChat", "음... 잘 모르겠는데");
+        assertThat(humanCleaned).isEqualTo("음... 잘 모르겠는데");
     }
 
     @Test
