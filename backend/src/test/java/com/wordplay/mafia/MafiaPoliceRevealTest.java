@@ -70,31 +70,68 @@ class MafiaPoliceRevealTest {
         assertThat(asked(svc)).isTrue();
     }
 
+    /** 같은 상황에서 여러 번 뽑아 대상 분포를 본다(밤 선택에 난수가 들어간다). */
+    private static Map<Object, Integer> distribution(MafiaService svc, Object actor, int tries) {
+        Map<Object, Integer> hist = new HashMap<>();
+        for (int i = 0; i < tries; i++)
+            hist.merge(ReflectionTestUtils.invokeMethod(svc, "chooseNightTarget", actor), 1, Integer::sum);
+        return hist;
+    }
+
     @Test
-    void 마피아_봇은_커밍아웃한_사람을_밤에_노린다() {
+    void 마피아_봇은_커밍아웃한_사람을_주로_노리되_항상은_아니다() {
         MafiaService svc = started(6);
         List<?> players = (List<?>) ReflectionTestUtils.getField(svc, "players");
-        // 0=마피아, 3=커밍아웃한 경찰로 고정
         setRole(players.get(0), "MAFIA");
         for (int i = 1; i < 6; i++) setRole(players.get(i), "CITIZEN");
         setRole(players.get(3), "POLICE");
         svc.sendChat("p3", "내가 경찰이다 사람1이 마피아야");
 
-        Object target = ReflectionTestUtils.invokeMethod(svc, "chooseNightTarget", players.get(0));
-        assertThat(target).isEqualTo(3);
+        Map<Object, Integer> hist = distribution(svc, players.get(0), 400);
+        assertThat(hist.getOrDefault(3, 0)).as("경찰을 주로 노린다").isGreaterThan(150);
+        assertThat(hist.size()).as("항상 경찰만 치면 의사가 100% 읽는다").isGreaterThan(1);
     }
 
     @Test
-    void 의사_봇은_커밍아웃한_경찰을_지킨다() {
+    void 어젯밤이_평화로웠으면_의사가_연속보호를_못하니_확실히_친다() {
+        MafiaService svc = started(6);
+        List<?> players = (List<?>) ReflectionTestUtils.getField(svc, "players");
+        setRole(players.get(0), "MAFIA");
+        for (int i = 1; i < 6; i++) setRole(players.get(i), "CITIZEN");
+        setRole(players.get(3), "POLICE");
+        svc.sendChat("p3", "내가 경찰이다");
+        ReflectionTestUtils.setField(svc, "lastNightPeaceful", true);
+
+        assertThat(distribution(svc, players.get(0), 50)).containsOnlyKeys(3);
+    }
+
+    @Test
+    void 의사_봇은_커밍아웃한_경찰을_주로_지키되_다른_사람도_본다() {
         MafiaService svc = started(6);
         List<?> players = (List<?>) ReflectionTestUtils.getField(svc, "players");
         setRole(players.get(0), "DOCTOR");
         for (int i = 1; i < 6; i++) setRole(players.get(i), "CITIZEN");
         setRole(players.get(2), "POLICE");
         svc.sendChat("p2", "제가 경찰입니다");
+        // 커밍아웃한 지 한참 지난 상황(즉시 보호 구간이 아님)
+        ReflectionTestUtils.setField(svc, "round", 3L);
 
-        Object target = ReflectionTestUtils.invokeMethod(svc, "chooseNightTarget", players.get(0));
-        assertThat(target).isEqualTo(2);
+        Map<Object, Integer> hist = distribution(svc, players.get(0), 400);
+        assertThat(hist.getOrDefault(2, 0)).as("경찰을 주로 지킨다").isGreaterThan(150);
+        assertThat(hist.size()).as("눈치 보고 다른 사람도 지켜야 한다").isGreaterThan(1);
+    }
+
+    @Test
+    void 의사는_같은_사람을_연속으로_지키지_못한다() {
+        MafiaService svc = started(6);
+        List<?> players = (List<?>) ReflectionTestUtils.getField(svc, "players");
+        setRole(players.get(0), "DOCTOR");
+        for (int i = 1; i < 6; i++) setRole(players.get(i), "CITIZEN");
+        setRole(players.get(2), "POLICE");
+        svc.sendChat("p2", "제가 경찰입니다");
+        ReflectionTestUtils.setField(svc, "lastDoctorTarget", 2);   // 어젯밤 이미 경찰을 지켰다
+
+        assertThat(distribution(svc, players.get(0), 100)).doesNotContainKey(2);
     }
 
     @Test

@@ -370,9 +370,22 @@ public class SpicyGame implements RoomGame {
     int score(P p) { return p.won + p.trophies * 10 - (handPenalty ? p.hand.size() : 0); }
 
     private void nextTurn() {
-        int n = players.size(), guard = 0;
-        do { turnSeat = (turnSeat + 1) % n; guard++; }
-        while (guard <= n * 2 && players.get(turnSeat).left);
+        turnSeat = seatAfter(turnSeat);
+    }
+
+    /**
+     * 좌석 순서상 다음 차례(나간 사람은 건너뜀). 정할 수 없으면 -1.
+     *
+     * <p>화면의 "다음 차례" 표시도 이걸 그대로 쓴다. 프론트에서 따로 계산하면
+     * 나간 사람 처리가 서버와 어긋난다.
+     */
+    private int seatAfter(int from) {
+        int n = players.size();
+        if (n == 0 || from < 0) return -1;
+        int s = from, guard = 0;
+        do { s = (s + 1) % n; guard++; }
+        while (guard <= n * 2 && players.get(s).left);
+        return players.get(s).left ? -1 : s;
     }
 
     // ── 봇/타임아웃 ──
@@ -489,6 +502,7 @@ public class SpicyGame implements RoomGame {
         boolean canCh = phase == Phase.PLAYING && turnPhase == TurnPhase.CHALLENGE
                 && me != null && !me.left && meSeat != lastPlayerSeat;
         String turnName = phase == Phase.PLAYING && turnSeat >= 0 ? players.get(turnSeat).nick : null;
+        int nextSeat = phase == Phase.PLAYING ? seatAfter(turnSeat) : -1;
 
         return new SpicyState(
                 phase.name(),
@@ -501,7 +515,7 @@ public class SpicyGame implements RoomGame {
                 clientId != null && clientId.equals(hostClientId),
                 me != null,
                 pv, hand,
-                turnSeat, turnName, myTurn, meSeat,
+                turnSeat, turnName, nextSeat, myTurn, meSeat,
                 pile.size(), declaredSpice, declaredNumber, lastPlayerSeat,
                 myTurn ? playableNumbers() : List.of(),
                 myTurn ? playableSpices() : List.of(),

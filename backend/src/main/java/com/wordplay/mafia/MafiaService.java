@@ -183,6 +183,7 @@ public class MafiaService implements RoomGame {
 
         this.round = 1;
         this.lastDoctorTarget = -1;
+        this.lastNightPeaceful = false;
         this.copLog.clear();
         this.history.clear();
         this.myLogs.clear();
@@ -405,6 +406,7 @@ public class MafiaService implements RoomGame {
         } else {
             nightMessage = "평화로운 밤이었습니다. 아무도 죽지 않았습니다.";
         }
+        lastNightPeaceful = nightDeadSeat < 0;
         history.add(round + "일차 🌙 " + nightMessage);
         // 경찰 조사 결과: 최종 지목 1명만 아침에 공개
         int policeSeat = seatOfRole(Role.POLICE);
@@ -685,12 +687,8 @@ public class MafiaService implements RoomGame {
                 List<Integer> targets = new ArrayList<>();
                 for (int i : alive) if (players.get(i).role != Role.MAFIA) targets.add(i);
                 if (targets.isEmpty()) return -1;
-                // 경찰이라고 밝힌 사람이 있으면 그쪽부터 지운다(동료가 위장 커밍아웃한 건 제외).
-                List<Integer> claimed = claimedPoliceSeats().stream().filter(targets::contains).toList();
-                if (!claimed.isEmpty())
-                    return claimed.get((int) Math.floorMod(round * 2654435761L, (long) claimed.size()));
-                // 모든 마피아 봇이 같은 대상을 고르도록 라운드 기반 결정.
-                return targets.get((int) Math.floorMod(round * 2654435761L, (long) targets.size()));
+                int seat = mafiaTargetSeat(targets);
+                return seat >= 0 ? seat : defaultPick(targets);
             }
             case POLICE -> {
                 List<Integer> unchecked = new ArrayList<>();
@@ -700,18 +698,95 @@ public class MafiaService implements RoomGame {
                 return pool.isEmpty() ? -1 : pool.get(rnd(pool.size()));
             }
             case DOCTOR -> {
-                // 커밍아웃한 경찰이 그날 밤 1순위 표적이다. 지켜줘야 커밍아웃이 도박이 아니게 된다.
-                List<Integer> claimed = claimedPoliceSeats().stream()
-                        .filter(i -> i != lastDoctorTarget).toList();
-                if (!claimed.isEmpty()) return claimed.get(rnd(claimed.size()));
                 List<Integer> pool = alive.stream().filter(i -> i != lastDoctorTarget).toList();
-                return pool.isEmpty() ? -1 : pool.get(rnd(pool.size()));
+                if (pool.isEmpty()) return -1;
+                int seat = doctorTargetSeat(pool, myS);
+                return seat >= 0 ? seat : pool.get(rnd(pool.size()));
             }
             default -> {
                 List<Integer> pool = alive.stream().filter(i -> i != myS).toList();
                 return pool.isEmpty() ? -1 : pool.get(rnd(pool.size()));
             }
         }
+    }
+
+    /*
+     * 밤 심리전.
+     *
+     * 커밍아웃한 경찰을 마피아가 100% 노리고 의사가 100% 지키면 서로 수를 다 읽는
+     * 결정론이 되어 재미가 없다. 그래서 양쪽 다 "읽고 흔든다".
+     *
+     * 판단 근거는 모두 공개 정보다 — 누가 커밍아웃했는지, 어젯밤이 평화로웠는지,
+     * 그리고 "의사는 같은 사람을 연속으로 보호할 수 없다"는 규칙. 숨은 정보는 안 쓴다.
+     */
+
+    /** 직전 밤에 아무도 죽지 않았는지(= 의사가 막았을 가능성). 공개 정보다. */
+    private boolean lastNightPeaceful = false;
+
+    /** 해당 좌석이 처음 경찰이라고 밝힌 라운드. 밝힌 적 없으면 -1. */
+    private long policeClaimRound(int seat) {
+        for (ChatMsg c : chat)
+            if (c.seat() == seat && isPoliceClaim(c.text())) return c.round();
+        return -1;
+    }
+
+    /** 모든 마피아 봇이 같은 대상을 고르도록 라운드 기반 결정(합의 대체). */
+    private int defaultPick(List<Integer> pool) {
+        return pool.isEmpty() ? -1 : pool.get((int) Math.floorMod(round * 2654435761L, (long) pool.size()));
+    }
+
+    /** 마피아의 밤 표적. 정할 수 없으면 -1(호출부에서 기본 선택). */
+    private int mafiaTargetSeat(List<Integer> targets) {
+        List<Integer> claimed = claimedPoliceSeats().stream().filter(targets::contains).toList();
+        if (claimed.isEmpty()) return -1;
+        int cop = defaultPick(claimed);
+        long claimedAt = policeClaimRound(cop);
+        List<Integer> others = targets.stream().filter(i -> i != cop).toList();
+        if (others.isEmpty()) return cop;
+
+        // 어젯밤 아무도 안 죽었다 = 의사가 막았을 공산이 크다. 의사는 같은 사람을 연속으로
+        // 못 지키니 오늘은 경찰이 무방비다. 확실할 때 친다.
+        if (lastNightPeaceful) return cop;
+
+        // 커밍아웃 직후 첫 밤은 의사가 지키러 갈 확률이 가장 높다. 절반쯤은 흘려보내고
+        // 정보를 낸 다른 사람을 지운다(경찰만 노리면 의사가 매번 맞힌다).
+        if (claimedAt == round && rnd(100) < 45) return defaultPick(others);
+
+        // 그 뒤로는 대체로 경찰을 노리되 가끔 섞는다.
+        return rnd(100) < 25 ? defaultPick(others) : cop;
+    }
+
+    /** 의사의 보호 대상. 정할 수 없으면 -1(호출부에서 기본 선택). */
+    private int doctorTargetSeat(List<Integer> pool, int mySeat) {
+        List<Integer> claimed = claimedPoliceSeats().stream().filter(pool::contains).toList();
+        if (claimed.isEmpty()) return -1;
+        int cop = claimed.get(rnd(claimed.size()));
+        long claimedAt = policeClaimRound(cop);
+
+        // 커밍아웃한 그날 밤은 거의 확실히 지킨다.
+        if (claimedAt == round) return rnd(100) < 85 ? cop : altProtect(pool, mySeat, cop);
+
+        // 지난밤 막아냈다면 마피아도 눈치채고 딴 데를 칠 수 있다. 절반은 다른 곳을 본다.
+        if (lastNightPeaceful) return rnd(100) < 50 ? cop : altProtect(pool, mySeat, cop);
+
+        return rnd(100) < 65 ? cop : altProtect(pool, mySeat, cop);
+    }
+
+    /**
+     * 경찰 말고 지킬 만한 사람.
+     *
+     * <p>마피아가 지우고 싶은 건 정보를 많이 낸 사람이다. 오늘 말을 가장 많이 한 사람을
+     * 고르고, 그럴 사람이 없으면 자기 자신을 지킨다(의사도 표적이다).
+     */
+    private int altProtect(List<Integer> pool, int mySeat, int exclude) {
+        Map<Integer, Integer> spoke = new HashMap<>();
+        for (ChatMsg c : chat)
+            if (c.round() == round && c.seat() != exclude && pool.contains(c.seat()))
+                spoke.merge(c.seat(), 1, Integer::sum);
+        return spoke.entrySet().stream()
+                .max(Map.Entry.comparingByValue())
+                .map(Map.Entry::getKey)
+                .orElse(pool.contains(mySeat) ? mySeat : pool.get(rnd(pool.size())));
     }
 
     // --- 토론: LLM 채팅(비동기, 페이싱) ---
@@ -1347,6 +1422,7 @@ public class MafiaService implements RoomGame {
         configMafiaCount = 0;
         revealOnDeath = true;
         copTarget = doctorTarget = lastDoctorTarget = -1;
+        lastNightPeaceful = false;
         copLog.clear();
         copFindings.clear();
         skipVotes.clear();

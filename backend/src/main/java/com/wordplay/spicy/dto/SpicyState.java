@@ -23,6 +23,7 @@ public record SpicyState(
         List<CardView> myHand,        // 내 손패 — 나만
         int turnSeat,
         String turnName,
+        int nextSeat,               // 도전이 없을 때 다음 차례(없으면 -1)
         boolean myTurn,
         int mySeat,
         int pileSize,                 // 현재 더미에 쌓인 장수
@@ -54,7 +55,7 @@ public record SpicyState(
 
     public static SpicyState notFound(long now) {
         return new SpicyState("NONE", null, 8, false, 0, 0, false, false, 0, 0, false, false, List.of(), List.of(),
-                -1, null, false, -1, 0, -1, -1, -1, List.of(), List.of(), false, null, 0, 0,
+                -1, null, -1, false, -1, 0, -1, -1, -1, List.of(), List.of(), false, null, 0, 0,
                 null, List.of(), -1, null, 0, now);
     }
 }
