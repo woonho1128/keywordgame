@@ -66,8 +66,15 @@ class MafiaChatIntentTest {
 
         String first = bot.prompts.get(0);
         assertThat(first).contains("[이번 발언에서 할 일]");
-        // 역할마다 문구는 달라도(마피아/경찰/시민) 첫 턴은 다 "정리부터" 하라고 시킨다.
-        assertThat(first).contains("정리");
+        // 첫 발언 지시는 봇마다 다르다(밤 결과 해석 / 질문 / 진행 제안 / 자기 이야기).
+        // 어느 갈래로 나오든 "근거 없으니 지켜보자"로 때우라고 시키지는 않는다.
+        assertThat(first).satisfiesAnyOf(
+                t -> assertThat(t).contains("네 해석"),
+                t -> assertThat(t).contains("질문을 던져라"),
+                t -> assertThat(t).contains("진행할지 제안"),
+                t -> assertThat(t).contains("네 이야기부터"),
+                t -> assertThat(t).contains("시민인 척"),      // 마피아
+                t -> assertThat(t).contains("조사 결과"));     // 경찰
     }
 
     @Test

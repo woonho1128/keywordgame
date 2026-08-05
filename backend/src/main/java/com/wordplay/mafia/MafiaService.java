@@ -462,6 +462,9 @@ public class MafiaService implements RoomGame {
                 sb.append(players.get(en.getKey()).nick).append(" ").append(en.getValue()).append("표");
             }
             history.add(round + "일차 🗳️ 집계: " + sb);
+            // 개인별 기록도 남긴다. 봇 프롬프트가 이걸 근거로 쓰므로 사람도 같이 봐야 공정하다.
+            String detail = voteDetailLine(votes);
+            if (!detail.isEmpty()) history.add(round + "일차 🗳️ 투표: " + detail);
         }
         int max = 0, top = -1; boolean tie = false;
         for (var e : tally.entrySet()) {
@@ -1055,26 +1058,33 @@ public class MafiaService implements RoomGame {
         List<Long> rounds = new ArrayList<>(voteHistory.keySet());
         for (int i = Math.max(0, rounds.size() - 2); i < rounds.size(); i++) {
             long r = rounds.get(i);
-            Map<Integer, Integer> v = voteHistory.get(r);
-            if (v == null || v.isEmpty()) continue;
-            // 대상별로 묶어야 "누구를 같이 몰았나"가 한눈에 보인다.
-            Map<Integer, List<String>> byTarget = new LinkedHashMap<>();
-            List<String> abstained = new ArrayList<>();
-            for (var e : v.entrySet()) {
-                if (e.getKey() >= players.size()) continue;
-                String voter = players.get(e.getKey()).nick;
-                if (e.getValue() == null || e.getValue() < 0) abstained.add(voter);
-                else byTarget.computeIfAbsent(e.getValue(), k -> new ArrayList<>()).add(voter);
-            }
-            sb.append("\n- ").append(r).append("일차: ");
-            List<String> parts = new ArrayList<>();
-            for (var e : byTarget.entrySet())
-                if (e.getKey() < players.size())
-                    parts.add(players.get(e.getKey()).nick + " ← " + String.join(", ", e.getValue()));
-            if (!abstained.isEmpty()) parts.add("기권: " + String.join(", ", abstained));
-            sb.append(String.join(" / ", parts));
+            String line = voteDetailLine(voteHistory.get(r));
+            if (!line.isEmpty()) sb.append("\n- ").append(r).append("일차: ").append(line);
         }
         return sb.toString();
+    }
+
+    /**
+     * "봄이 ← 해달, 우노 / 기권: 꾸릉" 형태의 개인별 투표 한 줄.
+     *
+     * <p>대상별로 묶어야 "누구를 같이 몰았나"가 한눈에 보인다. 봇 프롬프트와 진행
+     * 이력이 같은 문장을 쓰므로 사람과 봇이 정확히 같은 것을 본다.
+     */
+    private String voteDetailLine(Map<Integer, Integer> v) {
+        if (v == null || v.isEmpty()) return "";
+        Map<Integer, List<String>> byTarget = new LinkedHashMap<>();
+        List<String> abstained = new ArrayList<>();
+        for (var e : v.entrySet()) {
+            if (e.getKey() == null || e.getKey() < 0 || e.getKey() >= players.size()) continue;
+            String voter = players.get(e.getKey()).nick;
+            if (e.getValue() == null || e.getValue() < 0 || e.getValue() >= players.size()) abstained.add(voter);
+            else byTarget.computeIfAbsent(e.getValue(), k -> new ArrayList<>()).add(voter);
+        }
+        List<String> parts = new ArrayList<>();
+        for (var e : byTarget.entrySet())
+            parts.add(players.get(e.getKey()).nick + " ← " + String.join(", ", e.getValue()));
+        if (!abstained.isEmpty()) parts.add("기권: " + String.join(", ", abstained));
+        return String.join(" / ", parts);
     }
 
     /** 이 봇에게만 해당하는 것: 내가 전에 한 말, 나를 지목한 사람. */
@@ -1404,10 +1414,16 @@ public class MafiaService implements RoomGame {
         if (joined && me.role == Role.POLICE) myCopLog = List.copyOf(copLog);
 
         List<VoteView> tally = new ArrayList<>();
+        // 공개 투표: 집계뿐 아니라 누가 누구를 찍었는지도 모두에게 보여준다.
+        // 봇 프롬프트에는 개인별 기록이 들어가므로, 사람에게 숨기면 봇만 아는 정보가 된다.
+        List<MafiaStateResponse.VoteCast> casts = new ArrayList<>();
         if (phase == Phase.VOTE || phase == Phase.EXECUTE) {
             Map<Integer, Integer> counts = new LinkedHashMap<>();
             for (int t : votes.values()) if (t != -1) counts.merge(t, 1, Integer::sum);
             counts.forEach((k, v) -> tally.add(new VoteView(k + 1, v)));
+            votes.forEach((voter, target) ->
+                    casts.add(new MafiaStateResponse.VoteCast(voter + 1, target == null || target < 0 ? -1 : target + 1)));
+            casts.sort((a, b) -> a.voterSeat() - b.voterSeat());
         }
 
         long mafiaAlive = players.stream().filter(p -> p.alive && p.role == Role.MAFIA).count();
@@ -1435,6 +1451,7 @@ public class MafiaService implements RoomGame {
                 (phase == Phase.MORNING) ? seat1(nightDeadSeat) : -1,
                 (phase == Phase.EXECUTE || ended) ? seat1(executedSeat) : -1,
                 tally,
+                casts,
                 (phase == Phase.DEFENSE || phase == Phase.FINAL_VOTE) ? seat1(accusedSeat) : -1,
                 (int) finalVotes.values().stream().filter(Boolean::booleanValue).count(),
                 (int) finalVotes.values().stream().filter(v -> !v).count(),

@@ -31,9 +31,11 @@ class SpicyGameTest {
         }
         for (SpicyGame.P q : g.playersList()) {
             for (SpicyGame.Card c : q.hand) {
-                if (c.spice() == spice && c.number() == number) {
-                    q.hand.remove(c); if (q != p) p.hand.add(c); return c;
-                }
+                if (c.spice() != spice || c.number() != number) continue;
+                // 이미 대상이 쥐고 있으면 그대로 둔다. 예전엔 빼고 다시 안 넣어서
+                // 셔플 결과에 따라 간헐적으로 "가지고 있지 않은 카드" 오류가 났다.
+                if (q == p) return c;
+                q.hand.remove(c); p.hand.add(c); return c;
             }
         }
         throw new IllegalStateException("어디에도 없음: " + spice + "/" + number);

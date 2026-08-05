@@ -33,6 +33,7 @@ type MafiaState = {
   nightDeadSeat: number;
   executedSeat: number;
   voteTally: VoteView[];
+  voteCasts: { voterSeat: number; targetSeat: number }[];
   accusedSeat: number;
   killVotes: number;
   spareVotes: number;
@@ -906,6 +907,24 @@ export default function MafiaPage() {
                   <span className="font-bold">{v.count}표</span>
                 </div>
               ))}
+          </div>
+        )}
+        {/*
+          공개 투표 — 누가 누구를 찍었는지 모두에게 보여준다.
+          AI 봇은 이 기록을 근거로 추리하므로, 사람에게 숨기면 봇만 아는 정보가 된다.
+        */}
+        {st!.voteCasts && st!.voteCasts.length > 0 && (
+          <div className="rounded-lg border border-gray-200 p-3 space-y-1">
+            <p className="text-xs font-bold text-gray-400">누가 누구를 찍었나</p>
+            {st!.voteCasts.map((c) => (
+              <div key={c.voterSeat} className="flex items-center gap-1.5 text-sm">
+                <span className={c.voterSeat === st!.seat ? 'font-bold text-hit' : ''}>{nickOf(c.voterSeat)}</span>
+                <span className="text-gray-300">▸</span>
+                <span className={c.targetSeat < 0 ? 'text-gray-400' : 'font-medium'}>
+                  {c.targetSeat < 0 ? '기권' : nickOf(c.targetSeat)}
+                </span>
+              </div>
+            ))}
           </div>
         )}
       </div>

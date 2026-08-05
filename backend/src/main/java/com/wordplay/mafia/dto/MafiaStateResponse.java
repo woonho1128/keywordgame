@@ -40,6 +40,7 @@ public record MafiaStateResponse(
         int nightDeadSeat,        // 밤 사망 좌석, 없으면 -1
         int executedSeat,         // 처형 좌석, 없으면 -1
         List<VoteView> voteTally, // 투표 집계
+        List<VoteCast> voteCasts, // 누가 누구를 찍었는지(공개 투표). 투표/처형 단계에서만
         int accusedSeat,          // 재판대에 오른 좌석(1-based, 없으면 -1)
         int killVotes,            // 사형 표 수
         int spareVotes,           // 생존 표 수
@@ -58,6 +59,8 @@ public record MafiaStateResponse(
     /** copResult: 경찰 본인에게만, 내가 조사한 사람이면 MAFIA/CITIZEN. bot: AI 봇 여부. */
     public record PlayerView(int seat, String nick, boolean alive, String role, String copResult, boolean bot) {}
     public record VoteView(int targetSeat, int count) {}
+    /** 공개 투표 한 건. targetSeat=-1은 기권. 좌석은 1-based. */
+    public record VoteCast(int voterSeat, int targetSeat) {}
     /** 토론 채팅 한 줄. bot: AI 봇 발언 여부. */
     public record ChatView(int seat, String nick, String text, boolean bot, long round) {}
 
@@ -65,6 +68,6 @@ public record MafiaStateResponse(
         return new MafiaStateResponse(
                 "NOT_STARTED", 0, 0, now, false, false, 0, null, null, null, false,
                 List.of(), "NONE", List.of(), -1, List.of(), List.of(),
-                null, -1, -1, List.of(), -1, 0, 0, -1, null, 0, 0, 0, List.of(), 0, false, List.of(), List.of(), List.of());
+                null, -1, -1, List.of(), List.of(), -1, 0, 0, -1, null, 0, 0, 0, List.of(), 0, false, List.of(), List.of(), List.of());
     }
 }
