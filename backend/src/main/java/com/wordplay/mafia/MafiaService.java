@@ -282,9 +282,13 @@ public class MafiaService implements RoomGame {
     public synchronized MafiaStateResponse sendChat(String clientId, String text) {
         tick();
         Player me = requirePlayer(clientId);
-        if (phase != Phase.MORNING && phase != Phase.DISCUSS && phase != Phase.VOTE)
+        boolean dayChat = phase == Phase.MORNING || phase == Phase.DISCUSS || phase == Phase.VOTE;
+        if (!dayChat && phase != Phase.DEFENSE)
             throw new BusinessException(ErrorCode.INVALID_INPUT, "지금은 대화할 수 없습니다");
         if (!me.alive) throw new BusinessException(ErrorCode.INVALID_INPUT, "사망한 플레이어는 대화할 수 없습니다");
+        // 최후변론은 재판대에 오른 사람만 말한다. 나머지는 듣기만.
+        if (phase == Phase.DEFENSE && seatOf(me) != accusedSeat)
+            throw new BusinessException(ErrorCode.INVALID_INPUT, "최후변론은 지목된 사람만 할 수 있습니다");
         String t = cleanChat(text);
         if (t.isEmpty()) return buildResponse(clientId);
         chat.add(new ChatMsg(seatOf(me), me.nick, t, false, round, System.currentTimeMillis()));
@@ -357,7 +361,7 @@ public class MafiaService implements RoomGame {
             case DISCUSS -> { votes.clear(); startPhase(Phase.VOTE); initBotVote(); }
             case VOTE -> {
                 resolveNomination();
-                if (accusedSeat >= 0) { finalVotes.clear(); startPhase(Phase.DEFENSE); }
+                if (accusedSeat >= 0) { finalVotes.clear(); startPhase(Phase.DEFENSE); initBotDefense(); }
                 else { executedSeat = -1; startPhase(Phase.EXECUTE); }
             }
             case DEFENSE -> { finalVotes.clear(); startPhase(Phase.FINAL_VOTE); initBotFinalVote(); }
@@ -518,6 +522,7 @@ public class MafiaService implements RoomGame {
             case NIGHT -> driveBotNight(now);
             case DISCUSS -> driveBotDiscuss(now);
             case VOTE -> driveBotVote(now);
+            case DEFENSE -> driveBotDefense(now);
             case FINAL_VOTE -> driveBotFinalVote(now);
             default -> { }
         }
@@ -575,6 +580,40 @@ public class MafiaService implements RoomGame {
         String t = out.replaceAll("\\s+", "");
         if (t.contains("생존") || t.contains("살린") || t.contains("살려")) return false;
         return true;
+    }
+
+    // --- 최후변론: 재판대에 오른 봇이 스스로 변론한다 ---
+    private long botDefenseAt = Long.MAX_VALUE;
+    private boolean botDefenseInFlight = false;
+
+    private void initBotDefense() {
+        botDefenseAt = Long.MAX_VALUE;
+        botDefenseInFlight = false;
+        if (accusedSeat >= 0 && accusedSeat < players.size() && players.get(accusedSeat).ai)
+            botDefenseAt = System.currentTimeMillis() + 1500 + rnd(2000);
+    }
+
+    private void driveBotDefense(long now) {
+        if (accusedSeat < 0 || accusedSeat >= players.size()) return;
+        if (botDefenseInFlight || now < botDefenseAt) return;
+        Player p = players.get(accusedSeat);
+        if (!p.ai || !p.alive) return;
+        botDefenseAt = Long.MAX_VALUE;      // 변론은 한 번뿐
+        botDefenseInFlight = true;
+        long r = round;
+        int seat = accusedSeat;
+        String user = buildDefensePrompt(p);
+        bot.submit(() -> applyBotDefense(seat, r, bot.chat(user)));
+    }
+
+    synchronized void applyBotDefense(int seat, long r, String text) {
+        botDefenseInFlight = false;
+        if (phase != Phase.DEFENSE || r != round || seat != accusedSeat) return;
+        if (seat < 0 || seat >= players.size()) return;
+        Player p = players.get(seat);
+        if (!p.alive || !p.ai) return;
+        String t = cleanBotChat(text);
+        if (!t.isEmpty()) chat.add(new ChatMsg(seat, p.nick, t, true, round, System.currentTimeMillis()));
     }
 
     private void initBotFinalVote() {
@@ -816,6 +855,22 @@ public class MafiaService implements RoomGame {
                 + " 분위기가 쏠린다는 이유만으로 따라 찍지 마라."
                 + " 추리를 열심히 하던 사람이 갑자기 몰리고 있다면 그 몰이를 시작한 쪽을 의심해라."
                 + "\n누굴 처형할지 위 번호 중 하나만 숫자로 답하라. 기권은 0. 다른 말 없이 숫자만 출력.";
+    }
+
+    /** 최후변론. 죽기 직전이라 억울함만 호소하지 말고 근거를 대게 시킨다. */
+    private String buildDefensePrompt(Player p) {
+        List<String> accusers = new ArrayList<>();
+        for (var e : votes.entrySet())
+            if (e.getValue() != null && e.getValue() == accusedSeat && e.getKey() < players.size())
+                accusers.add(players.get(e.getKey()).nick);
+        return chatContext(p)
+                + "\n\n[너의 정보] 너의 이름은 '" + p.nick + "'다. " + rolePrivate(p)
+                + (p.persona != null ? "\n[너의 성격] " + p.persona : "")
+                + "\n\n[최후변론] 너는 최다 득표로 재판대에 올랐다. 지금 한 마디 못 하면 처형된다."
+                + (accusers.isEmpty() ? "" : " 너에게 투표한 사람: " + String.join(", ", accusers) + ".")
+                + "\n억울하다는 말만 반복하지 마라. 네가 마피아가 아닌 이유를 하나라도 구체적으로 대거나,"
+                + " 지금 진짜 의심스러운 사람을 근거와 함께 지목해라."
+                + "\n한 줄로 변론해라. 설명·따옴표 없이 대사만.";
     }
 
     /** 사형/생존 최종 판단(시민 봇만 씀. 마피아는 정체를 알아서 규칙으로 정한다). */
@@ -1199,9 +1254,9 @@ public class MafiaService implements RoomGame {
         );
     }
 
-    /** 최근 채팅(최대 60줄) → 뷰. */
+    /** 최근 채팅(최대 60줄) → 뷰. 게임이 끝나면 전체 기록을 준다(다시보기용). */
     private List<ChatView> recentChat() {
-        int from = Math.max(0, chat.size() - 60);
+        int from = phase == Phase.ENDED ? 0 : Math.max(0, chat.size() - 60);
         List<ChatView> out = new ArrayList<>();
         for (int i = from; i < chat.size(); i++) {
             ChatMsg c = chat.get(i);

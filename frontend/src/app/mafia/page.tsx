@@ -722,13 +722,17 @@ export default function MafiaPage() {
   function chatBox() {
     if (!st) return null;
     const dayPhase = phase === 'MORNING' || phase === 'DISCUSS' || phase === 'VOTE';
-    if (!dayPhase) return null;
+    const defense = phase === 'DEFENSE';
+    if (!dayPhase && !defense) return null;
+    // 최후변론은 재판대에 오른 사람만 말한다.
+    const isAccused = st.seat === st.accusedSeat;
+    const canSpeak = st.joined && st.alive && (!defense || isAccused);
     const timed = st.phaseEndsAt > 0;
     const urgent = timed && remaining > 0 && remaining <= 10;
     return (
       <div className={`w-full mt-4 rounded-xl border flex flex-col overflow-hidden transition-all ${urgent ? 'border-red-400 ring-2 ring-red-300' : 'border-gray-200'}`}>
         <div className={`px-3 py-2 border-b text-sm font-bold flex items-center justify-between transition-colors ${urgent ? 'border-red-100 bg-red-50 text-red-600' : 'border-gray-100 text-gray-600'}`}>
-          <span>💬 토론 채팅</span>
+          <span>{defense ? '🎤 최후변론' : '💬 토론 채팅'}</span>
           {timed ? (
             <span className={`text-xs font-extrabold tabular-nums ${urgent ? 'text-red-500 animate-pulse' : 'text-gray-400'}`}>
               {urgent ? `⏰ ${remaining}초!` : `${remaining}s`}
@@ -751,14 +755,14 @@ export default function MafiaPage() {
             );
           })}
         </div>
-        {st.joined && st.alive ? (
+        {canSpeak ? (
           <div className="flex gap-2 p-2 border-t border-gray-100">
             <input
               value={chatText}
               onChange={(e) => setChatText(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && handleSendChat()}
               maxLength={200}
-              placeholder="메시지 입력..."
+              placeholder={defense ? '변론하세요...' : '메시지 입력...'}
               className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-hit"
             />
             <button onClick={handleSendChat} disabled={busy} className="bg-hit text-white text-sm font-bold px-4 rounded-lg disabled:opacity-50">
@@ -767,7 +771,9 @@ export default function MafiaPage() {
           </div>
         ) : (
           <div className="p-2 border-t border-gray-100 text-center text-xs text-gray-400">
-            {st.joined ? '사망하여 관전 중 — 대화할 수 없어요' : '관전 중'}
+            {defense && st.joined && st.alive
+              ? `${nickOf(st.accusedSeat)}님의 변론을 듣는 중이에요`
+              : st.joined ? '사망하여 관전 중 — 대화할 수 없어요' : '관전 중'}
           </div>
         )}
       </div>
@@ -975,6 +981,46 @@ export default function MafiaPage() {
     );
   }
 
+  /**
+   * 끝난 뒤 전체 대화 다시보기.
+   * 정체가 공개된 상태로 다시 읽으면 누가 언제 거짓말했는지가 보인다.
+   */
+  function chatReplay() {
+    if (!st || st.chat.length === 0) return null;
+    const roleOf = (seat: number) => st.players.find((p) => p.seat === seat)?.role;
+    const rounds = [...new Set(st.chat.map((c) => c.round))].sort((a, b) => a - b);
+    return (
+      <details className="rounded-xl border border-gray-200 text-left">
+        <summary className="px-4 py-3 text-sm font-bold cursor-pointer select-none">
+          💬 전체 대화 다시보기 <span className="font-normal text-gray-400">({st.chat.length}줄)</span>
+        </summary>
+        <div className="px-4 pb-4 max-h-80 overflow-y-auto space-y-3">
+          {rounds.map((r) => (
+            <div key={r} className="space-y-1">
+              <p className="text-[11px] font-bold text-gray-400 sticky top-0 bg-white py-1">{r}일차</p>
+              {st.chat.filter((c) => c.round === r).map((c, i) => {
+                const role = roleOf(c.seat);
+                return (
+                  <div key={i} className="text-sm leading-snug">
+                    <span className={`font-bold ${role === 'MAFIA' ? 'text-red-500' : 'text-gray-700'}`}>
+                      {c.nick}
+                    </span>
+                    {role && (
+                      <span className={`ml-1 text-[10px] ${ROLE_META[role]?.color ?? ''}`}>
+                        {ROLE_META[role]?.emoji}
+                      </span>
+                    )}
+                    <span className="text-gray-700"> {c.text}</span>
+                  </div>
+                );
+              })}
+            </div>
+          ))}
+        </div>
+      </details>
+    );
+  }
+
   function renderEnded() {
     const win = st!.winner === 'MAFIA';
     return (
@@ -1001,6 +1047,8 @@ export default function MafiaPage() {
             })}
           </div>
         </div>
+        {chatReplay()}
+
         <button
           onClick={() => {
             setShowCreate(true);
