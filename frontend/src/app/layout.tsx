@@ -38,6 +38,13 @@ export default function RootLayout({
           </noscript>
         )}
         {children}
+        {/*
+          홈(좌하단)·건의하기(하단중앙)·채팅(우하단) 버튼이 화면 아래에 떠 있어서
+          페이지 맨 끝 내용을 덮는다(진행 로그가 안 보인다는 건의). 문서 끝에 버튼
+          높이만큼 여백을 둬서 끝까지 스크롤해도 내용이 버튼 밑에 깔리지 않게 한다.
+          페이지마다 main의 padding이 제각각이라 전역 CSS로는 덮이지 않아 여백을 쓴다.
+        */}
+        <div aria-hidden className="h-20" />
         <HomeButton />
         <FeedbackButton />
       </body>
