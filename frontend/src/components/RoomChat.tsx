@@ -44,6 +44,86 @@ export default function RoomChat({ game, roomCode, clientId, nick }: {
 
   useEffect(() => { if (open && listRef.current) listRef.current.scrollTop = listRef.current.scrollHeight; }, [msgs, open]);
 
+  /*
+   * 플로팅 버튼 위치 이동.
+   * 홈·건의하기 버튼과 겹쳐 화면 아래쪽 내용을 가린다는 지적이 있어, 길게 눌러
+   * 원하는 곳으로 옮길 수 있게 했다. 위치는 기기에 저장되어 다음에도 유지된다.
+   */
+  const LONG_PRESS_MS = 350;
+  const [pos, setPos] = useState<{ x: number; y: number } | null>(null);
+  const [dragging, setDragging] = useState(false);
+  const pressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const movedRef = useRef(false);
+  const dragRef = useRef(false);
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem('room_chat_btn_pos');
+      if (raw) setPos(JSON.parse(raw));
+    } catch {}
+  }, []);
+
+  // 화면 밖으로 나가지 않게 가둔다(기기 회전·창 크기 변경 대비).
+  const clamp = (x: number, y: number) => ({
+    x: Math.min(Math.max(x, 8), Math.max(8, window.innerWidth - 64)),
+    y: Math.min(Math.max(y, 8), Math.max(8, window.innerHeight - 64)),
+  });
+
+  useEffect(() => {
+    if (!pos) return;
+    const onResize = () => setPos((p) => (p ? clamp(p.x, p.y) : p));
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, [pos]);
+
+  const startPress = (clientX: number, clientY: number) => {
+    movedRef.current = false;
+    pressTimer.current = setTimeout(() => {
+      dragRef.current = true;
+      setDragging(true);
+      setPos(clamp(clientX - 28, clientY - 28));
+      if (navigator.vibrate) navigator.vibrate(30);   // 잡혔다는 신호
+    }, LONG_PRESS_MS);
+  };
+
+  const movePress = (clientX: number, clientY: number) => {
+    if (!dragRef.current) {
+      // 길게 누르기 전에 움직였으면 스크롤 의도다 — 드래그로 오인하지 않는다.
+      movedRef.current = true;
+      if (pressTimer.current) { clearTimeout(pressTimer.current); pressTimer.current = null; }
+      return;
+    }
+    setPos(clamp(clientX - 28, clientY - 28));
+  };
+
+  const endPress = () => {
+    if (pressTimer.current) { clearTimeout(pressTimer.current); pressTimer.current = null; }
+    if (dragRef.current) {
+      dragRef.current = false;
+      setDragging(false);
+      setPos((p) => {
+        if (p) { try { localStorage.setItem('room_chat_btn_pos', JSON.stringify(p)); } catch {} }
+        return p;
+      });
+      return;
+    }
+    if (!movedRef.current) setOpen(true);   // 짧게 눌렀으면 평소대로 열기
+  };
+
+  useEffect(() => {
+    if (!dragging) return;
+    const move = (e: PointerEvent) => { e.preventDefault(); movePress(e.clientX, e.clientY); };
+    const up = () => endPress();
+    window.addEventListener('pointermove', move, { passive: false });
+    window.addEventListener('pointerup', up);
+    window.addEventListener('pointercancel', up);
+    return () => {
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', up);
+      window.removeEventListener('pointercancel', up);
+    };
+  }, [dragging]);
+
   const send = async () => {
     const t = text.trim();
     if (!t) return;
@@ -59,10 +139,18 @@ export default function RoomChat({ game, roomCode, clientId, nick }: {
   return (
     <>
       {!open && (
-        <button onClick={() => setOpen(true)} aria-label="채팅 열기"
-          className="fixed bottom-4 right-4 z-40 w-14 h-14 rounded-full bg-hit text-white shadow-lg flex items-center justify-center text-2xl active:scale-95">
+        <button
+          aria-label="채팅 열기 (길게 누르면 위치 이동)"
+          title="길게 눌러 원하는 곳으로 옮길 수 있어요"
+          onPointerDown={(e) => { e.preventDefault(); startPress(e.clientX, e.clientY); }}
+          onPointerMove={(e) => { if (!dragging) movePress(e.clientX, e.clientY); }}
+          onPointerUp={() => { if (!dragging) endPress(); }}
+          onPointerLeave={() => { if (!dragging && pressTimer.current) { clearTimeout(pressTimer.current); pressTimer.current = null; } }}
+          style={pos ? { left: pos.x, top: pos.y, right: 'auto', bottom: 'auto', touchAction: 'none' } : { touchAction: 'none' }}
+          className={`fixed bottom-4 right-4 z-40 w-14 h-14 rounded-full bg-hit text-white shadow-lg flex items-center justify-center text-2xl
+            ${dragging ? 'scale-110 ring-4 ring-hit/30 cursor-grabbing' : 'active:scale-95'}`}>
           💬
-          {unread > 0 && <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[11px] font-bold rounded-full min-w-5 h-5 px-1 flex items-center justify-center">{unread > 99 ? '99+' : unread}</span>}
+          {unread > 0 && !dragging && <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[11px] font-bold rounded-full min-w-5 h-5 px-1 flex items-center justify-center">{unread > 99 ? '99+' : unread}</span>}
         </button>
       )}
 

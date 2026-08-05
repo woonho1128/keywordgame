@@ -391,6 +391,22 @@ export default function SpicyPage() {
         <div className="w-full grid grid-cols-1 lg:grid-cols-[1fr_320px] xl:grid-cols-[1fr_380px] gap-3 sm:gap-4 lg:gap-5 items-start lg:items-stretch lg:min-h-[calc(100vh-150px)]">
           {/* 왼쪽: 테이블 */}
           <div className="flex flex-col gap-3 sm:gap-4 min-w-0">
+            {/*
+              모바일 진행 로그. 원래는 화면 맨 아래에 있었는데 홈·건의하기·채팅
+              플로팅 버튼에 가려 읽을 수가 없었다(건의사항). 위로 올리고, 자리를
+              많이 먹지 않게 접어둔 채 최근 한 줄만 보여준다.
+            */}
+            {ss.log.length > 0 && (
+              <details className="lg:hidden rounded-xl border border-slate-200 bg-white overflow-hidden flex-none">
+                <summary className="px-3 py-2 text-xs cursor-pointer select-none flex items-center gap-2">
+                  <span className="font-extrabold text-slate-400 flex-none">진행 로그</span>
+                  <span className="text-slate-500 truncate">{ss.log[ss.log.length - 1]}</span>
+                </summary>
+                <div className="px-3 pb-2.5 max-h-40 overflow-y-auto text-xs text-slate-500 space-y-1 border-t border-slate-100 pt-2">
+                  {[...ss.log].reverse().map((l, i) => <p key={ss.log.length - i}>{l}</p>)}
+                </div>
+              </details>
+            )}
             <div className="flex items-center justify-between text-xs sm:text-sm lg:text-base flex-none">
               <span className="px-3 py-1.5 lg:px-4 lg:py-2 rounded-full bg-rose-100 text-rose-800 font-bold">
                 🃏 덱 {ss.drawLeft} · 🏆 트로피 {ss.trophyLeft}/{ss.trophyTotal}
@@ -613,8 +629,9 @@ export default function SpicyPage() {
               })}
             </div>
 
+            {/* 데스크톱: 오른쪽 칸에 그대로. 모바일은 화면 맨 아래라 플로팅 버튼에 가려서 위로 옮겼다. */}
             {ss.log.length > 0 && (
-              <div className="rounded-2xl border-2 border-slate-200 bg-white overflow-hidden flex flex-col lg:flex-1 lg:min-h-0">
+              <div className="hidden lg:flex rounded-2xl border-2 border-slate-200 bg-white overflow-hidden flex-col lg:flex-1 lg:min-h-0">
                 <p className="px-3 py-2 lg:py-2.5 text-xs lg:text-sm font-extrabold text-slate-400 bg-slate-50 border-b border-slate-100 flex-none">진행 로그</p>
                 <div className="p-2.5 lg:p-3 max-h-48 lg:max-h-none lg:flex-1 overflow-y-auto text-xs lg:text-sm text-slate-500 space-y-1 lg:space-y-1.5">
                   {[...ss.log].reverse().map((l, i) => <p key={ss.log.length - i}>{l}</p>)}
