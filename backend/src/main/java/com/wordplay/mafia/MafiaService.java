@@ -1028,6 +1028,15 @@ public class MafiaService implements RoomGame {
             sb.append("\n[지금까지 밤·처형 결과]");
             for (int i = from; i < history.size(); i++) sb.append("\n- ").append(history.get(i));
         }
+        // 정체 공개 설정이 켜져 있으면 죽은 사람의 역할은 화면에 뜨는 공개 정보다.
+        // 이걸 안 넣어주면 사람은 "의사가 죽었다"고 말하는데 봇만 몰라서 근거를 캐묻는다.
+        if (revealOnDeath) {
+            List<String> dead = new ArrayList<>();
+            for (Player p : players)
+                if (!p.alive && p.role != null) dead.add(p.nick + "=" + roleKor(p.role));
+            if (!dead.isEmpty())
+                sb.append("\n[공개된 정체 — 이미 죽어서 모두가 아는 사실] ").append(String.join(", ", dead));
+        }
         String votesBlock = voteRecordBlock();
         if (!votesBlock.isEmpty()) sb.append("\n[지난 투표 기록 — 누가 누구를 찍었나]").append(votesBlock);
         if (viewer != null) sb.append(personalBlock(viewer));
@@ -1149,14 +1158,37 @@ public class MafiaService implements RoomGame {
                 };
             }
             default -> switch (turn) {
-                case 0 -> "아직 근거가 없다. 남을 지목하지 말고, 밤에 일어난 일이나 지난 투표 기록에서 "
-                        + "드러난 사실을 짚어 정리해라(누가 죽었는지, 누가 누구를 같이 찍었는지 등).";
-                case 1 -> "특정한 한 사람에게 구체적으로 질문해라(어젯밤 뭘 했는지, 왜 그 사람한테 투표했는지 등). "
-                        + "이번엔 의심한다는 말은 쓰지 마라.";
+                // 첫 발언에 전원 같은 지시를 주면 넷이 똑같이 "아직 근거가 없으니 일단 들어보자"만
+                // 말한다(특히 1일차는 공유할 사실 자체가 없다). 봇마다 다른 역할을 준다.
+                case 0 -> switch (botOrderIndex(mySeat) % 4) {
+                    case 0 -> "밤에 무슨 일이 있었는지 짚고, 그게 무슨 뜻인지 네 해석을 한 줄 붙여라. "
+                            + "'아직 근거가 없다' 같은 말로 끝내지 마라.";
+                    case 1 -> "특정한 한 사람의 이름을 불러서 질문을 던져라. 의심한다는 말은 쓰지 말고, "
+                            + "어젯밤 뭘 했는지나 무슨 생각인지 물어라.";
+                    case 2 -> "오늘 어떻게 진행할지 제안해라. 누구부터 이야기를 들을지, 무엇을 기준으로 "
+                            + "판단할지 정하자고 해라.";
+                    default -> "네 이야기부터 꺼내라. 어젯밤 네가 무슨 생각을 했는지 말하고 "
+                            + "다른 사람들도 각자 말해보라고 해라.";
+                };
+                case 1 -> botOrderIndex(mySeat) % 2 == 0
+                        ? "특정한 한 사람에게 구체적으로 질문해라(어젯밤 뭘 했는지, 왜 그 사람한테 "
+                          + "투표했는지 등). 이번엔 의심한다는 말은 쓰지 마라."
+                        : "앞사람들이 한 말 중 하나를 골라 반응해라. 동의하든 반박하든 누구의 어떤 말인지 "
+                          + "집어서 말해라. 새 화제를 꺼내지 마라.";
                 default -> "지금까지 나온 말과 투표 기록을 근거로 의견을 내라. 근거를 댈 수 없으면 "
                         + "지목하지 말고 판단을 미루거나 더 물어봐라.";
             };
         };
+    }
+
+    /** 살아있는 봇 중 몇 번째인지(좌석 순). 봇마다 다른 지시를 주기 위한 인덱스. */
+    private int botOrderIndex(int seat) {
+        int idx = 0;
+        for (int s : aliveSeats()) {
+            if (s == seat) return idx;
+            if (players.get(s).ai) idx++;
+        }
+        return idx;
     }
 
     /** 조사에서 마피아를 하나라도 찾았는지. */
@@ -1270,8 +1302,31 @@ public class MafiaService implements RoomGame {
             if (prev.equals(key)) return true;
             if (key.length() >= 8 && prev.length() >= 8
                     && key.substring(0, 8).equals(prev.substring(0, 8))) return true;
+            // 앞머리만 비교하면 "첫날 밤 사망이면 아직 단서가 없네"와 "어젯밤 봇2만 죽었고
+            // 기록이 아직 없네"를 다른 말로 본다. 실제로는 같은 말이다.
+            // 짧은 문장은 겹침 비율이 요동쳐서(예: "봇1 첫마디"/"봇2 첫마디" = 0.5) 제외한다.
+            if (key.length() >= MIN_OVERLAP_LEN && prev.length() >= MIN_OVERLAP_LEN
+                    && bigramOverlap(key, prev) >= 0.5) return true;
         }
         return false;
+    }
+
+    /** 겹침 비율로 중복을 판정할 최소 길이. 이보다 짧으면 비율이 불안정하다. */
+    private static final int MIN_OVERLAP_LEN = 12;
+
+    /** 두 문장의 글자 2-gram 겹침 비율(0~1). 표현만 다르고 내용이 같은 말을 잡는다. */
+    static double bigramOverlap(String a, String b) {
+        Set<String> sa = bigrams(a), sb = bigrams(b);
+        if (sa.isEmpty() || sb.isEmpty()) return 0;
+        int shared = 0;
+        for (String g : sa) if (sb.contains(g)) shared++;
+        return (double) shared / Math.min(sa.size(), sb.size());
+    }
+
+    private static Set<String> bigrams(String s) {
+        Set<String> out = new HashSet<>();
+        for (int i = 0; i + 2 <= s.length(); i++) out.add(s.substring(i, i + 2));
+        return out;
     }
     private static String normForCompare(String s) {
         return s == null ? "" : s.replaceAll("[^\\p{IsHangul}0-9]", "");
