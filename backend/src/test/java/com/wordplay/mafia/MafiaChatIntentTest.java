@@ -87,7 +87,7 @@ class MafiaChatIntentTest {
         assertThat(mafia).isNotEqualTo(citizen);
         assertThat(police).isNotEqualTo(citizen);
         assertThat(String.valueOf(mafia)).contains("동료 마피아는 절대 언급하지 말고");
-        assertThat(String.valueOf(police)).contains("조사 결과를 아직 꺼내지 마라");
+        assertThat(String.valueOf(police)).contains("조사 결과는 다음 발언에 꺼낸다");
     }
 
     /** 역할만 바꿔 끼우고 이번 턴 지시를 뽑아본다. */

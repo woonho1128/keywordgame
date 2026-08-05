@@ -647,6 +647,35 @@ public class MafiaService implements RoomGame {
         if (acted) maybeAdvanceNight();
     }
 
+    /**
+     * 공개 대화에서 스스로 경찰이라고 밝힌 좌석들(살아있는 사람만).
+     *
+     * <p>커밍아웃이 전략으로 성립하려면 밤에 실제로 결과가 따라야 한다 — 마피아는 노리고,
+     * 의사는 지킨다. 근거는 모두가 읽은 공개 채팅이라 정보 격리를 깨지 않는다.
+     */
+    private static final java.util.regex.Pattern POLICE_CLAIM = java.util.regex.Pattern.compile(
+            "(내가|나는|난|제가|저는|본인)\\s*[^.!?]{0,6}경찰"   // "내가 경찰인데", "난 경찰이야"
+                    + "|^경찰(입니다|이다|임|이야)"                // 문장을 경찰 선언으로 시작
+                    + "|경찰\\s*커밍아웃");
+    /** "난 경찰 아니야"처럼 부정하는 말은 커밍아웃이 아니다. */
+    private static final java.util.regex.Pattern POLICE_DENY = java.util.regex.Pattern.compile(
+            "경찰\\s*(아니|아님|이 아)");
+
+    static boolean isPoliceClaim(String text) {
+        if (text == null) return false;
+        return POLICE_CLAIM.matcher(text).find() && !POLICE_DENY.matcher(text).find();
+    }
+
+    private List<Integer> claimedPoliceSeats() {
+        List<Integer> out = new ArrayList<>();
+        for (ChatMsg c : chat) {
+            if (c.seat() < 0 || c.seat() >= players.size()) continue;
+            if (out.contains(c.seat()) || !players.get(c.seat()).alive) continue;
+            if (isPoliceClaim(c.text())) out.add(c.seat());
+        }
+        return out;
+    }
+
     /** 역할별 밤 대상 선택(생존자 중). 없으면 -1. */
     private int chooseNightTarget(Player p) {
         List<Integer> alive = aliveSeats();
@@ -656,6 +685,10 @@ public class MafiaService implements RoomGame {
                 List<Integer> targets = new ArrayList<>();
                 for (int i : alive) if (players.get(i).role != Role.MAFIA) targets.add(i);
                 if (targets.isEmpty()) return -1;
+                // 경찰이라고 밝힌 사람이 있으면 그쪽부터 지운다(동료가 위장 커밍아웃한 건 제외).
+                List<Integer> claimed = claimedPoliceSeats().stream().filter(targets::contains).toList();
+                if (!claimed.isEmpty())
+                    return claimed.get((int) Math.floorMod(round * 2654435761L, (long) claimed.size()));
                 // 모든 마피아 봇이 같은 대상을 고르도록 라운드 기반 결정.
                 return targets.get((int) Math.floorMod(round * 2654435761L, (long) targets.size()));
             }
@@ -667,6 +700,10 @@ public class MafiaService implements RoomGame {
                 return pool.isEmpty() ? -1 : pool.get(rnd(pool.size()));
             }
             case DOCTOR -> {
+                // 커밍아웃한 경찰이 그날 밤 1순위 표적이다. 지켜줘야 커밍아웃이 도박이 아니게 된다.
+                List<Integer> claimed = claimedPoliceSeats().stream()
+                        .filter(i -> i != lastDoctorTarget).toList();
+                if (!claimed.isEmpty()) return claimed.get(rnd(claimed.size()));
                 List<Integer> pool = alive.stream().filter(i -> i != lastDoctorTarget).toList();
                 return pool.isEmpty() ? -1 : pool.get(rnd(pool.size()));
             }
@@ -870,6 +907,10 @@ public class MafiaService implements RoomGame {
                 + (accusers.isEmpty() ? "" : " 너에게 투표한 사람: " + String.join(", ", accusers) + ".")
                 + "\n억울하다는 말만 반복하지 마라. 네가 마피아가 아닌 이유를 하나라도 구체적으로 대거나,"
                 + " 지금 진짜 의심스러운 사람을 근거와 함께 지목해라."
+                + (p.role == Role.POLICE && foundMafia()
+                        ? " 너는 경찰이고 조사 결과가 있다. 여기서 죽으면 정보가 통째로 사라지니"
+                          + " 지금 경찰이라고 밝히고 조사 결과를 말해라."
+                        : "")
                 + "\n한 줄로 변론해라. 설명·따옴표 없이 대사만.";
     }
 
@@ -1016,16 +1057,19 @@ public class MafiaService implements RoomGame {
                         + "흔들어라. 근거는 실제 발언·투표에서 가져와야 티가 안 난다.";
             };
             case POLICE -> {
-                boolean hasFinding = copFindings.values().stream().anyMatch(Boolean::booleanValue);
+                boolean hasFinding = foundMafia();
+                boolean alreadyOut = claimedPoliceSeats().contains(mySeat);
+                if (hasFinding && !alreadyOut && (turn >= 1 || askedForPolice()))
+                    yield "조사에서 마피아를 찾았다. 지금 '내가 경찰이다'라고 밝히고 그게 누구인지 "
+                            + "정확히 말해라. 흘리듯 말하면 아무도 안 믿고 그 사람은 살아남는다. "
+                            + "밤에 노려지는 건 감수해라 — 정보를 못 쓰고 죽는 게 더 나쁘다.";
                 yield switch (turn) {
-                    case 0 -> "조사 결과를 아직 꺼내지 마라. 먼저 밤 결과와 투표 기록을 정리해서 "
-                            + "네가 판을 읽고 있다는 인상만 남겨라.";
-                    case 1 -> hasFinding
-                            ? "조사에서 마피아를 찾았다. '경찰이다'라고 밝히지는 말고, 그 사람의 발언이나 "
-                              + "투표를 걸고 넘어져서 자연스럽게 의심이 쏠리게 만들어라."
-                            : "아직 조사에서 나온 게 없다. 특정인에게 구체적으로 질문해서 정보를 더 캐라.";
-                    default -> hasFinding
-                            ? "네가 아는 사실 쪽으로 표를 모아라. 다만 어떻게 아는지는 끝까지 흐려라."
+                    case 0 -> "먼저 밤 결과와 투표 기록을 정리해서 네가 판을 읽고 있다는 인상을 남겨라. "
+                            + "조사 결과는 다음 발언에 꺼낸다.";
+                    case 1 -> "아직 조사에서 나온 게 없다. 특정인에게 구체적으로 질문해서 정보를 더 캐라.";
+                    default -> alreadyOut
+                            ? "이미 경찰이라고 밝혔다. 말을 바꾸지 말고, 네가 지목한 사람에게 표가 "
+                              + "모이도록 근거를 한 번 더 대라."
                             : "지금까지 나온 말 중 앞뒤가 안 맞는 지점을 짚어라.";
                 };
             }
@@ -1038,6 +1082,26 @@ public class MafiaService implements RoomGame {
                         + "지목하지 말고 판단을 미루거나 더 물어봐라.";
             };
         };
+    }
+
+    /** 조사에서 마피아를 하나라도 찾았는지. */
+    private boolean foundMafia() {
+        return copFindings.values().stream().anyMatch(Boolean::booleanValue);
+    }
+
+    /**
+     * 오늘 대화에서 누가 "경찰 나와달라"고 요청했는지.
+     *
+     * <p>사람이 대놓고 요청했는데 봇 경찰이 계속 침묵하면 게임이 안 굴러간다는 지적이 있었다.
+     * 요청을 감지해 커밍아웃 판단을 앞당긴다.
+     */
+    private static final java.util.regex.Pattern POLICE_CALL = java.util.regex.Pattern.compile(
+            "경찰[^.!?]{0,10}(나와|나오|밝혀|밝히|커밍아웃|말해|알려)|(커밍아웃)[^.!?]{0,6}(해|하자|좀)");
+
+    private boolean askedForPolice() {
+        for (ChatMsg c : chat)
+            if (c.round() == round && POLICE_CALL.matcher(c.text()).find()) return true;
+        return false;
     }
 
     /** 이번 라운드에서 나 아닌 사람이 마지막으로 한 발언자 닉네임. 없으면 null. */
@@ -1067,7 +1131,11 @@ public class MafiaService implements RoomGame {
                     found.add(players.get(e.getKey()).nick + "은(는) " + (e.getValue() ? "마피아" : "시민"));
                 String info = found.isEmpty() ? "아직 조사 결과가 없다."
                         : "너의 밤 조사 결과: " + String.join(", ", found) + ". 이 사실을 근거로 삼아라.";
-                return "너의 정체는 [경찰]. " + info + " 단, 대놓고 '나 경찰'이라 밝히면 밤에 죽으니 조심히 몰아가라.";
+                String hint = foundMafia() && !claimedPoliceSeats().contains(seatOf(p))
+                        ? " 마피아를 찾았다. 밝히면 밤에 노려지지만 의사가 지켜줄 수도 있고, 숨기다 죽으면"
+                          + " 정보가 통째로 사라진다. 지금 밝힐지 판단해라."
+                        : " 밝힐 정보가 없을 때는 굳이 정체를 드러내지 마라.";
+                return "너의 정체는 [경찰]. " + info + hint;
             }
             case DOCTOR -> {
                 return "너의 정체는 [의사]. 정체를 숨기고 일반 시민처럼 추리에 참여하라.";
