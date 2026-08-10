@@ -9,10 +9,10 @@ const GAME_SLUG: Record<string, string> = {
   mafia: 'mafia', 'mafia-jobs': 'jobmafia', avalon: 'avalon', codenames: 'codenames',
   rummikub: 'rummikub', halligalli: 'halligalli', lexio: 'lexio', bingo: 'bingo',
   gartic: 'gartic', othello: 'othello', coup: 'coup', omok: 'omok', horserace: 'horserace',
-  sixnimmt: 'sixnimmt', 'tetris-battle': 'tetris-battle', yacht: 'yacht', mojo: 'mojo', yut: 'yut', monopoly: 'monopoly', sherlock: 'sherlock', ciao: 'ciao', spicy: 'spicy',
+  sixnimmt: 'sixnimmt', 'tetris-battle': 'tetris-battle', yacht: 'yacht', mojo: 'mojo', yut: 'yut', monopoly: 'monopoly', sherlock: 'sherlock', ciao: 'ciao', spicy: 'spicy', snakes: 'snakes',
 };
 // 엔트리형(방을 localStorage로 복원하지 않는) 게임 → ?join=CODE 쿼리로 자동 참가
-const ENTRY_GAMES = new Set(['sixnimmt', 'tetris-battle', 'yacht', 'mojo', 'yut', 'monopoly', 'sherlock', 'ciao', 'spicy']);
+const ENTRY_GAMES = new Set(['sixnimmt', 'tetris-battle', 'yacht', 'mojo', 'yut', 'monopoly', 'sherlock', 'ciao', 'spicy', 'snakes']);
 
 type Genre = 'mystery' | 'card' | 'board' | 'puzzle' | 'action' | 'party';
 
@@ -64,6 +64,7 @@ const GAMES: Game[] = [
   { href: '/monopoly', title: '🏙️ 부루마블', desc: '도시를 사고 건물을 올려 통행료로 상대를 파산시키는 보드게임. 독점 라인·랜드마크·인수·황금열쇠, 개인전/팀전(2:2). 봇과 2~4인.', hover: 'move', solo: true, soloLabel: '🤖 봇과 1인 가능', genres: ['board'] },
   { href: '/sherlock', title: '🔎 셜록13', desc: '아이템 단서로 숨은 범인 1명을 추리하는 게임. 전체/개인 조사로 개수를 캐내 용의자를 좁히고 먼저 지목! 인원에 맞춰 캐릭터가 늘어나 최대 10인. 봇과 2~10인.', hover: 'hit', solo: true, soloLabel: '🤖 봇과 1인 가능', genres: ['mystery'] },
   { href: '/spicy', title: '🌶️ 스파이시', desc: '카드를 엎어 내며 「스파이스 + 숫자」를 선언하는 블러핑 카드게임. 앞사람보다 높게 불러야 해서 결국 뻥을 칠 수밖에! 도전은 숫자냐 스파이스냐 콕 집어야 해요. 인원에 맞춰 카드가 늘어나 최대 10인. 봇과 2~10인.', hover: 'hit', solo: true, soloLabel: '🤖 봇과 1인 가능', genres: ['card', 'mystery'] },
+  { href: '/snakes', title: '🐍 뱀과 사다리', desc: '주사위를 굴려 사다리를 타고 오르고 뱀에 물려 미끄러지는 클래식 보드게임. 사다리와 뱀 위치가 매판 새로 만들어져 같은 판이 두 번 안 나와요. 인원에 맞춰 판 크기 자동 조정. 봇과 2~10인.', hover: 'move', solo: true, soloLabel: '🤖 봇과 1인 가능', genres: ['board', 'party'] },
   { href: '/ciao', title: '🤥 차오차오', desc: '주사위를 통 속에 숨겨 굴리고 숫자를 선언(뻥 가능!), 의심으로 견제하며 구름다리를 건너는 블러핑 레이스. X가 나오면 무조건 거짓말! 인원에 맞춰 말·목표 자동 조정. 봇과 2~10인.', hover: 'move', solo: true, soloLabel: '🤖 봇과 1인 가능', genres: ['mystery', 'party'] },
 ];
 
