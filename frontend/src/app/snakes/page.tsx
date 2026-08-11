@@ -13,10 +13,13 @@ type State = {
   isHost: boolean; joined: boolean; players: PlayerView[];
   ladders: JumpView[]; snakes: JumpView[];
   turnSeat: number; turnName: string | null; nextSeat: number; myTurn: boolean; mySeat: number;
-  lastDie: number; lastMove: LastMove | null;
+  lastDie: number; lastMove: LastMove | null; moveSeq: number;
   lastAction: string | null; log: string[]; winnerSeat: number; winnerLabel: string | null;
   deadline: number; serverNow: number;
 };
+
+/** 연출 타이밍(ms). 서버의 봇 대기시간(2800)이 이 합보다 길어야 연출이 겹치지 않는다. */
+const DICE_SPIN_MS = 700, STEP_MS = 160, JUMP_MS = 700, JUMP_PAUSE_MS = 260;
 type Room = { code: string; status: string; playerCount: number; host: string };
 
 function cid(): string {
@@ -30,7 +33,7 @@ const SEAT_COLORS = ['#f43f5e', '#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#ec
 /** 칸 배경 — 체크무늬처럼 두 색을 번갈아 쓴다. */
 const CELL_A = '#fef9e7', CELL_B = '#e8f5e9';
 
-/** 주사위 눈 1~6. */
+/** 주사위 눈 1~6. rolling이면 흔들린다. */
 function DiceFace({ v, size = 44, rolling = false }: { v: number; size?: number; rolling?: boolean }) {
   const pips: Record<number, [number, number][]> = {
     1: [[50, 50]],
@@ -42,7 +45,7 @@ function DiceFace({ v, size = 44, rolling = false }: { v: number; size?: number;
   };
   return (
     <span className="relative inline-block shrink-0 rounded-2xl border-2 border-slate-300 bg-white shadow-[inset_0_-3px_0_rgba(0,0,0,0.08),0_2px_6px_rgba(0,0,0,0.15)] align-middle"
-      style={{ width: size, height: size, animation: rolling ? 'sn-shake .5s ease' : undefined }}>
+      style={{ width: size, height: size, animation: rolling ? 'sn-shake .22s linear infinite' : undefined }}>
       {v <= 0 ? (
         <span className="absolute inset-0 flex items-center justify-center font-extrabold text-slate-300" style={{ fontSize: size * 0.5 }}>?</span>
       ) : (
@@ -68,7 +71,73 @@ export default function SnakesPage() {
   const syncRef = useRef({ serverNow: 0, at: 0 });
   const [, forceTick] = useState(0);
 
+  /*
+   * 이동 연출.
+   *
+   * 서버는 결과만 준다(lastMove: 출발칸 → 밟은칸 → 최종칸). 화면에서 주사위를 굴리고
+   * 말을 한 칸씩 옮기는 건 전부 여기서 한다. 연출 중인 말은 칸에서 숨기고 보드 위에
+   * 뜬 토큰으로 그려서, CSS transition으로 실제로 움직이는 것처럼 보이게 한다.
+   *
+   * 이동이 몰려 들어와도 겹치지 않게 큐에 쌓아 하나씩 재생한다.
+   */
+  const [anim, setAnim] = useState<{ seat: number; cell: number; kind: 'step' | 'jump'; how: string } | null>(null);
+  const [spinFace, setSpinFace] = useState(0);          // 굴리는 중에 보여줄 임시 눈
+  const queue = useRef<LastMove[]>([]);
+  const playing = useRef(false);
+  const seenSeq = useRef(0);
+  const aliveRef = useRef(true);
+  useEffect(() => () => { aliveRef.current = false; }, []);
+
+  const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+  const playQueue = useCallback(async () => {
+    if (playing.current) return;
+    playing.current = true;
+    while (queue.current.length && aliveRef.current) {
+      const m = queue.current.shift()!;
+
+      // 1) 주사위가 구르는 동안 눈이 계속 바뀐다.
+      const spin = setInterval(() => setSpinFace(1 + Math.floor(Math.random() * 6)), 80);
+      await sleep(DICE_SPIN_MS);
+      clearInterval(spin);
+      setSpinFace(0);
+      if (!aliveRef.current) break;
+
+      // 2) 출발칸에서 밟은 칸까지 한 칸씩.
+      if (m.landed !== m.from) {
+        const dir = m.landed > m.from ? 1 : -1;
+        for (let c = m.from + dir; ; c += dir) {
+          if (!aliveRef.current) break;
+          setAnim({ seat: m.seat, cell: c, kind: 'step', how: m.how });
+          await sleep(STEP_MS);
+          if (c === m.landed) break;
+        }
+      }
+
+      // 3) 뱀·사다리면 미끄러진다.
+      if (m.to !== m.landed && aliveRef.current) {
+        await sleep(JUMP_PAUSE_MS);
+        setAnim({ seat: m.seat, cell: m.to, kind: 'jump', how: m.how });
+        await sleep(JUMP_MS);
+      }
+      setAnim(null);
+    }
+    playing.current = false;
+  }, []);
+
   useEffect(() => { id.current = cid(); try { setNick(localStorage.getItem('arcade_nick') || ''); } catch {} }, []);
+
+  /** 서버 상태를 반영하고, 못 본 이동이 있으면 연출 큐에 넣는다. */
+  const applyState = useCallback((s: State) => {
+    setSs(s);
+    if (s.lastMove && s.moveSeq > seenSeq.current) {
+      seenSeq.current = s.moveSeq;
+      queue.current.push(s.lastMove);
+      playQueue();
+    }
+    // 새 판이 시작되면(서버가 0으로 리셋) 기준도 되돌린다.
+    if (s.moveSeq === 0) { seenSeq.current = 0; queue.current.length = 0; }
+  }, [playQueue]);
 
   const loadRooms = useCallback(async () => { try { setRooms(await api(`/api/v1/snakes/rooms`)); } catch {} }, []);
   useEffect(() => { if (screen === 'entry') { loadRooms(); const t = setInterval(loadRooms, 3000); return () => clearInterval(t); } }, [screen, loadRooms]);
@@ -81,14 +150,14 @@ export default function SnakesPage() {
         const s = await api<State>(`/api/v1/snakes/me?roomCode=${roomCode}&clientId=${id.current}`);
         if (!alive) return;
         syncRef.current = { serverNow: s.serverNow, at: Date.now() };
-        setSs(s);
+        applyState(s);
         if (s.phase !== 'LOBBY' && screen === 'lobby') setScreen('game');
         if (s.phase === 'LOBBY' && screen === 'game') setScreen('lobby');
       } catch {}
     };
     const t = setInterval(poll, 1000); poll();
     return () => { alive = false; clearInterval(t); };
-  }, [screen, roomCode]);
+  }, [screen, roomCode, applyState]);
 
   useEffect(() => {
     if (screen !== 'game') return;
@@ -124,7 +193,7 @@ export default function SnakesPage() {
 
   const addBot = async () => { try { setSs(await api(`/api/v1/snakes/add-bot?roomCode=${roomCode}&clientId=${id.current}`, { method: 'POST', body: '{}' })); } catch (e: any) { alert(e?.message); } };
   const startMatch = async () => { try { setSs(await api(`/api/v1/snakes/start?roomCode=${roomCode}&clientId=${id.current}`, { method: 'POST', body: '{}' })); setScreen('game'); } catch (e: any) { alert(e?.message); } };
-  const roll = async () => { try { setSs(await api(`/api/v1/snakes/roll?roomCode=${roomCode}&clientId=${id.current}`, { method: 'POST', body: '{}' })); } catch (e: any) { alert(e?.message); } };
+  const roll = async () => { try { applyState(await api(`/api/v1/snakes/roll?roomCode=${roomCode}&clientId=${id.current}`, { method: 'POST', body: '{}' })); } catch (e: any) { alert(e?.message); } };
   const leave = async () => { const rc = roomRef.current; if (rc) { try { await api(`/api/v1/snakes/leave?roomCode=${rc}&clientId=${id.current}`, { method: 'POST', body: '{}' }); } catch {} } setScreen('entry'); setRoomCode(null); setSs(null); };
 
   const beaconLeave = () => {
@@ -137,6 +206,9 @@ export default function SnakesPage() {
 
   const localNow = syncRef.current.at ? syncRef.current.serverNow + (Date.now() - syncRef.current.at) : (ss?.serverNow ?? 0);
   const remainSec = ss && ss.deadline > 0 ? Math.ceil(Math.max(0, ss.deadline - localNow) / 1000) : 0;
+
+  // 연출이 도는 동안에는 굴리기를 막고 승리 배너도 미룬다.
+  const busyAnim = spinFace > 0 || anim !== null;
 
   const active = ss ? ss.players.filter((p) => !p.left) : [];
   const bySeat = [...active].sort((a, b) => a.seat - b.seat);
@@ -388,7 +460,8 @@ export default function SnakesPage() {
                 {boardCells().map((sq) => {
                   const { row } = cellOf(sq);
                   const j = jumpFrom(sq), jt = jumpTo(sq);
-                  const here = active.filter((p) => p.pos === sq);
+                  // 연출 중인 말은 칸에서 빼고 아래 떠 있는 토큰으로 그린다(두 번 그리지 않게).
+                  const here = active.filter((p) => p.pos === sq && p.seat !== anim?.seat);
                   return (
                     <div key={sq} className="relative border border-white/60 flex items-start justify-start"
                       style={{ background: (row + sq) % 2 === 0 ? CELL_A : CELL_B }}>
@@ -417,6 +490,35 @@ export default function SnakesPage() {
                 })}
               </div>
               <BoardOverlay />
+
+              {/*
+                움직이는 말. 칸 격자 위에 절대 위치로 띄우고 left/top에 transition을 걸어
+                한 칸씩 걸어가는 것처럼 보이게 한다. 뱀·사다리 구간은 더 느리게 미끄러진다.
+              */}
+              {anim && (() => {
+                const p = active.find((q) => q.seat === anim.seat);
+                if (!p) return null;
+                const c = centerOf(anim.cell);
+                const dur = anim.kind === 'jump' ? JUMP_MS : STEP_MS;
+                return (
+                  <span className="absolute z-20 rounded-full border-2 border-white font-extrabold text-white flex items-center justify-center shadow-lg"
+                    style={{
+                      left: `${c.x}%`, top: `${c.y}%`,
+                      width: `${(1 / cols) * 62}%`, height: `${(1 / cols) * 62}%`,
+                      transform: 'translate(-50%,-50%)',
+                      transition: `left ${dur}ms ${anim.kind === 'jump' ? 'ease-in-out' : 'linear'}, top ${dur}ms ${anim.kind === 'jump' ? 'ease-in-out' : 'linear'}`,
+                      background: SEAT_COLORS[anim.seat % SEAT_COLORS.length],
+                      fontSize: '0.55rem',
+                    }}>
+                    {p.name.slice(0, 1)}
+                    {anim.kind === 'jump' && (
+                      <span className="absolute -top-4 left-1/2 -translate-x-1/2 text-base drop-shadow">
+                        {anim.how === 'LADDER' ? '🪜' : '🐍'}
+                      </span>
+                    )}
+                  </span>
+                );
+              })()}
             </div>
 
             {/* 출발 대기 중인 말 */}
@@ -433,14 +535,16 @@ export default function SnakesPage() {
             {/* 주사위 + 굴리기 */}
             {!ended && (
               <div className="flex items-center justify-center gap-4 rounded-2xl border-2 border-slate-200 bg-white py-3">
-                <DiceFace v={ss.lastDie} rolling={false} />
+                <DiceFace v={spinFace > 0 ? spinFace : ss.lastDie} rolling={spinFace > 0} />
                 {ss.myTurn ? (
-                  <button onClick={roll}
-                    className="px-6 py-3 rounded-xl bg-gradient-to-b from-emerald-500 to-emerald-600 text-white font-extrabold shadow-md active:scale-95">
-                    🎲 굴리기{!ss.noTimeLimit && remainSec > 0 ? ` (${remainSec})` : ''}
+                  <button onClick={roll} disabled={busyAnim}
+                    className="px-6 py-3 rounded-xl bg-gradient-to-b from-emerald-500 to-emerald-600 text-white font-extrabold shadow-md active:scale-95 disabled:opacity-50">
+                    {busyAnim ? '움직이는 중…' : `🎲 굴리기${!ss.noTimeLimit && remainSec > 0 ? ` (${remainSec})` : ''}`}
                   </button>
                 ) : (
-                  <span className="text-sm text-slate-400">{ss.turnName}님이 굴리는 중…</span>
+                  <span className="text-sm text-slate-400">
+                    {spinFace > 0 || anim ? `${seatName(ss.lastMove?.seat ?? ss.turnSeat)}님이 움직이는 중…` : `${ss.turnName}님이 굴리는 중…`}
+                  </span>
                 )}
               </div>
             )}
@@ -451,7 +555,7 @@ export default function SnakesPage() {
               </p>
             )}
 
-            {ended && (
+            {ended && !busyAnim && (
               <div className="text-center rounded-3xl border-2 border-emerald-400 bg-gradient-to-b from-emerald-50 to-amber-50 px-6 py-6 shadow" style={{ animation: 'sn-pop .35s ease' }}>
                 <p className="text-3xl mb-1">🎉🏁🎉</p>
                 <p className="text-xl sm:text-2xl font-extrabold">{ss.winnerLabel} 승리!</p>

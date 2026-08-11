@@ -126,6 +126,53 @@ class SnakesGameTest {
     }
 
     @Test
+    void 이동마다_번호가_올라간다() {
+        // 프론트는 이 번호로 '새 이동'을 판별해 연출을 재생한다. 같은 결과가 연달아 나와도
+        // 구분되어야 하므로 결과가 아니라 번호가 기준이다.
+        SnakesGame g = withPlayers(2);
+        g.start("host");
+        long a = g.me("host").moveSeq();
+        g.roll(cid(g, g.turnSeat()));
+        long b = g.me("host").moveSeq();
+        g.roll(cid(g, g.turnSeat()));
+        long c = g.me("host").moveSeq();
+        assertThat(a).isZero();
+        assertThat(b).isEqualTo(1);
+        assertThat(c).isEqualTo(2);
+    }
+
+    @Test
+    void 이동_정보로_연출을_재구성할_수_있다() {
+        SnakesGame g = withPlayers(2);
+        g.start("host");
+        SnakesGame.P cur = at(g, g.turnSeat());
+        g.roll(cur.clientId);
+        SnakesState.LastMove m = g.me("host").lastMove();
+
+        assertThat(m).isNotNull();
+        assertThat(m.seat()).isEqualTo(cur.seat);
+        assertThat(m.die()).isBetween(1, 6);
+        assertThat(m.from()).isZero();                       // 첫 이동은 출발 칸에서
+        assertThat(m.how()).isIn("MOVE", "LADDER", "SNAKE", "OVER");
+        if ("MOVE".equals(m.how())) {
+            assertThat(m.landed()).isEqualTo(m.from() + m.die());
+            assertThat(m.to()).isEqualTo(m.landed());        // 걷기만 하면 밟은 칸이 최종
+        } else if ("LADDER".equals(m.how())) {
+            assertThat(m.to()).isGreaterThan(m.landed());
+        } else if ("SNAKE".equals(m.how())) {
+            assertThat(m.to()).isLessThan(m.landed());
+        }
+        assertThat(m.to()).isEqualTo(cur.pos);               // 최종 칸은 실제 말 위치와 같다
+    }
+
+    @Test
+    void 봇은_연출이_끝날_시간을_두고_굴린다() {
+        // 연출은 주사위 0.7초 + 최대 6칸(0.96초) + 미끄러짐 0.7초 ≈ 2.4초가 걸린다.
+        // 봇이 그보다 빨리 굴리면 연출이 겹쳐 무슨 일이 났는지 볼 수 없다.
+        assertThat(SnakesGame.BOT_DELAY_MS).isGreaterThanOrEqualTo(2400);
+    }
+
+    @Test
     void 나간_사람은_차례를_건너뛴다() {
         SnakesGame g = withPlayers(3);
         g.start("host");

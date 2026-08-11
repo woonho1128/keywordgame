@@ -27,6 +27,7 @@ public record SnakesState(
         int mySeat,
         int lastDie,                  // 마지막으로 나온 눈(연출용). 없으면 0
         LastMove lastMove,            // 직전 이동(애니메이션용). 없으면 null
+        long moveSeq,                 // 이동 일련번호. 늘어나면 새 이동이다(같은 결과 연속 구분용)
         String lastAction,
         List<String> log,
         int winnerSeat,
@@ -38,7 +39,7 @@ public record SnakesState(
     public static SnakesState notFound(long now) {
         return new SnakesState("NONE", 10, 100, 0L, 0, false, false, false,
                 List.of(), List.of(), List.of(), -1, null, -1, false, -1,
-                0, null, null, List.of(), -1, null, 0, now);
+                0, null, 0L, null, List.of(), -1, null, 0, now);
     }
 
     public record PlayerView(int seat, String name, boolean bot, boolean host, boolean me,

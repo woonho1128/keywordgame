@@ -30,7 +30,14 @@ public class SnakesGame implements RoomGame {
     public enum Phase { LOBBY, PLAYING, ENDED }
 
     static final int MAX_PLAYERS = 10;
-    static final long BOT_DELAY_MS = 1200;
+    /**
+     * 봇이 굴리기까지 기다리는 시간.
+     *
+     * <p>화면에서 주사위가 구르고(0.7초) 말이 한 칸씩 이동하고(칸당 0.16초, 최대 6칸)
+     * 뱀·사다리를 타는(0.7초) 연출이 끝날 시간을 줘야 한다. 짧으면 연출이 겹쳐
+     * 무슨 일이 일어났는지 볼 수 없다.
+     */
+    static final long BOT_DELAY_MS = 2800;
     /** 6이 연달아 나올 때 추가로 굴릴 수 있는 최대 횟수. */
     static final int MAX_EXTRA_ROLLS = 2;
     static final int DEFAULT_TURN_SEC = 20, MIN_TURN_SEC = 5, MAX_TURN_SEC = 60;
@@ -54,6 +61,8 @@ public class SnakesGame implements RoomGame {
     /** 이번 차례에서 6을 연달아 굴린 횟수. */
     private int extraRolls = 0;
     private LastMove lastMove = null;
+    /** 이동 일련번호. 프론트가 '새 이동'을 판별해 연출을 재생하는 기준이다. */
+    private long moveSeq = 0;
     private final List<String> log = new ArrayList<>();
     private String lastAction = null;
     private int winnerSeat = -1;
@@ -105,7 +114,7 @@ public class SnakesGame implements RoomGame {
             p.seat = i; p.pos = 0; p.rolls = 0;
         }
         phase = Phase.PLAYING;
-        winnerSeat = -1; winnerLabel = null; lastMove = null; log.clear();
+        winnerSeat = -1; winnerLabel = null; lastMove = null; moveSeq = 0; log.clear();
         turnSeat = ThreadLocalRandom.current().nextInt(n);
         note("게임 시작! " + board.cols() + "×" + board.cols() + " · 사다리 "
                 + board.ladders().size() + "개 · 뱀 " + board.snakes().size() + "개 (" + n + "인)");
@@ -157,6 +166,7 @@ public class SnakesGame implements RoomGame {
         }
         int landedBefore = how.equals("OVER") ? from : from + die;
         lastMove = new LastMove(p.seat, die, from, landedBefore, stepped, how);
+        moveSeq++;
         p.pos = stepped;
 
         if (p.pos >= board.size()) { win(p); return; }
@@ -230,7 +240,7 @@ public class SnakesGame implements RoomGame {
                 clientId != null && clientId.equals(hostClientId), me != null,
                 pv, ladders, snakes,
                 turnSeat, turnName, nextSeat(), myTurn, meSeat,
-                lastDie, lastMove, lastAction, new ArrayList<>(log),
+                lastDie, lastMove, moveSeq, lastAction, new ArrayList<>(log),
                 winnerSeat, winnerLabel, deadline, now());
     }
 
