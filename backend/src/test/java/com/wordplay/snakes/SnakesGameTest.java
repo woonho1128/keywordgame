@@ -167,9 +167,9 @@ class SnakesGameTest {
 
     @Test
     void 봇은_연출이_끝날_시간을_두고_굴린다() {
-        // 연출은 주사위 0.7초 + 최대 6칸(0.96초) + 미끄러짐 0.7초 ≈ 2.4초가 걸린다.
-        // 봇이 그보다 빨리 굴리면 연출이 겹쳐 무슨 일이 났는지 볼 수 없다.
-        assertThat(SnakesGame.BOT_DELAY_MS).isGreaterThanOrEqualTo(2400);
+        // 연출은 주사위 0.7초 + 최대 6칸(칸당 0.21초 = 1.26초) + 멈춤 0.26초 +
+        // 미끄러짐 0.7초 ≈ 2.9초가 걸린다. 봇이 그보다 빨리 굴리면 연출이 겹친다.
+        assertThat(SnakesGame.BOT_DELAY_MS).isGreaterThanOrEqualTo(2920);
     }
 
     @Test

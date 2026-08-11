@@ -33,11 +33,11 @@ public class SnakesGame implements RoomGame {
     /**
      * 봇이 굴리기까지 기다리는 시간.
      *
-     * <p>화면에서 주사위가 구르고(0.7초) 말이 한 칸씩 이동하고(칸당 0.16초, 최대 6칸)
-     * 뱀·사다리를 타는(0.7초) 연출이 끝날 시간을 줘야 한다. 짧으면 연출이 겹쳐
-     * 무슨 일이 일어났는지 볼 수 없다.
+     * <p>화면에서 주사위가 구르고(0.7초) 말이 한 칸씩 또박또박 이동하고(칸당 0.21초,
+     * 최대 6칸) 뱀·사다리를 타는(0.26초 멈춤 + 0.7초) 연출이 끝날 시간을 줘야 한다.
+     * 최대 약 2.9초. 짧으면 연출이 겹쳐 무슨 일이 일어났는지 볼 수 없다.
      */
-    static final long BOT_DELAY_MS = 2800;
+    static final long BOT_DELAY_MS = 3400;
     /** 6이 연달아 나올 때 추가로 굴릴 수 있는 최대 횟수. */
     static final int MAX_EXTRA_ROLLS = 2;
     static final int DEFAULT_TURN_SEC = 20, MIN_TURN_SEC = 5, MAX_TURN_SEC = 60;

@@ -18,8 +18,16 @@ type State = {
   deadline: number; serverNow: number;
 };
 
-/** 연출 타이밍(ms). 서버의 봇 대기시간(2800)이 이 합보다 길어야 연출이 겹치지 않는다. */
-const DICE_SPIN_MS = 700, STEP_MS = 160, JUMP_MS = 700, JUMP_PAUSE_MS = 260;
+/*
+ * 연출 타이밍(ms). 서버의 봇 대기시간(3400)이 이 합보다 길어야 연출이 겹치지 않는다.
+ *
+ * 칸 이동은 '건너가는 시간(MOVE)'과 '내려앉아 멈추는 시간(REST)'으로 나눈다.
+ * 둘을 합친 만큼 대기하면서 transition은 MOVE 동안만 걸어야 칸마다 또박또박 멈춘다.
+ * (예전엔 transition 길이와 칸 간격이 같아서 끊김 없이 한 번에 쭉 미끄러져 보였다.)
+ */
+const DICE_SPIN_MS = 700;
+const STEP_MOVE_MS = 100, STEP_REST_MS = 110, STEP_MS = STEP_MOVE_MS + STEP_REST_MS;
+const JUMP_MS = 700, JUMP_PAUSE_MS = 260;
 type Room = { code: string; status: string; playerCount: number; host: string };
 
 function cid(): string {
@@ -315,6 +323,12 @@ export default function SnakesPage() {
         @keyframes sn-pop { 0% { transform: scale(.85); opacity: 0 } 100% { transform: scale(1); opacity: 1 } }
         @keyframes sn-shake { 0%,100% { transform: rotate(0) } 25% { transform: rotate(-16deg) } 75% { transform: rotate(16deg) } }
         @keyframes sn-float { 0%,100% { transform: translateY(0) } 50% { transform: translateY(-4px) } }
+        /* 칸에 내려앉는 느낌 — 살짝 떠올랐다가 눌리며 멈춘다. */
+        @keyframes sn-hop {
+          0%   { transform: translateY(-22%) scale(1.14) }
+          55%  { transform: translateY(0) scale(0.94) }
+          100% { transform: translateY(0) scale(1) }
+        }
       `}</style>
 
       <div className="w-full flex items-center justify-between mb-3 sm:mb-4">
@@ -499,19 +513,32 @@ export default function SnakesPage() {
                 const p = active.find((q) => q.seat === anim.seat);
                 if (!p) return null;
                 const c = centerOf(anim.cell);
-                const dur = anim.kind === 'jump' ? JUMP_MS : STEP_MS;
+                const jump = anim.kind === 'jump';
+                // 건너가는 동안만 transition을 걸고, 남은 시간은 그 칸에 멈춰 있는다.
+                const dur = jump ? JUMP_MS : STEP_MOVE_MS;
+                const ease = jump ? 'ease-in-out' : 'ease-out';
                 return (
-                  <span className="absolute z-20 rounded-full border-2 border-white font-extrabold text-white flex items-center justify-center shadow-lg"
+                  <span className="absolute z-20"
                     style={{
                       left: `${c.x}%`, top: `${c.y}%`,
                       width: `${(1 / cols) * 62}%`, height: `${(1 / cols) * 62}%`,
                       transform: 'translate(-50%,-50%)',
-                      transition: `left ${dur}ms ${anim.kind === 'jump' ? 'ease-in-out' : 'linear'}, top ${dur}ms ${anim.kind === 'jump' ? 'ease-in-out' : 'linear'}`,
-                      background: SEAT_COLORS[anim.seat % SEAT_COLORS.length],
-                      fontSize: '0.55rem',
+                      transition: `left ${dur}ms ${ease}, top ${dur}ms ${ease}`,
                     }}>
-                    {p.name.slice(0, 1)}
-                    {anim.kind === 'jump' && (
+                    {/*
+                      칸마다 콩 뛰는 느낌. key를 칸 번호로 둬서 칸이 바뀔 때마다
+                      애니메이션이 처음부터 다시 재생된다(위치 transition은 바깥이 유지).
+                    */}
+                    <span key={anim.cell}
+                      className="absolute inset-0 rounded-full border-2 border-white font-extrabold text-white flex items-center justify-center shadow-lg"
+                      style={{
+                        background: SEAT_COLORS[anim.seat % SEAT_COLORS.length],
+                        fontSize: '0.55rem',
+                        animation: jump ? undefined : `sn-hop ${STEP_MS}ms ease-out`,
+                      }}>
+                      {p.name.slice(0, 1)}
+                    </span>
+                    {jump && (
                       <span className="absolute -top-4 left-1/2 -translate-x-1/2 text-base drop-shadow">
                         {anim.how === 'LADDER' ? '🪜' : '🐍'}
                       </span>
