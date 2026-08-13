@@ -64,9 +64,14 @@ export default function QuizPage() {
   /*
    * 상태 폴링(1초).
    *
-   * 두 경우에는 쉰다 — 끝난 판은 더 바뀔 게 없고, 숨겨진 탭은 볼 사람이 없다.
-   * 예전에는 종료 화면을 열어두면 영원히 1초마다 호출했다.
+   * 끝난 판은 더 바뀔 게 없어 완전히 멈춘다(종료된 방은 서버가 40초 뒤 정리한다).
+   *
+   * 숨겨진 탭은 볼 사람이 없으니 늦춘다 — 단 아예 멈추면 안 된다. 서버는 "3분간
+   * 이 방으로 요청이 없으면 아무도 안 보고 있다"고 판단해 방을 지우므로(RoomRegistry
+   * ABANDONED_MS), 잠깐 다른 탭에 다녀오면 방이 사라진다. 그래서 살아 있다는 신호만
+   * {@code HIDDEN_POLL_TICKS}초마다 보낸다(호출 97% 감소, 3분 한도 대비 6배 여유).
    */
+  const HIDDEN_POLL_TICKS = 30;
   const doneRef = useRef(false);
   useEffect(() => { doneRef.current = false; }, [roomCode]);
 
@@ -84,7 +89,17 @@ export default function QuizPage() {
         if (s.phase === 'LOBBY' && screen === 'game') setScreen('lobby');
       } catch {}
     };
-    const tick = () => { if (!doneRef.current && !document.hidden) poll(); };
+    let hiddenTicks = 0;
+    const tick = () => {
+      if (doneRef.current) return;
+      if (document.hidden) {
+        if (++hiddenTicks < HIDDEN_POLL_TICKS) return;   // 방이 지워지지 않을 만큼만
+        hiddenTicks = 0;
+      } else {
+        hiddenTicks = 0;
+      }
+      poll();
+    };
     poll();
     const t = setInterval(tick, 1000);
     // 탭으로 돌아오면 곧바로 한 번 받아 화면을 맞춘다.
@@ -343,6 +358,20 @@ export default function QuizPage() {
                   </p>
                 )}
               </div>
+            )}
+
+            {/*
+              버튼이 잠겼을 때 이유를 밝힌다. 아무 설명 없이 눌리지 않으면 고장으로 보인다
+              ("답 클릭이 안 된다"는 제보를 재현할 수 없었는데, 잠긴 이유가 보이면 바로 안다).
+            */}
+            {!ended && ss.kind && !ss.canAnswer && (
+              <p className="text-center text-xs text-slate-400">
+                {busy ? '전송 중…'
+                  : revealing ? '정답 공개 중 — 곧 다음 문제예요'
+                  : ss.myAnswer != null ? '이미 답했어요 — 다음 문제를 기다려요'
+                  : !ss.joined ? '관전 중 — 답할 수 없어요'
+                  : '지금은 답할 수 없어요'}
+              </p>
             )}
 
             {/* 답 입력 */}
