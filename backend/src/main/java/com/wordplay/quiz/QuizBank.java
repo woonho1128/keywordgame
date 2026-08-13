@@ -8,16 +8,19 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 import java.time.LocalDate;
-import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.Deque;
-import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentLinkedDeque;
 import java.util.concurrent.ThreadLocalRandom;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * 상식 퀴즈 문제 창고. AI가 만든 문제를 모아두고 방에 나눠준다.
@@ -49,8 +52,15 @@ public class QuizBank {
     private final OpenAiChatClient client;
     private final ObjectMapper mapper = new ObjectMapper();
 
-    /** 난이도(1~10) -> 대기 중인 문제들. */
-    private final Map<Integer, Deque<QuizQuestion>> pool = new HashMap<>();
+    /**
+     * 난이도(1~10) -> 대기 중인 문제들.
+     *
+     * <p>락 없이 꺼낼 수 있어야 한다. 무제한 모드는 진행 중에 문제를 보충하는데, 그때
+     * 배경 생성이 잡은 락을 기다리면 게임이 몇 초 멈춘다.
+     */
+    private final Map<Integer, Deque<QuizQuestion>> pool = new ConcurrentHashMap<>();
+    /** 난이도별 생성이 이미 돌고 있는지. 같은 난이도로 동시에 여러 번 부르지 않는다. */
+    private final Map<Integer, AtomicBoolean> generating = new ConcurrentHashMap<>();
     /** 이미 만든 지문(정규화) — 중복 출제 방지. */
     private final Set<String> seen = Collections.synchronizedSet(new LinkedHashSet<>());
 
@@ -58,8 +68,8 @@ public class QuizBank {
     @Value("${app.quiz.daily-call-limit:200}")
     private int dailyCallLimit;
 
-    private LocalDate callDay = LocalDate.now();
-    private int callsToday = 0;
+    private volatile LocalDate callDay = LocalDate.now();
+    private final AtomicInteger callsToday = new AtomicInteger();
 
     public QuizBank(OpenAiChatClient client) {
         this.client = client;
@@ -72,9 +82,9 @@ public class QuizBank {
      *
      * @param level 1~10
      */
-    public synchronized List<QuizQuestion> take(int level, int count) {
+    public List<QuizQuestion> take(int level, int count) {
         int lv = Math.max(1, Math.min(10, level));
-        Deque<QuizQuestion> q = pool.computeIfAbsent(lv, k -> new ArrayDeque<>());
+        Deque<QuizQuestion> q = deque(lv);
 
         List<QuizQuestion> out = new ArrayList<>();
         while (out.size() < count) {
@@ -88,10 +98,52 @@ public class QuizBank {
     }
 
     /** 다음 판을 위해 미리 채워둔다(플레이 중 끊김 방지). 부족할 때만 호출한다. */
-    public synchronized void prewarm(int level) {
+    public void prewarm(int level) {
         int lv = Math.max(1, Math.min(10, level));
-        Deque<QuizQuestion> q = pool.computeIfAbsent(lv, k -> new ArrayDeque<>());
-        if (q.size() <= LOW_WATER) refill(lv);
+        if (deque(lv).size() <= LOW_WATER) refill(lv);
+    }
+
+    /**
+     * 이미 만들어 둔 것만 꺼낸다 — AI를 부르지 않으므로 즉시 돌아온다.
+     *
+     * <p>무제한 모드가 진행 중에 문제를 보충할 때 쓴다. 모자라면 내장 문제로 메우고,
+     * 배경에서 창고를 다시 채운다. 여기서 생성을 기다리면 게임이 멈춘다.
+     */
+    public List<QuizQuestion> takeReady(int level, int count, Collection<QuizQuestion> exclude) {
+        int lv = Math.max(1, Math.min(10, level));
+        Deque<QuizQuestion> q = deque(lv);
+        List<QuizQuestion> out = new ArrayList<>();
+        while (out.size() < count) {
+            QuizQuestion x = q.poll();
+            if (x == null) break;
+            out.add(x);
+        }
+        prewarmAsync(lv);
+        if (out.size() < count) {
+            List<QuizQuestion> seenAll = new ArrayList<>(out);
+            if (exclude != null) seenAll.addAll(exclude);
+            out.addAll(QuizFallback.pick(lv, count - out.size(), seenAll));
+        }
+        return out;
+    }
+
+    /** 배경에서 창고를 채운다. 게임 스레드를 붙잡지 않는다. */
+    public void prewarmAsync(int level) {
+        int lv = Math.max(1, Math.min(10, level));
+        if (deque(lv).size() > LOW_WATER || !aiAvailable()) return;
+        AtomicBoolean busy = generating.computeIfAbsent(lv, k -> new AtomicBoolean());
+        if (!busy.compareAndSet(false, true)) return;      // 이미 만들고 있다
+        Thread t = new Thread(() -> {
+            try { refill(lv); } catch (Exception e) {
+                log.warn("퀴즈 배경 생성 실패: {}", e.getMessage());
+            } finally { busy.set(false); }
+        }, "quiz-gen-" + lv);
+        t.setDaemon(true);
+        t.start();
+    }
+
+    private Deque<QuizQuestion> deque(int level) {
+        return pool.computeIfAbsent(level, k -> new ConcurrentLinkedDeque<>());
     }
 
     /** 한 번 호출해 창고를 채운다. 채웠으면 true. */
@@ -99,20 +151,20 @@ public class QuizBank {
         if (!aiAvailable() || !allowCall()) return false;
         List<QuizQuestion> made = generate(level);
         if (made.isEmpty()) return false;
-        Deque<QuizQuestion> q = pool.computeIfAbsent(level, k -> new ArrayDeque<>());
+        Deque<QuizQuestion> q = deque(level);
         for (QuizQuestion x : made) if (q.size() < POOL_MAX) q.add(x);
         return !q.isEmpty();
     }
 
     /** 하루 상한 확인 및 카운트. */
-    private boolean allowCall() {
+    private synchronized boolean allowCall() {
         LocalDate today = LocalDate.now();
-        if (!today.equals(callDay)) { callDay = today; callsToday = 0; }
-        if (callsToday >= dailyCallLimit) {
+        if (!today.equals(callDay)) { callDay = today; callsToday.set(0); }
+        if (callsToday.get() >= dailyCallLimit) {
             log.warn("퀴즈 생성 하루 한도({}) 초과 — 내장 문제로 대체", dailyCallLimit);
             return false;
         }
-        callsToday++;
+        callsToday.incrementAndGet();
         return true;
     }
 
@@ -229,11 +281,11 @@ public class QuizBank {
     }
 
     /** 테스트·진단용. */
-    synchronized int poolSize(int level) {
+    int poolSize(int level) {
         Deque<QuizQuestion> q = pool.get(level);
         return q == null ? 0 : q.size();
     }
-    synchronized int callsToday() { return callsToday; }
+    int callsToday() { return callsToday.get(); }
 
     // ── 고정 시스템 프롬프트(캐싱 프리픽스) ──
     static final String SYSTEM = """

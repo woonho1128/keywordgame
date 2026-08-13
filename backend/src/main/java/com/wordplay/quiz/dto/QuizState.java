@@ -11,10 +11,12 @@ import java.util.Map;
  */
 public record QuizState(
         String phase,                 // LOBBY / ASKING / REVEAL / ENDED
+        String mode,                  // CLASSIC(문제 수 고정) / SPRINT(시간 제한 무제한)
         int level,                    // 난이도 1~10
-        int totalRounds,
-        int round,                    // 현재 문제 번호(1-based). 시작 전 0
+        int totalRounds,              // CLASSIC 전체 문제 수. SPRINT면 0
+        int round,                    // 지금 몇 번째 문제인지(1-based). 시작 전 0
         int questionSec,
+        int limitSec,                 // SPRINT 제한시간(초)
         boolean isHost,
         boolean joined,
         List<PlayerView> players,
@@ -27,12 +29,17 @@ public record QuizState(
         boolean myAnswerRight,
         boolean canAnswer,            // 지금 답을 낼 수 있는가
         Reveal lastReveal,            // 정답 공개(REVEAL 단계에서만)
+        MyLast myLast,                // SPRINT: 직전에 푼 문제 결과(짧게 보여준다). 없으면 null
         List<String> log,
         long deadline,
         long serverNow
 ) {
     public record PlayerView(int seat, String name, boolean host, boolean me, boolean left,
-                             int score, int correct, int streak, int bestStreak, boolean answered) {}
+                             int score, int correct, int streak, int bestStreak, boolean answered,
+                             int wrong, int skipped, int solved) {}
+
+    /** SPRINT에서 직전 문제의 결과. right=null이면 넘긴 것. */
+    public record MyLast(Boolean right, String answer, String explain) {}
 
     /**
      * 정답 공개.
@@ -45,8 +52,8 @@ public record QuizState(
 
     /** 방이 사라졌을 때. */
     public static QuizState notFound(long now) {
-        return new QuizState("NONE", 5, 0, 0, 20, false, false,
+        return new QuizState("NONE", "CLASSIC", 5, 0, 0, 20, 120, false, false,
                 List.of(), null, null, null, List.of(), null, null, false, false,
-                null, List.of(), 0, now);
+                null, null, List.of(), 0, now);
     }
 }

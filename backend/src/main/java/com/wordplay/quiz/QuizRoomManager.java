@@ -19,7 +19,8 @@ public class QuizRoomManager {
     public QuizRoomManager(QuizBank bank) { this.bank = bank; }
 
     public String create(String clientId, NewQuizRequest req) {
-        QuizGame game = new QuizGame(clientId, req.nick(), req.level(), req.rounds(), req.questionSec(), bank);
+        QuizGame game = new QuizGame(clientId, req.nick(), req.level(), req.rounds(),
+                req.questionSec(), req.mode(), req.limitSec(), bank);
         try {
             return reg.add(game);
         } catch (IllegalStateException e) {

@@ -751,12 +751,11 @@ public class MafiaService implements RoomGame {
         // 못 지키니 오늘은 경찰이 무방비다. 확실할 때 친다.
         if (lastNightPeaceful) return cop;
 
-        // 커밍아웃 직후 첫 밤은 의사가 지키러 갈 확률이 가장 높다. 절반쯤은 흘려보내고
-        // 정보를 낸 다른 사람을 지운다(경찰만 노리면 의사가 매번 맞힌다).
-        if (claimedAt == round && rnd(100) < 45) return defaultPick(others);
-
-        // 그 뒤로는 대체로 경찰을 노리되 가끔 섞는다.
-        return rnd(100) < 25 ? defaultPick(others) : cop;
+        // 나머지는 한 번만 굴린다. 두 단계로 나눠 곱하면 경찰을 노릴 확률이 절반 밑으로
+        // 떨어져 '주로 경찰을 노린다'가 성립하지 않는다.
+        // 커밍아웃 당일 밤은 의사가 지키러 갈 확률이 가장 높아 그때만 더 자주 흘려보낸다.
+        int copChance = claimedAt == round ? 60 : 80;
+        return rnd(100) < copChance ? cop : defaultPick(others);
     }
 
     /** 의사의 보호 대상. 정할 수 없으면 -1(호출부에서 기본 선택). */

@@ -66,6 +66,15 @@ public class QuizController {
         return ApiResponse.success(g.me(clientId));
     }
 
+    /** 무제한 모드에서 모르는 문제를 넘긴다. */
+    @PostMapping("/skip")
+    public ApiResponse<QuizState> skip(@RequestParam String roomCode, @RequestParam String clientId) {
+        validateClientId(clientId);
+        QuizGame g = rooms.require(roomCode);
+        g.skip(clientId);
+        return ApiResponse.success(g.me(clientId));
+    }
+
     @GetMapping("/me")
     public ApiResponse<QuizState> me(@RequestParam String roomCode, @RequestParam String clientId) {
         validateClientId(clientId);

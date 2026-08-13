@@ -87,8 +87,10 @@ class MafiaPoliceRevealTest {
         setRole(players.get(3), "POLICE");
         svc.sendChat("p3", "내가 경찰이다 사람1이 마피아야");
 
+        // 커밍아웃 당일이라 60% 경찰(400회 중 약 240회). 5시그마 아래로 잡아 흔들리지 않게 한다.
         Map<Object, Integer> hist = distribution(svc, players.get(0), 400);
-        assertThat(hist.getOrDefault(3, 0)).as("경찰을 주로 노린다").isGreaterThan(150);
+        assertThat(hist.getOrDefault(3, 0)).as("경찰을 주로 노린다").isGreaterThan(190);
+        assertThat(hist.getOrDefault(3, 0)).as("경찰이 과반이어야 '주로'가 성립한다").isGreaterThan(200);
         assertThat(hist.size()).as("항상 경찰만 치면 의사가 100% 읽는다").isGreaterThan(1);
     }
 
