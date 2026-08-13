@@ -38,8 +38,16 @@ export default function RoomChat({ game, roomCode, clientId, nick }: {
       } catch {}
     };
     poll();
-    const t = setInterval(poll, 2000);
-    return () => { alive = false; clearInterval(t); };
+    // 숨겨진 탭에서는 쉰다. 게임을 켜둔 채 다른 탭을 보는 동안 계속 부를 이유가 없다.
+    // 돌아오면 곧바로 한 번 받아 놓친 메시지를 채운다.
+    const t = setInterval(() => { if (!document.hidden) poll(); }, 2000);
+    const onVisible = () => { if (!document.hidden) poll(); };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => {
+      alive = false;
+      clearInterval(t);
+      document.removeEventListener('visibilitychange', onVisible);
+    };
   }, [game, roomCode, clientId]);
 
   useEffect(() => { if (open && listRef.current) listRef.current.scrollTop = listRef.current.scrollHeight; }, [msgs, open]);

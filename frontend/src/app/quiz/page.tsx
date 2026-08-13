@@ -61,6 +61,15 @@ export default function QuizPage() {
   const loadRooms = useCallback(async () => { try { setRooms(await api(`/api/v1/quiz/rooms`)); } catch {} }, []);
   useEffect(() => { if (screen === 'entry') { loadRooms(); const t = setInterval(loadRooms, 3000); return () => clearInterval(t); } }, [screen, loadRooms]);
 
+  /*
+   * 상태 폴링(1초).
+   *
+   * 두 경우에는 쉰다 — 끝난 판은 더 바뀔 게 없고, 숨겨진 탭은 볼 사람이 없다.
+   * 예전에는 종료 화면을 열어두면 영원히 1초마다 호출했다.
+   */
+  const doneRef = useRef(false);
+  useEffect(() => { doneRef.current = false; }, [roomCode]);
+
   useEffect(() => {
     if (screen === 'entry' || !roomCode) return;
     let alive = true;
@@ -70,12 +79,22 @@ export default function QuizPage() {
         if (!alive) return;
         syncRef.current = { serverNow: s.serverNow, at: Date.now() };
         setSs(s);
+        doneRef.current = s.phase === 'ENDED';
         if (s.phase !== 'LOBBY' && screen === 'lobby') setScreen('game');
         if (s.phase === 'LOBBY' && screen === 'game') setScreen('lobby');
       } catch {}
     };
-    const t = setInterval(poll, 1000); poll();
-    return () => { alive = false; clearInterval(t); };
+    const tick = () => { if (!doneRef.current && !document.hidden) poll(); };
+    poll();
+    const t = setInterval(tick, 1000);
+    // 탭으로 돌아오면 곧바로 한 번 받아 화면을 맞춘다.
+    const onVisible = () => { if (!document.hidden && !doneRef.current) poll(); };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => {
+      alive = false;
+      clearInterval(t);
+      document.removeEventListener('visibilitychange', onVisible);
+    };
   }, [screen, roomCode]);
 
   useEffect(() => {
