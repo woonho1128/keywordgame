@@ -18,6 +18,7 @@ type State = {
   lastReveal: Reveal | null; myLast: MyLast | null; log: string[]; deadline: number; serverNow: number;
 };
 type Room = { code: string; status: string; playerCount: number; host: string };
+type RankRow = { rank: number; nick: string; correct: number; solved: number; at: number };
 
 function cid(): string {
   if (typeof window === 'undefined') return '';
@@ -56,11 +57,35 @@ export default function QuizPage() {
   const [, forceTick] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
 
+  // 시간 배틀 순위표(난이도·제한시간별). 방과 무관하게 남는 기록이다.
+  const [rankLevel, setRankLevel] = useState(5);
+  const [rankLimit, setRankLimit] = useState(120);
+  const [ranks, setRanks] = useState<RankRow[]>([]);
+  const loadRanks = useCallback(async (lv: number, ls: number) => {
+    try { setRanks(await api<RankRow[]>(`/api/v1/quiz/ranks?level=${lv}&limitSec=${ls}&limit=10`)); }
+    catch { setRanks([]); }
+  }, []);
+
   useEffect(() => {
     id.current = cid();
     try { setNick(localStorage.getItem('arcade_nick') || ''); } catch {}
     api<boolean>('/api/v1/quiz/ai-available').then(setAiOn).catch(() => {});
   }, []);
+
+  // 순위표는 입장 화면에서 시간 배틀을 골랐을 때, 그리고 배틀이 끝난 뒤에 보인다.
+  const rankOpen = (screen === 'entry' && mode === 'SPRINT')
+    || (ss?.phase === 'ENDED' && ss?.mode === 'SPRINT');
+
+  // 방을 만들 때 고른 난이도·시간을 순위표 기본값으로 맞춘다.
+  useEffect(() => { setRankLevel(level); }, [level]);
+  useEffect(() => { setRankLimit(limitSec); }, [limitSec]);
+
+  // 배틀이 끝나면 방금 뛴 난이도·시간의 순위부터 보여준다(내 기록이 들어간 그 판).
+  useEffect(() => {
+    if (ss?.phase === 'ENDED' && ss?.mode === 'SPRINT') { setRankLevel(ss.level); setRankLimit(ss.limitSec); }
+  }, [ss?.phase, ss?.mode, ss?.level, ss?.limitSec]);
+
+  useEffect(() => { if (rankOpen) loadRanks(rankLevel, rankLimit); }, [rankOpen, rankLevel, rankLimit, loadRanks]);
 
   const loadRooms = useCallback(async () => { try { setRooms(await api(`/api/v1/quiz/rooms`)); } catch {} }, []);
   useEffect(() => { if (screen === 'entry') { loadRooms(); const t = setInterval(loadRooms, 3000); return () => clearInterval(t); } }, [screen, loadRooms]);
@@ -204,6 +229,70 @@ export default function QuizPage() {
     : (b.score - a.score || b.correct - a.correct));
   const rightSet = new Set(ss?.lastReveal?.rightSeats ?? []);
 
+  const limitLabel = (n: number) => (n >= 60 ? `${n / 60}분` : `${n}초`);
+  const MEDAL = ['🥇', '🥈', '🥉'];
+
+  /**
+   * 시간 배틀 순위표. 난이도 1~10 · 제한시간별로 따로 매긴다.
+   *
+   * 난이도가 섞이면 순위가 무의미해서(1레벨 30개 vs 10레벨 5개) 조건을 골라 보게 했다.
+   */
+  const rankBoard = (
+    <div className="rounded-2xl border-2 border-rose-200 bg-white overflow-hidden">
+      <p className="px-4 py-2.5 bg-rose-50 border-b border-rose-100 text-sm font-extrabold text-rose-700 flex items-center justify-between">
+        <span>🏅 시간 배틀 순위</span>
+        <span className="text-[11px] font-normal text-rose-400">난이도 {rankLevel} · {limitLabel(rankLimit)}</span>
+      </p>
+      <div className="px-3 pt-3 space-y-2">
+        <div>
+          <p className="text-[11px] font-bold text-slate-400 mb-1">난이도</p>
+          <div className="grid grid-cols-10 gap-1">
+            {Array.from({ length: 10 }, (_, i) => i + 1).map((lv) => (
+              <button key={lv} onClick={() => setRankLevel(lv)}
+                className={`py-1.5 rounded-md text-xs font-bold border ${rankLevel === lv ? 'border-rose-400 bg-rose-50 text-rose-700' : 'border-slate-200 text-slate-400'}`}>
+                {lv}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div>
+          <p className="text-[11px] font-bold text-slate-400 mb-1">제한시간</p>
+          <div className="grid grid-cols-4 gap-1">
+            {[60, 120, 180, 300].map((n) => (
+              <button key={n} onClick={() => setRankLimit(n)}
+                className={`py-1.5 rounded-md text-xs font-bold border ${rankLimit === n ? 'border-rose-400 bg-rose-50 text-rose-700' : 'border-slate-200 text-slate-400'}`}>
+                {limitLabel(n)}
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+      {ranks.length === 0 ? (
+        <p className="px-4 py-6 text-center text-xs text-slate-400">아직 기록이 없어요 — 첫 주인공이 되어보세요!</p>
+      ) : (
+        <div className="mt-3 divide-y divide-slate-50 border-t border-slate-100">
+          <p className="px-4 py-1.5 flex items-center justify-between text-[10px] font-bold text-slate-300">
+            <span>순위 · 닉네임</span><span>맞힌 개수 / 푼 문제</span>
+          </p>
+          {ranks.map((r) => (
+            <div key={`${r.rank}-${r.nick}-${r.at}`} className="flex items-center justify-between px-4 py-2 text-sm">
+              <span className="flex items-center gap-2 min-w-0">
+                <span className={`w-6 text-center flex-none font-extrabold ${r.rank <= 3 ? '' : 'text-slate-300 text-xs'}`}>
+                  {MEDAL[r.rank - 1] ?? `${r.rank}위`}
+                </span>
+                <span className="font-bold truncate">{r.nick}</span>
+              </span>
+              <span className="flex-none">
+                <span className="font-extrabold text-rose-600">{r.correct}개</span>
+                <span className="text-[11px] text-slate-400 ml-1.5">/ {r.solved}문제</span>
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+
   return (
     <main className="min-h-screen flex flex-col items-center p-3 sm:p-5 max-w-6xl xl:max-w-[1400px] mx-auto w-full text-slate-800">
       <style>{`
@@ -338,6 +427,8 @@ export default function QuizPage() {
               ))}
             </div>
           )}
+
+          {mode === 'SPRINT' && rankBoard}
         </div>
       )}
 
@@ -539,6 +630,9 @@ export default function QuizPage() {
                 </button>
               </div>
             )}
+
+            {/* 시간 배틀은 판이 끝나면 전체 순위 안에서 내 기록이 어디인지 보여준다. */}
+            {ended && sprint && rankBoard}
           </div>
 
           {/* 점수판 */}

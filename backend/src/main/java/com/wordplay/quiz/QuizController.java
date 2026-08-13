@@ -66,6 +66,15 @@ public class QuizController {
         return ApiResponse.success(g.me(clientId));
     }
 
+    /** 난이도·제한시간별 시간 배틀 순위. */
+    @GetMapping("/ranks")
+    public ApiResponse<List<com.wordplay.quiz.dto.QuizRankRow>> ranks(
+            @RequestParam(defaultValue = "5") int level,
+            @RequestParam(defaultValue = "120") int limitSec,
+            @RequestParam(defaultValue = "10") int limit) {
+        return ApiResponse.success(rooms.ranks(level, limitSec, limit));
+    }
+
     /** 무제한 모드에서 모르는 문제를 넘긴다. */
     @PostMapping("/skip")
     public ApiResponse<QuizState> skip(@RequestParam String roomCode, @RequestParam String clientId) {

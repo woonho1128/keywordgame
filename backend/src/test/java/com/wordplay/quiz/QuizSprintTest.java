@@ -23,7 +23,7 @@ class QuizSprintTest {
     }
 
     private static QuizGame sprint(int limitSec, int players) {
-        QuizGame g = new QuizGame("host", "우노", 3, null, null, "SPRINT", limitSec, bank());
+        QuizGame g = new QuizGame("host", "우노", 3, null, null, "SPRINT", limitSec, bank(), null);
         for (int i = 1; i < players; i++) g.join("p" + i, "친구" + i);
         return g;
     }
@@ -96,7 +96,7 @@ class QuizSprintTest {
 
     @Test
     void 고전_모드에서는_넘길_수_없다() {
-        QuizGame g = new QuizGame("host", "우노", 3, 5, 20, "CLASSIC", null, bank());
+        QuizGame g = new QuizGame("host", "우노", 3, 5, 20, "CLASSIC", null, bank(), null);
         g.start("host");
         assertThatThrownBy(() -> g.skip("host")).hasMessageContaining("넘길 수 없습니다");
     }
@@ -138,6 +138,31 @@ class QuizSprintTest {
             g.skip("host");
         }
         assertThat(g.questionsList().size()).as("목록이 늘어난다").isGreaterThan(initial);
+    }
+
+    @Test
+    void 넘긴_문제가_곧바로_다시_나오지_않는다() {
+        QuizGame g = sprint(60, 1);
+        g.start("host");
+        String skipped = g.me("host").question();
+        g.skip("host");
+        assertThat(g.me("host").question()).as("넘긴 문제가 바로 또 나오면 안 된다").isNotEqualTo(skipped);
+    }
+
+    @Test
+    void 한_판에서_같은_문제를_두_번_보지_않는다() {
+        // 내장 문제가 유한해 목록을 재활용하게 되는데, 그래도 사람 기준으로는
+        // 새 문제가 남아 있는 동안 중복이 나오지 않아야 한다.
+        QuizGame g = sprint(300, 1);
+        g.start("host");
+        int distinct = g.questionsList().stream().map(QuizQuestion::id).distinct().toList().size();
+        java.util.Set<String> seen = new java.util.HashSet<>();
+        for (int i = 0; i < distinct; i++) {
+            String q = g.me("host").question();
+            assertThat(q).isNotNull();
+            assertThat(seen.add(q)).as(i + "번째 문제가 이미 나온 문제다: " + q).isTrue();
+            g.skip("host");
+        }
     }
 
     @Test

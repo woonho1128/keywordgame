@@ -72,10 +72,19 @@ public class QuizGame implements RoomGame {
         /** 직전에 푼 문제의 결과(짧게 표시해주기 위한 것). */
         String lastAnswer, lastExplain;
         Boolean lastRight;
+        /**
+         * 이 사람이 이미 본 문제들.
+         *
+         * <p>넘긴 문제가 곧바로 다시 나온다는 지적이 있었다. 목록을 재활용하거나 AI가
+         * 비슷한 문제를 내놓으면 중복이 생길 수 있어, 아예 사람 기준으로 걸러낸다.
+         */
+        final java.util.Set<String> seenIds = new java.util.HashSet<>();
     }
 
     private final String hostClientId;
     private final QuizBank bank;
+    /** 시간 배틀 결과를 남길 곳. null이면 기록만 건너뛴다(테스트·DB 없음). */
+    private final QuizRankService ranks;
     private final Mode mode;
     private final int level, rounds, questionSec, limitSec;
 
@@ -89,9 +98,11 @@ public class QuizGame implements RoomGame {
     private long lastActive = System.currentTimeMillis();
 
     public QuizGame(String hostClientId, String nick, Integer levelOpt, Integer roundsOpt,
-                    Integer secOpt, String modeOpt, Integer limitSecOpt, QuizBank bank) {
+                    Integer secOpt, String modeOpt, Integer limitSecOpt,
+                    QuizBank bank, QuizRankService ranks) {
         this.hostClientId = hostClientId;
         this.bank = bank;
+        this.ranks = ranks;
         this.mode = "SPRINT".equalsIgnoreCase(modeOpt) ? Mode.SPRINT : Mode.CLASSIC;
         this.level = clamp(levelOpt, 1, 10, 5);
         this.rounds = clamp(roundsOpt, MIN_ROUNDS, MAX_ROUNDS, DEFAULT_ROUNDS);
@@ -138,6 +149,7 @@ public class QuizGame implements RoomGame {
             p.answer = null; p.answeredRight = false; p.answeredAt = 0;
             p.cursor = 0; p.wrong = 0; p.skipped = 0;
             p.lastRight = null; p.lastAnswer = null; p.lastExplain = null;
+            p.seenIds.clear();
         }
         log.clear();
         if (mode == Mode.SPRINT) {
@@ -262,6 +274,7 @@ public class QuizGame implements RoomGame {
         p.lastRight = right;
         p.lastAnswer = solved.answerLabel();
         p.lastExplain = solved.explain();
+        p.seenIds.add(solved.id());
         p.cursor++;
         topUpIfNeeded();
     }
@@ -288,11 +301,27 @@ public class QuizGame implements RoomGame {
         questions.addAll(recycled);
     }
 
-    /** 그 사람이 지금 풀어야 할 문제. */
+    /**
+     * 그 사람이 지금 풀어야 할 문제.
+     *
+     * <p>이미 푼 문제는 건너뛴다 — 목록 재활용이나 비슷한 출제로 중복이 섞여도
+     * 같은 문제를 두 번 보지 않는다. 남은 게 전부 본 문제뿐이면 어쩔 수 없이 다시 낸다.
+     */
     private QuizQuestion questionFor(P p) {
         if (mode != Mode.SPRINT) return current();
         if (p == null) return null;
         if (p.cursor >= questions.size()) topUpIfNeeded();
+        while (p.cursor < questions.size() && p.seenIds.contains(questions.get(p.cursor).id())) {
+            p.cursor++;
+            if (p.cursor >= questions.size()) topUpIfNeeded();
+            // 목록이 더 늘지 않으면(전부 본 문제) 그 자리에서 멈춘다.
+            if (p.cursor >= questions.size()) break;
+        }
+        if (p.cursor >= questions.size()) {
+            // 새 문제를 못 구했다. 본 문제 기록을 비워 다시 돌게 한다(빈 화면보다 낫다).
+            p.seenIds.clear();
+            p.cursor = questions.isEmpty() ? 0 : p.cursor % questions.size();
+        }
         return p.cursor < questions.size() ? questions.get(p.cursor) : null;
     }
 
@@ -347,6 +376,11 @@ public class QuizGame implements RoomGame {
     private void finish() {
         phase = Phase.ENDED;
         deadline = 0; revealAt = 0;
+        // 시간 배틀만 순위에 남긴다(문제 수 고정 모드와는 기준이 달라 섞을 수 없다).
+        if (mode == Mode.SPRINT && ranks != null)
+            for (P p : players)
+                if (!p.left) ranks.record(level, limitSec, p.nick, p.correct,
+                        p.correct + p.wrong + p.skipped);
         P best = null;
         for (P p : players) if (!p.left && (best == null || rankBetter(p, best))) best = p;
         if (best == null) note("게임 종료");

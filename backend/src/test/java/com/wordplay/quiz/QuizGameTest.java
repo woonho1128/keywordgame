@@ -17,11 +17,11 @@ class QuizGameTest {
     }
 
     private static QuizGame solo(int rounds) {
-        return new QuizGame("host", "우노", 5, rounds, 20, null, null, bank());
+        return new QuizGame("host", "우노", 5, rounds, 20, null, null, bank(), null);
     }
 
     private static QuizGame withPlayers(int n, int rounds) {
-        QuizGame g = new QuizGame("host", "우노", 5, rounds, 20, null, null, bank());
+        QuizGame g = new QuizGame("host", "우노", 5, rounds, 20, null, null, bank(), null);
         for (int i = 1; i < n; i++) g.join("p" + i, "친구" + i);
         return g;
     }
@@ -181,8 +181,8 @@ class QuizGameTest {
 
     @Test
     void 난이도와_문제수는_범위를_벗어나면_잘린다() {
-        QuizGame low = new QuizGame("h", "n", 0, 1, 1, null, null, bank());
-        QuizGame high = new QuizGame("h", "n", 99, 999, 999, null, null, bank());
+        QuizGame low = new QuizGame("h", "n", 0, 1, 1, null, null, bank(), null);
+        QuizGame high = new QuizGame("h", "n", 99, 999, 999, null, null, bank(), null);
         assertThat(low.me("h").level()).isEqualTo(1);
         assertThat(high.me("h").level()).isEqualTo(10);
         assertThat(low.me("h").questionSec()).isEqualTo(QuizGame.MIN_SEC);

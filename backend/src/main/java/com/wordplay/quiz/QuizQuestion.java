@@ -30,10 +30,18 @@ public record QuizQuestion(
         return answers.isEmpty() ? "?" : answers.get(0);
     }
 
-    /** 주관식 초성 힌트. 예: "이순신" → "ㅇㅅㅅ". 한글이 아닌 글자는 그대로 둔다. */
+    /**
+     * 주관식 힌트. 예: "이순신" → "ㅇㅅㅅ", "DNA" → "___".
+     *
+     * <p>한글은 초성만 남기고, 한글이 아닌 글자(영문·숫자)는 가린다. 예전에는 비한글을
+     * 그대로 통과시켜서 "DNA"·"8" 같은 정답이 힌트에 통째로 노출됐다. 그래도 힌트가
+     * 정답과 같아지면(가릴 게 없는 짧은 답 등) 아예 주지 않는다.
+     */
     public String hint() {
         if (kind != Kind.TEXT) return null;
-        return chosung(answerLabel());
+        String answer = answerLabel();
+        String h = mask(answer);
+        return normalize(h).equals(normalize(answer)) ? null : h;
     }
 
     /** 이 답이 맞는가. 대소문자·공백·괄호·문장부호 차이는 무시한다. */
@@ -66,6 +74,19 @@ public record QuizQuestion(
         for (char c : s.toCharArray()) {
             if (c >= HANGUL_BASE && c <= 0xD7A3) sb.append(CHO[(c - HANGUL_BASE) / (JUNG * JONG)]);
             else if (c == ' ') sb.append(' ');
+            else sb.append(c);
+        }
+        return sb.toString();
+    }
+
+    /** 힌트용 가리기. 한글은 초성, 영문·숫자는 밑줄, 띄어쓰기는 그대로. */
+    static String mask(String s) {
+        if (s == null) return "";
+        StringBuilder sb = new StringBuilder();
+        for (char c : s.toCharArray()) {
+            if (c >= HANGUL_BASE && c <= 0xD7A3) sb.append(CHO[(c - HANGUL_BASE) / (JUNG * JONG)]);
+            else if (c == ' ') sb.append(' ');
+            else if (Character.isLetterOrDigit(c)) sb.append('_');
             else sb.append(c);
         }
         return sb.toString();

@@ -19,7 +19,7 @@ class QuizWireTest {
     private static QuizGame game() {
         QuizBank b = new QuizBank(null);
         ReflectionTestUtils.setField(b, "dailyCallLimit", 0);
-        return new QuizGame("host", "우노", 3, 5, 30, null, null, b);
+        return new QuizGame("host", "우노", 3, 5, 30, null, null, b, null);
     }
 
     @Test

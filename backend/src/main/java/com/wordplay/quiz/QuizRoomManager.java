@@ -15,12 +15,16 @@ public class QuizRoomManager {
 
     private final RoomRegistry<QuizGame> reg = new RoomRegistry<>("quiz");
     private final QuizBank bank;
+    private final QuizRankService ranks;
 
-    public QuizRoomManager(QuizBank bank) { this.bank = bank; }
+    public QuizRoomManager(QuizBank bank, QuizRankService ranks) {
+        this.bank = bank;
+        this.ranks = ranks;
+    }
 
     public String create(String clientId, NewQuizRequest req) {
         QuizGame game = new QuizGame(clientId, req.nick(), req.level(), req.rounds(),
-                req.questionSec(), req.mode(), req.limitSec(), bank);
+                req.questionSec(), req.mode(), req.limitSec(), bank, ranks);
         try {
             return reg.add(game);
         } catch (IllegalStateException e) {
@@ -40,4 +44,7 @@ public class QuizRoomManager {
     public boolean closeRoom(String code) { return reg.remove(code); }
     public void leave(String code, String clientId) { reg.leave(code, clientId); }
     public boolean aiAvailable() { return bank.aiAvailable(); }
+    public List<com.wordplay.quiz.dto.QuizRankRow> ranks(int level, int limitSec, int limit) {
+        return ranks.top(level, limitSec, limit);
+    }
 }

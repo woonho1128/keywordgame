@@ -82,10 +82,23 @@ class QuizQuestionTest {
     }
 
     @Test
-    void 초성_힌트는_한글이_아닌_글자를_그대로_둔다() {
-        assertThat(QuizQuestion.chosung("DNA")).isEqualTo("DNA");
-        assertThat(QuizQuestion.chosung("에펠 탑")).isEqualTo("ㅇㅍ ㅌ");
-        assertThat(QuizQuestion.chosung("8")).isEqualTo("8");
+    void 영문_숫자_정답은_힌트에_노출되지_않는다() {
+        // 예전에는 비한글을 그대로 통과시켜 "DNA"가 힌트로 그대로 나갔다(정답 노출).
+        assertThat(text("DNA").hint()).isEqualTo("___");
+        assertThat(text("H2O").hint()).isEqualTo("___");
+        assertThat(text("아이폰 15").hint()).isEqualTo("ㅇㅇㅍ __");
+        // 가려도 정답과 같아지면 힌트를 주지 않는다
+        assertThat(text("8").hint()).isEqualTo("_");
+    }
+
+    @Test
+    void 힌트는_어떤_정답에도_정답을_그대로_담지_않는다() {
+        for (String a : new String[]{"DNA", "8", "Au", "GDP", "이순신", "에펠 탑", "H2O", "금", "ㄱ"}) {
+            String h = text(a).hint();
+            if (h == null) continue;
+            assertThat(QuizQuestion.normalize(h))
+                    .as("정답 " + a + " 의 힌트 " + h).isNotEqualTo(QuizQuestion.normalize(a));
+        }
     }
 
     @Test
