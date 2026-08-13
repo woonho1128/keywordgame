@@ -63,6 +63,10 @@ app:
     # 한도를 넘으면 메일만 건너뛰고 접수는 계속 받는다(/admin/feedback에서 확인).
     mail-daily-limit: ${FEEDBACK_MAIL_DAILY_LIMIT:80}
     mail-monthly-limit: ${FEEDBACK_MAIL_MONTHLY_LIMIT:2500}
+  quiz:
+    # AI 상식 퀴즈 문제 생성 하루 호출 상한. 한 번에 10문제를 받으므로
+    # 200회면 하루 2000문제다. 넘으면 내장 문제로 돌아가고 게임은 계속 된다.
+    daily-call-limit: ${QUIZ_DAILY_CALL_LIMIT:200}
   wordsim:
     # WordSim 참고용 벡터 사전 위치 (rank 비교 기준)
     vectors-path: ${WORDSIM_VECTORS_PATH:/etc/wordplay/word_vectors.bin}
