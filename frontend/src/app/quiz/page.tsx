@@ -6,7 +6,7 @@ import { api } from '@/lib/api';
 import RoomChat from '@/components/RoomChat';
 
 type PlayerView = { seat: number; name: string; host: boolean; me: boolean; left: boolean; score: number; correct: number; streak: number; bestStreak: number; answered: boolean; wrong: number; skipped: number; solved: number };
-type MyLast = { right: boolean | null; answer: string; explain: string | null };
+type MyLast = { right: boolean | null; answer: string; explain: string | null; delta: number };
 type Reveal = { round: number; answer: string; explain: string | null; rightSeats: number[]; given: Record<string, string> };
 type State = {
   phase: string; mode: string; level: number; totalRounds: number; round: number;
@@ -18,7 +18,7 @@ type State = {
   lastReveal: Reveal | null; myLast: MyLast | null; log: string[]; deadline: number; serverNow: number;
 };
 type Room = { code: string; status: string; playerCount: number; host: string };
-type RankRow = { rank: number; nick: string; correct: number; solved: number; at: number };
+type RankRow = { rank: number; nick: string; score: number; correct: number; solved: number; at: number };
 
 function cid(): string {
   if (typeof window === 'undefined') return '';
@@ -225,7 +225,7 @@ export default function QuizPage() {
 
   const active = ss ? ss.players.filter((p) => !p.left) : [];
   const ranked = [...active].sort((a, b) => sprint
-    ? (b.correct - a.correct || a.wrong - b.wrong)
+    ? (b.score - a.score || b.correct - a.correct || a.wrong - b.wrong)
     : (b.score - a.score || b.correct - a.correct));
   const rightSet = new Set(ss?.lastReveal?.rightSeats ?? []);
 
@@ -272,7 +272,7 @@ export default function QuizPage() {
       ) : (
         <div className="mt-3 divide-y divide-slate-50 border-t border-slate-100">
           <p className="px-4 py-1.5 flex items-center justify-between text-[10px] font-bold text-slate-300">
-            <span>순위 · 닉네임</span><span>맞힌 개수 / 푼 문제</span>
+            <span>순위 · 닉네임</span><span>점수 / 정답</span>
           </p>
           {ranks.map((r) => (
             <div key={`${r.rank}-${r.nick}-${r.at}`} className="flex items-center justify-between px-4 py-2 text-sm">
@@ -283,8 +283,8 @@ export default function QuizPage() {
                 <span className="font-bold truncate">{r.nick}</span>
               </span>
               <span className="flex-none">
-                <span className="font-extrabold text-rose-600">{r.correct}개</span>
-                <span className="text-[11px] text-slate-400 ml-1.5">/ {r.solved}문제</span>
+                <span className="font-extrabold text-rose-600">{r.score}점</span>
+                <span className="text-[11px] text-slate-400 ml-1.5">정답 {r.correct}/{r.solved}</span>
               </span>
             </div>
           ))}
@@ -350,7 +350,17 @@ export default function QuizPage() {
               <p className="text-[11px] text-slate-400 mt-1.5">
                 {mode === 'CLASSIC'
                   ? '정해진 문제 수를 함께 풀어요. 빨리 맞히면 점수가 더!'
-                  : '제한시간 동안 무제한! 답하면 바로 다음 문제 — 많이 맞힌 사람이 이겨요.'}
+                  : '제한시간 동안 무제한! 답하면 바로 다음 문제 — 점수가 높은 사람이 이겨요.'}
+              </p>
+              <p className="text-[11px] text-slate-400 mt-1">
+                {mode === 'SPRINT' && (
+                  <span className="inline-flex flex-wrap gap-x-2 gap-y-0.5">
+                    <span className="text-emerald-600 font-bold">정답 +2</span>
+                    <span className="text-emerald-600 font-bold">주관식 정답 +3</span>
+                    <span className="text-rose-500 font-bold">오답 -2</span>
+                    <span className="text-slate-400 font-bold">넘기기 -1</span>
+                  </span>
+                )}
               </p>
             </div>
             <div>
@@ -560,12 +570,13 @@ export default function QuizPage() {
               <div className="flex items-center gap-2">
                 <button onClick={skip} disabled={busy || !ss.canAnswer}
                   className="px-4 py-2.5 rounded-xl border-2 border-slate-200 text-slate-500 font-bold text-sm disabled:opacity-40">
-                  모르겠어요 ⏭
+                  모르겠어요 ⏭ <span className="text-[10px] text-slate-400">-1</span>
                 </button>
                 {ss.myLast && (
                   <p key={ss.round} className="text-sm flex-1 min-w-0 truncate" style={{ animation: 'qz-pop .25s ease' }}>
                     <span className={`font-extrabold ${ss.myLast.right === true ? 'text-emerald-600' : ss.myLast.right === false ? 'text-rose-500' : 'text-slate-400'}`}>
-                      {ss.myLast.right === true ? '⭕ 정답' : ss.myLast.right === false ? '❌ 오답' : '⏭ 넘김'}
+                      {ss.myLast.right === true ? `⭕ 정답 ${ss.myLast.delta > 0 ? '+' : ''}${ss.myLast.delta}`
+                        : ss.myLast.right === false ? `❌ 오답 ${ss.myLast.delta}` : `⏭ 넘김 ${ss.myLast.delta}`}
                     </span>
                     <span className="text-slate-400 ml-1.5">정답: {ss.myLast.answer}</span>
                   </p>
@@ -615,10 +626,10 @@ export default function QuizPage() {
                         {p.name}{p.me ? ' (나)' : ''}
                       </span>
                       <span className="text-sm">
-                        <span className="font-extrabold">{sprint ? `${p.correct}개` : `${p.score}점`}</span>
+                        <span className="font-extrabold">{p.score}점</span>
                         <span className="text-slate-400 ml-2">
                           {sprint
-                            ? `${p.solved}문제 풀이 · 오답 ${p.wrong} · 최고 ${p.bestStreak}연속`
+                            ? `정답 ${p.correct} · 오답 ${p.wrong} · 넘김 ${p.skipped} · 최고 ${p.bestStreak}연속`
                             : `${p.correct}/${ss.totalRounds}개 · 최고 ${p.bestStreak}연속`}
                         </span>
                       </span>
@@ -640,7 +651,7 @@ export default function QuizPage() {
             <div className="rounded-2xl border-2 border-slate-200 overflow-hidden bg-white">
               <p className="px-3 py-2 text-xs font-extrabold text-slate-400 bg-slate-50 border-b border-slate-100 flex items-center justify-between">
                 <span>{sprint ? '순위표' : '점수판'}</span>
-                {sprint && <span className="font-normal text-[10px] text-slate-300">맞힌 개수 순</span>}
+                {sprint && <span className="font-normal text-[10px] text-slate-300">점수 순</span>}
               </p>
               {ranked.map((p, i) => (
                 <div key={p.seat} className={`px-3 py-2 border-b border-slate-50 last:border-b-0 ${p.me ? 'bg-indigo-50/50' : ''}`}>
@@ -651,11 +662,11 @@ export default function QuizPage() {
                       <span className="truncate">{p.name}{p.me ? ' (나)' : ''}</span>
                       {asking && p.answered && <span className="text-[10px] text-emerald-500 flex-none">✓</span>}
                     </span>
-                    <span className="font-extrabold text-sm flex-none">{sprint ? `${p.correct}개` : p.score}</span>
+                    <span className="font-extrabold text-sm flex-none">{sprint ? `${p.score}점` : p.score}</span>
                   </div>
                   <p className="text-[11px] text-slate-400 mt-0.5">
                     {sprint
-                      ? `${p.solved}문제 · 오답 ${p.wrong}${p.skipped > 0 ? ` · 넘김 ${p.skipped}` : ''}`
+                      ? `정답 ${p.correct} · 오답 ${p.wrong}${p.skipped > 0 ? ` · 넘김 ${p.skipped}` : ''}`
                       : `${p.correct}개 정답`}
                     {p.streak > 1 ? ` · 🔥${p.streak}연속` : ''}
                   </p>

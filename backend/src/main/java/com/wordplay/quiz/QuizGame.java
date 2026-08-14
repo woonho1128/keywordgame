@@ -28,7 +28,9 @@ import java.util.Map;
  *   <li>{@link Mode#SPRINT}: 제한시간 동안 무제한으로 푼다. 답하면 곧바로 다음 문제가
  *       나오므로 각자 자기 속도로 달린다. 문제 목록은 공유하고 커서만 사람마다 따로
  *       두어 — 모두 같은 문제를 같은 순서로 받아 공정하고, 필요한 문제 수도
- *       "가장 많이 푼 사람" 만큼이라 비용이 인원수만큼 늘지 않는다.</li>
+ *       "가장 많이 푼 사람" 만큼이라 비용이 인원수만큼 늘지 않는다.
+ *       배점은 맞으면 {@value #SPRINT_RIGHT}점(주관식 {@value #SPRINT_TEXT_RIGHT}점),
+ *       틀리면 {@value #SPRINT_WRONG}점, 넘기면 {@value #SPRINT_SKIP}점이다.</li>
  * </ul>
  */
 public class QuizGame implements RoomGame {
@@ -62,6 +64,25 @@ public class QuizGame implements RoomGame {
     private int startCount() {
         return Math.min(mode == Mode.SPRINT ? preloadFor(limitSec) : rounds, QuizBank.BATCH);
     }
+    /**
+     * 무제한 모드 배점.
+     *
+     * <p>맞힌 개수만 세면 4지선다를 아무거나 찍는 게 최적 전략이 된다 — 1초에 25% 확률로
+     * 한 개씩 벌기 때문이다. 틀리면 깎아야 아는 문제를 고르는 경기가 된다.
+     *
+     * <p>기대값으로 맞춘 숫자다. 4지선다를 완전히 찍으면
+     * {@code 0.25×2 + 0.75×(-2) = -1}이라 찍기가 확실히 손해다. 반반까지 좁히면 0이 되어
+     * 그때부터 도전할 만해진다.
+     *
+     * <p>주관식이 {@value #SPRINT_TEXT_RIGHT}점인 이유: 보기가 없어 훨씬 어렵고 표기 차이로
+     * 억울하게 틀릴 위험까지 있다. 정답이 같은 값이면 아무도 주관식을 반기지 않는다.
+     *
+     * <p>넘기기를 0이 아니라 {@value #SPRINT_SKIP}점으로 두는 이유: 공짜면 쉬운 문제가
+     * 나올 때까지 넘기기를 연타하는 게 최적 전략이 된다.
+     *
+     * <p>0점 바닥은 두지 않는다. 바닥이 있으면 0점인 사람에게는 오답이 공짜라 벌점이 사라진다.
+     */
+    static final int SPRINT_RIGHT = 2, SPRINT_TEXT_RIGHT = 3, SPRINT_WRONG = -2, SPRINT_SKIP = -1;
     /** 커서가 목록 끝에서 이만큼 안으로 들어오면 보충한다. */
     static final int TOPUP_MARGIN = 5;
     /** 목록이 무한히 커지지 않게 두는 상한. 제한시간 안에 여기까지 푸는 건 불가능하다. */
@@ -82,6 +103,8 @@ public class QuizGame implements RoomGame {
         /** 직전에 푼 문제의 결과(짧게 표시해주기 위한 것). */
         String lastAnswer, lastExplain;
         Boolean lastRight;
+        /** 직전 문제로 오르내린 점수. 왜 점수가 움직였는지 화면에서 바로 알게 한다. */
+        int lastDelta;
         /**
          * 이 사람이 이미 본 문제들.
          *
@@ -158,7 +181,7 @@ public class QuizGame implements RoomGame {
             p.seat = i; p.score = 0; p.correct = 0; p.streak = 0; p.bestStreak = 0;
             p.answer = null; p.answeredRight = false; p.answeredAt = 0;
             p.cursor = 0; p.wrong = 0; p.skipped = 0;
-            p.lastRight = null; p.lastAnswer = null; p.lastExplain = null;
+            p.lastRight = null; p.lastAnswer = null; p.lastExplain = null; p.lastDelta = 0;
             p.seenIds.clear();
         }
         log.clear();
@@ -257,10 +280,6 @@ public class QuizGame implements RoomGame {
             right = q.accepts(text);
         }
         if (right) {
-            // 무제한 모드는 '많이 맞히기' 경기다. 속도는 문제 수로 이미 드러나므로
-            // 속도 가산을 주지 않고 문제마다 같은 점수를 준다(주관식만 가산).
-            p.score += q.kind() == QuizQuestion.Kind.TEXT
-                    ? BASE_SCORE * (100 + TEXT_BONUS_PCT) / 100 : BASE_SCORE;
             p.correct++;
             p.streak++;
             p.bestStreak = Math.max(p.bestStreak, p.streak);
@@ -287,12 +306,21 @@ public class QuizGame implements RoomGame {
 
     /** 커서를 한 칸 옮기고, 직전 결과를 남기고, 목록이 부족하면 보충한다. */
     private void advance(P p, Boolean right, QuizQuestion solved) {
+        p.lastDelta = deltaFor(right, solved);
+        p.score += p.lastDelta;
         p.lastRight = right;
         p.lastAnswer = solved.answerLabel();
         p.lastExplain = solved.explain();
         p.seenIds.add(solved.id());
         p.cursor++;
         topUpIfNeeded();
+    }
+
+    /** 그 결과로 오르내릴 점수. {@code right}가 null이면 넘긴 것이다. */
+    static int deltaFor(Boolean right, QuizQuestion q) {
+        if (right == null) return SPRINT_SKIP;
+        if (!right) return SPRINT_WRONG;
+        return q.kind() == QuizQuestion.Kind.TEXT ? SPRINT_TEXT_RIGHT : SPRINT_RIGHT;
     }
 
     /**
@@ -397,19 +425,20 @@ public class QuizGame implements RoomGame {
         // 시간 배틀만 순위에 남긴다(문제 수 고정 모드와는 기준이 달라 섞을 수 없다).
         if (mode == Mode.SPRINT && ranks != null)
             for (P p : players)
-                if (!p.left) ranks.record(level, limitSec, p.nick, p.correct,
+                if (!p.left) ranks.record(level, limitSec, p.nick, p.score, p.correct,
                         p.correct + p.wrong + p.skipped);
         P best = null;
         for (P p : players) if (!p.left && (best == null || rankBetter(p, best))) best = p;
         if (best == null) note("게임 종료");
         else if (mode == Mode.SPRINT)
-            note("🏁 " + best.nick + " 우승! " + best.correct + "개 정답");
+            note("🏁 " + best.nick + " 우승! " + best.score + "점 (정답 " + best.correct + ")");
         else note("🏁 " + best.nick + " 우승! " + best.score + "점");
     }
 
-    /** 무제한 모드는 맞힌 개수로, 같으면 오답이 적은 쪽이 이긴다. 그 외에는 점수순. */
+    /** 점수순. 무제한 모드는 점수가 같으면 맞힌 개수, 그다음 오답이 적은 쪽이 이긴다. */
     private boolean rankBetter(P a, P b) {
         if (mode != Mode.SPRINT) return a.score > b.score;
+        if (a.score != b.score) return a.score > b.score;
         if (a.correct != b.correct) return a.correct > b.correct;
         return a.wrong < b.wrong;
     }
@@ -441,7 +470,8 @@ public class QuizGame implements RoomGame {
         }
         // 무제한 모드 순위표: 맞힌 개수 순(동점이면 오답 적은 순).
         if (mode == Mode.SPRINT)
-            pv.sort((a, b) -> a.correct() != b.correct() ? b.correct() - a.correct() : a.wrong() - b.wrong());
+            pv.sort((a, b) -> a.score() != b.score() ? b.score() - a.score()
+                    : a.correct() != b.correct() ? b.correct() - a.correct() : a.wrong() - b.wrong());
 
         QuizQuestion q = mode == Mode.SPRINT ? questionFor(me) : current();
         boolean asking = phase == Phase.ASKING;
@@ -463,7 +493,7 @@ public class QuizGame implements RoomGame {
                 mode == Mode.SPRINT ? sprintCanAnswer : (asking && me != null && me.answer == null && !me.left),
                 phase == Phase.REVEAL ? lastReveal : null,
                 mode == Mode.SPRINT && me != null && me.lastAnswer != null
-                        ? new QuizState.MyLast(me.lastRight, me.lastAnswer, me.lastExplain) : null,
+                        ? new QuizState.MyLast(me.lastRight, me.lastAnswer, me.lastExplain, me.lastDelta) : null,
                 new ArrayList<>(log), deadline, now());
     }
 

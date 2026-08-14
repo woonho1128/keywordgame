@@ -39,7 +39,8 @@ public record QuizState(
                              int wrong, int skipped, int solved) {}
 
     /** SPRINT에서 직전 문제의 결과. right=null이면 넘긴 것. */
-    public record MyLast(Boolean right, String answer, String explain) {}
+    /** @param delta 그 문제로 오르내린 점수(+3/+2/-2/-1) */
+    public record MyLast(Boolean right, String answer, String explain, int delta) {}
 
     /**
      * 정답 공개.

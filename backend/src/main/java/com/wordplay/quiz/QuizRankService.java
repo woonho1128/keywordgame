@@ -41,8 +41,17 @@ public class QuizRankService {
                     solved INTEGER NOT NULL,
                     created_at TIMESTAMP NOT NULL DEFAULT now()
                 )""");
+            /*
+             * 순위 기준을 맞힌 개수에서 점수로 바꾸면서 늘어난 칸.
+             *
+             * 이미 쌓인 기록에는 점수가 없다. 그때는 벌점이 없었으니 맞힌 개수 × 정답 배점이
+             * 그 규칙에서의 점수와 같다 — 그렇게 채워 넣어야 옛 기록이 0점으로 밀리지 않는다.
+             */
+            jdbc.execute("ALTER TABLE tb_quiz_rank ADD COLUMN IF NOT EXISTS score INTEGER");
+            jdbc.update("UPDATE tb_quiz_rank SET score = correct * ? WHERE score IS NULL",
+                    QuizGame.SPRINT_RIGHT);
             jdbc.execute("CREATE INDEX IF NOT EXISTS idx_quiz_rank_board "
-                    + "ON tb_quiz_rank(level, limit_sec, correct DESC, created_at ASC)");
+                    + "ON tb_quiz_rank(level, limit_sec, score DESC, created_at ASC)");
             ready = true;
         } catch (Exception e) {
             log.warn("퀴즈 순위 테이블 초기화 실패(순위만 비활성): {}", e.getMessage());
@@ -50,13 +59,14 @@ public class QuizRankService {
     }
 
     /** 한 사람의 배틀 결과를 남긴다. 실패해도 조용히 넘어간다. */
-    public void record(int level, int limitSec, String nick, int correct, int solved) {
+    public void record(int level, int limitSec, String nick, int score, int correct, int solved) {
         if (!ready || nick == null || nick.isBlank()) return;
-        // 한 문제도 못 맞힌 기록은 순위표를 지저분하게만 만든다.
-        if (correct <= 0) return;
+        // 점수가 0 이하인 기록은 순위표를 지저분하게만 만든다(벌점으로 음수도 나온다).
+        if (score <= 0) return;
         try {
-            jdbc.update("INSERT INTO tb_quiz_rank(level, limit_sec, nick, correct, solved) VALUES (?,?,?,?,?)",
-                    clampLevel(level), limitSec, nick.length() > 16 ? nick.substring(0, 16) : nick, correct, solved);
+            jdbc.update("INSERT INTO tb_quiz_rank(level, limit_sec, nick, score, correct, solved) VALUES (?,?,?,?,?,?)",
+                    clampLevel(level), limitSec, nick.length() > 16 ? nick.substring(0, 16) : nick,
+                    score, correct, solved);
         } catch (Exception e) {
             log.warn("퀴즈 순위 기록 실패: {}", e.getMessage());
         }
@@ -68,11 +78,12 @@ public class QuizRankService {
         int lim = Math.max(1, Math.min(50, limit));
         try {
             return jdbc.query("""
-                    SELECT nick, correct, solved, created_at FROM tb_quiz_rank
+                    SELECT nick, score, correct, solved, created_at FROM tb_quiz_rank
                     WHERE level = ? AND limit_sec = ?
-                    ORDER BY correct DESC, solved ASC, created_at ASC LIMIT ?""",
-                    (rs, i) -> new QuizRankRow(i + 1, rs.getString("nick"), rs.getInt("correct"),
-                            rs.getInt("solved"), rs.getTimestamp("created_at").toInstant().toEpochMilli()),
+                    ORDER BY score DESC, correct DESC, solved ASC, created_at ASC LIMIT ?""",
+                    (rs, i) -> new QuizRankRow(i + 1, rs.getString("nick"), rs.getInt("score"),
+                            rs.getInt("correct"), rs.getInt("solved"),
+                            rs.getTimestamp("created_at").toInstant().toEpochMilli()),
                     clampLevel(level), limitSec, lim);
         } catch (Exception e) {
             log.warn("퀴즈 순위 조회 실패: {}", e.getMessage());
