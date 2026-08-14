@@ -48,6 +48,16 @@ public class QuizBank {
     static final int POOL_MAX = 60;
     /** 중복 판정용 지문 기억 개수. */
     static final int SEEN_MAX = 4000;
+    /**
+     * 최근 정답 기억 개수.
+     *
+     * <p>지문만 비교하면 "세계에서 가장 높은 산은?"과 "지구에서 가장 높은 산의 이름은?"이
+     * 서로 다른 문제로 통과한다. 사람이 느끼는 중복은 묻는 <b>사실</b>이 같은 것이라
+     * 정답으로도 걸러낸다. 오래된 것까지 막으면 낼 문제가 마르므로 최근 것만 본다.
+     */
+    static final int ANSWER_MEMORY = 400;
+    /** 프롬프트에 "이미 낸 문제"로 넣어줄 난이도별 지문 수. */
+    static final int RECENT_HINT = 30;
 
     private final OpenAiChatClient client;
     private final ObjectMapper mapper = new ObjectMapper();
@@ -63,6 +73,10 @@ public class QuizBank {
     private final Map<Integer, AtomicBoolean> generating = new ConcurrentHashMap<>();
     /** 이미 만든 지문(정규화) — 중복 출제 방지. */
     private final Set<String> seen = Collections.synchronizedSet(new LinkedHashSet<>());
+    /** 최근에 쓴 정답(정규화) — 표현만 바꾼 같은 문제를 걸러낸다. */
+    private final Set<String> usedAnswers = Collections.synchronizedSet(new LinkedHashSet<>());
+    /** 난이도별 최근 지문(원문) — 다음 생성 때 "이걸 빼고 만들라"고 알려준다. */
+    private final Map<Integer, Deque<String>> recent = new ConcurrentHashMap<>();
 
     /** 하루 호출 상한. 넘으면 내장 문제만 쓴다. */
     @Value("${app.quiz.daily-call-limit:200}")
@@ -78,7 +92,14 @@ public class QuizBank {
     public boolean aiAvailable() { return client != null && client.isConfigured(); }
 
     /**
-     * 문제를 꺼낸다. 창고가 부족하면 그 자리에서 만들고, 그래도 모자라면 내장 문제로 채운다.
+     * 문제를 꺼낸다. 창고가 비었으면 그 자리에서 <b>한 번만</b> 만들고, 모자란 몫은
+     * 내장 문제로 채운 뒤 나머지는 배경에서 이어 만든다.
+     *
+     * <p>생성 호출을 여러 번 이어서 하면 안 된다. 예전에는 요청한 개수를 다 채울 때까지
+     * 반복해서 불렀는데, 한 번에 {@value #BATCH}문제씩이라 40문제를 달라고 하면 20초짜리
+     * 호출이 4번 이어졌다. 그동안 시작 요청이 그대로 막혀 있어 앞단 프록시가 먼저 끊었고,
+     * 화면에는 JSON이 아닌 500 응답이 그대로 떴다("Internal Server Error").
+     * 시작에 필요한 만큼만 기다리고, 나머지는 사람들이 문제를 푸는 동안 채운다.
      *
      * @param level 1~10
      */
@@ -87,20 +108,20 @@ public class QuizBank {
         Deque<QuizQuestion> q = deque(lv);
 
         List<QuizQuestion> out = new ArrayList<>();
-        while (out.size() < count) {
-            if (q.isEmpty() && !refill(lv)) break;      // 더 만들 수 없으면 중단
-            if (q.isEmpty()) break;
-            out.add(q.poll());
-        }
+        drain(q, out, count);
+        if (out.isEmpty() && refill(lv)) drain(q, out, count);   // 창고가 비었을 때만 한 번
+        prewarmAsync(lv);                                        // 뒷일은 배경에서
         // 부족한 만큼은 내장 문제로 메운다(AI 미설정·한도 초과·응답 실패).
         if (out.size() < count) out.addAll(QuizFallback.pick(lv, count - out.size(), out));
         return out;
     }
 
-    /** 다음 판을 위해 미리 채워둔다(플레이 중 끊김 방지). 부족할 때만 호출한다. */
-    public void prewarm(int level) {
-        int lv = Math.max(1, Math.min(10, level));
-        if (deque(lv).size() <= LOW_WATER) refill(lv);
+    private static void drain(Deque<QuizQuestion> from, List<QuizQuestion> into, int upTo) {
+        while (into.size() < upTo) {
+            QuizQuestion x = from.poll();
+            if (x == null) return;
+            into.add(x);
+        }
     }
 
     /**
@@ -127,14 +148,20 @@ public class QuizBank {
         return out;
     }
 
-    /** 배경에서 창고를 채운다. 게임 스레드를 붙잡지 않는다. */
+    /**
+     * 배경에서 창고를 채운다. 게임 스레드를 붙잡지 않는다.
+     *
+     * <p>기다리는 사람이 없으므로 응답을 넉넉히 기다린다({@value #BG_TIMEOUT_MS}ms).
+     * 짧게 끊으면 만들다 만 응답을 버리게 되는데, 요금은 그대로 나가고 창고는 그대로
+     * 비어 있어 사람들은 내장 문제만 반복해서 보게 된다.
+     */
     public void prewarmAsync(int level) {
         int lv = Math.max(1, Math.min(10, level));
         if (deque(lv).size() > LOW_WATER || !aiAvailable()) return;
         AtomicBoolean busy = generating.computeIfAbsent(lv, k -> new AtomicBoolean());
         if (!busy.compareAndSet(false, true)) return;      // 이미 만들고 있다
         Thread t = new Thread(() -> {
-            try { refill(lv); } catch (Exception e) {
+            try { refill(lv, BG_TIMEOUT_MS); } catch (Exception e) {
                 log.warn("퀴즈 배경 생성 실패: {}", e.getMessage());
             } finally { busy.set(false); }
         }, "quiz-gen-" + lv);
@@ -142,14 +169,19 @@ public class QuizBank {
         t.start();
     }
 
+    /** 배경 생성 응답 대기 시간. 10문제를 만들려면 기본 설정(20초)으로는 자주 모자란다. */
+    static final int BG_TIMEOUT_MS = 60_000;
+
     private Deque<QuizQuestion> deque(int level) {
         return pool.computeIfAbsent(level, k -> new ConcurrentLinkedDeque<>());
     }
 
     /** 한 번 호출해 창고를 채운다. 채웠으면 true. */
-    private boolean refill(int level) {
+    private boolean refill(int level) { return refill(level, 0); }
+
+    private boolean refill(int level, int timeoutMs) {
         if (!aiAvailable() || !allowCall()) return false;
-        List<QuizQuestion> made = generate(level);
+        List<QuizQuestion> made = generate(level, timeoutMs);
         if (made.isEmpty()) return false;
         Deque<QuizQuestion> q = deque(level);
         for (QuizQuestion x : made) if (q.size() < POOL_MAX) q.add(x);
@@ -170,25 +202,67 @@ public class QuizBank {
 
     // ── AI 생성 ──
 
+    /**
+     * 출제 분야.
+     *
+     * <p>좁으면 같은 소재가 돌고 돌아 중복처럼 느껴진다. 매 호출마다 여기서 몇 개를
+     * 뽑아 넣으므로, 목록이 길수록 같은 조합이 다시 나올 확률이 낮아진다.
+     */
     static final List<String> TOPICS = List.of(
-            "한국사", "세계사", "동물", "식물", "나라·수도", "지리·자연", "과학", "우주·천문",
-            "인체·의학", "음식", "스포츠", "미술", "음악", "문학", "신화·전설", "발명·기술",
-            "경제·화폐", "언어·어원", "영화·드라마", "바다·해양", "곤충", "건축·유적", "공룡", "날씨");
+            // 역사·인물
+            "한국사", "세계사", "고대문명", "왕조·왕실", "전쟁·조약", "인물·위인", "탐험·항해",
+            // 자연·생물
+            "동물", "식물", "곤충", "조류", "바다·해양", "파충류·양서류", "공룡", "반려동물",
+            "지리·자연", "강·호수", "산·화산", "극지·사막", "날씨·기후", "지질·광물",
+            // 과학·기술
+            "과학", "물리", "화학", "우주·천문", "인체·의학", "발명·기술", "컴퓨터·인터넷",
+            "수학·숫자", "로봇·기계", "교통·자동차", "항공·비행",
+            // 문화·예술
+            "미술", "음악", "악기", "문학", "신화·전설", "영화·드라마", "만화·애니메이션",
+            "건축·유적", "세계유산", "사진·디자인",
+            // 생활·사회
+            "나라·수도", "국기·상징", "음식", "세계 요리", "디저트", "음료·커피", "향신료",
+            "명절·풍습", "전통놀이", "언어·어원", "속담·관용구", "경제·화폐", "단위·측정",
+            "법·제도", "국제기구", "직업", "패션·의복",
+            // 스포츠·기타
+            "스포츠", "올림픽", "축구", "야구", "보드게임·놀이", "기록·최초");
 
-    private List<QuizQuestion> generate(int level) {
+    /** 한 번에 프롬프트에 넣을 주제 수. 목록이 커진 만큼 배치 안 다양성도 늘린다. */
+    static final int TOPICS_PER_BATCH = 8;
+
+    private List<QuizQuestion> generate(int level, int timeoutMs) {
         // 주제를 섞어 넣어 한 배치 안에서도 분야가 골고루 나오게 한다.
         List<String> topics = new ArrayList<>(TOPICS);
         Collections.shuffle(topics, ThreadLocalRandom.current());
-        String picked = String.join(", ", topics.subList(0, Math.min(6, topics.size())));
+        String picked = String.join(", ", topics.subList(0, Math.min(TOPICS_PER_BATCH, topics.size())));
 
         String user = "난이도 " + level + "/10 상식 문제 " + BATCH + "개를 만들어라.\n"
                 + "이번 배치에서 다룰 주제(골고루 섞어라): " + picked + "\n"
                 + difficultyHint(level) + "\n"
-                + "객관식과 주관식을 섞어라(객관식 6, 주관식 4 정도).";
+                + "객관식과 주관식을 섞어라(객관식 6, 주관식 4 정도)."
+                + avoidBlock(level);
 
-        String raw = client.complete(SYSTEM, user, 2400, 0.9, null, "퀴즈");
+        String raw = client.complete(SYSTEM, user, 2400, 0.9, null, "퀴즈", timeoutMs);
         if (raw == null || raw.isBlank()) return List.of();
         return parse(raw, level);
+    }
+
+    /**
+     * 이미 낸 문제를 알려주는 블록.
+     *
+     * <p>없으면 모델이 매번 "대한민국의 수도는?" 같은 대표 문제부터 만든다. 걸러내면
+     * 되긴 하지만, 걸러낸 만큼 쓸 문제가 줄어 같은 값에 더 적은 문제를 받는 셈이다.
+     * 애초에 만들지 않게 하는 편이 싸고 결과도 다양하다.
+     */
+    String avoidBlock(int level) {
+        List<String> recentQs;
+        Deque<String> d = recent.get(level);
+        if (d == null) return "";
+        synchronized (d) { recentQs = new ArrayList<>(d); }
+        if (recentQs.isEmpty()) return "";
+        StringBuilder sb = new StringBuilder("\n\n[이미 낸 문제 — 같은 사실을 묻지 마라. 표현만 바꾸는 것도 금지]\n");
+        for (String q : recentQs) sb.append("- ").append(q.length() > 40 ? q.substring(0, 40) : q).append('\n');
+        return sb.toString();
     }
 
     /** 난이도를 말로 풀어준다. 숫자만 주면 모델이 1과 3을 구분하지 못한다. */
@@ -222,20 +296,62 @@ public class QuizBank {
             for (JsonNode n : arr) {
                 QuizQuestion q = toQuestion(n, level);
                 if (q == null) continue;
-                String key = QuizQuestion.normalize(q.question());
-                synchronized (seen) {
-                    if (!seen.add(key)) continue;                 // 이미 낸 문제
-                    if (seen.size() > SEEN_MAX) {                 // 오래된 것부터 잊는다
-                        var it = seen.iterator();
-                        for (int i = 0; i < SEEN_MAX / 4 && it.hasNext(); i++) { it.next(); it.remove(); }
-                    }
-                }
+                if (!remember(q)) continue;                       // 이미 낸 문제·이미 쓴 정답
                 out.add(q);
             }
         } catch (Exception e) {
             log.warn("퀴즈 응답 파싱 실패: {}", e.getMessage());
         }
         return out;
+    }
+
+    /**
+     * 새 문제로 받아들일지 판단하고, 받아들이면 기억해 둔다.
+     *
+     * <p>지문과 정답 두 가지로 본다. 지문만 보면 표현을 바꾼 같은 문제가 통과하고,
+     * 정답만 보면 정답이 겹칠 뿐인 다른 문제까지 막힌다. 정답 쪽은 최근 것만 기억해
+     * 낼 문제가 마르지 않게 한다.
+     *
+     * @return 처음 보는 문제면 true
+     */
+    boolean remember(QuizQuestion q) {
+        String key = QuizQuestion.normalize(q.question());
+        synchronized (seen) {
+            if (!seen.add(key)) return false;
+            if (seen.size() > SEEN_MAX) {                 // 오래된 것부터 잊는다
+                var it = seen.iterator();
+                for (int i = 0; i < SEEN_MAX / 4 && it.hasNext(); i++) { it.next(); it.remove(); }
+            }
+        }
+        String ans = QuizQuestion.normalize(q.answerLabel());
+        if (!ans.isEmpty() && !genericAnswer(ans)) {
+            synchronized (usedAnswers) {
+                if (!usedAnswers.add(ans)) {
+                    seen.remove(key);                     // 문제 자체는 다시 만들어 볼 수 있게 되돌린다
+                    return false;
+                }
+                if (usedAnswers.size() > ANSWER_MEMORY) {
+                    var it = usedAnswers.iterator();
+                    for (int i = 0; i < ANSWER_MEMORY / 4 && it.hasNext(); i++) { it.next(); it.remove(); }
+                }
+            }
+        }
+        Deque<String> d = recent.computeIfAbsent(q.level(), k -> new ConcurrentLinkedDeque<>());
+        synchronized (d) {
+            d.addLast(q.question());
+            while (d.size() > RECENT_HINT) d.pollFirst();
+        }
+        return true;
+    }
+
+    /**
+     * 정답만으로는 어떤 사실을 물었는지 알 수 없는 답인가.
+     *
+     * <p>"8개"는 태양계 행성 수이기도 하고 거미 다리 수이기도 하다. 이런 답까지 기억해
+     * 막으면 서로 상관없는 문제가 줄줄이 걸린다. 숫자 답은 정답 대조에서 빼고 지문으로만 본다.
+     */
+    static boolean genericAnswer(String normalized) {
+        return normalized.matches("\\d+(개|명|월|일|년|도|분|초|가지|번|살|장|권|마리|위|배|중|시)?");
     }
 
     private QuizQuestion toQuestion(JsonNode n, int level) {
@@ -324,5 +440,12 @@ public class QuizBank {
             [주제]
             - 요청받은 주제 안에서 골고루 낸다. 한 주제에 몰리지 않게 하라.
             - 특정 국가·문화에 치우치지 말고 한국과 세계를 섞어라.
+
+            [중복 금지]
+            - 한 배치 안에서 같은 사실을 두 번 묻지 마라. 정답이 겹치는 문제도 두 개 내지 마라.
+            - 그 주제의 대표 문제(수도·최대·최초처럼 제일 먼저 떠오르는 것)만 고르지 마라.
+              같은 주제라도 매번 다른 구석을 물어야 여러 판을 해도 새롭다.
+            - 묻는 방식도 섞어라: 이름 맞히기, 뜻·정의, 둘의 차이, 순서·시대, 개수·수치,
+              어디에 속하는가(분류), 무엇으로 만드는가, 어디에서 유래했는가.
             """;
 }

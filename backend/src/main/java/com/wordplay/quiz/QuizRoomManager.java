@@ -25,6 +25,9 @@ public class QuizRoomManager {
     public String create(String clientId, NewQuizRequest req) {
         QuizGame game = new QuizGame(clientId, req.nick(), req.level(), req.rounds(),
                 req.questionSec(), req.mode(), req.limitSec(), bank, ranks);
+        // 방을 만드는 순간부터 그 난이도의 문제를 배경에서 만들어 둔다.
+        // 로비에 머무는 몇십 초 동안 채워지면 시작 버튼이 곧바로 눌린다.
+        if (bank != null) bank.prewarmAsync(game.level());
         try {
             return reg.add(game);
         } catch (IllegalStateException e) {

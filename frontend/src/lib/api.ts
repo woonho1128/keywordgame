@@ -58,7 +58,24 @@ export async function api<T>(
     credentials: 'include',
     headers,
   });
-  const json = (await res.json()) as ApiResponse<T>;
+  /*
+   * 본문을 글자로 먼저 받고 나서 해석한다.
+   *
+   * 백엔드는 오류도 JSON으로 주지만, 앞단(Next 리라이트·nginx)이 백엔드를 못 붙잡으면
+   * 평문 "Internal Server Error"나 HTML 오류 페이지가 그대로 온다. 바로 res.json()을
+   * 부르면 그게 'Unexpected token I ... is not valid JSON' 이라는 알 수 없는 말로 뜬다.
+   */
+  const text = await res.text();
+  let json: ApiResponse<T>;
+  try {
+    json = JSON.parse(text) as ApiResponse<T>;
+  } catch {
+    throw new Error(
+      res.status === 504 || res.status === 502 || res.status === 500
+        ? '서버가 제때 응답하지 못했어요. 잠시 뒤 다시 시도해 주세요.'
+        : `서버 응답을 읽지 못했어요 (${res.status})`
+    );
+  }
   if (!json.success || json.data === null) {
     throw new Error(json.error?.message || 'Unknown error');
   }

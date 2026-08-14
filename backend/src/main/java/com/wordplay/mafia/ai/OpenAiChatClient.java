@@ -126,6 +126,16 @@ public class OpenAiChatClient {
      */
     public String complete(String system, String user, int maxTokens, double temperature,
                            String effortOverride, String kind) {
+        return complete(system, user, maxTokens, temperature, effortOverride, kind, 0);
+    }
+
+    /**
+     * @param timeoutOverrideMs 이 호출에만 다른 응답 대기 시간(0이면 기본 설정 사용).
+     *                          긴 응답을 배경에서 만들 때 쓴다 — 기다리는 사람이 없으면
+     *                          짧게 끊을 이유가 없고, 끊긴 응답도 요금은 그대로 나간다.
+     */
+    public String complete(String system, String user, int maxTokens, double temperature,
+                           String effortOverride, String kind, int timeoutOverrideMs) {
         if (!isConfigured()) return null;
         try {
             Map<String, Object> payload = new LinkedHashMap<>();
@@ -154,7 +164,7 @@ public class OpenAiChatClient {
             String body = mapper.writeValueAsString(payload);
             HttpRequest req = HttpRequest.newBuilder()
                     .uri(URI.create(URL))
-                    .timeout(Duration.ofMillis(timeoutMs))
+                    .timeout(Duration.ofMillis(timeoutOverrideMs > 0 ? timeoutOverrideMs : timeoutMs))
                     .header("Authorization", "Bearer " + apiKey)
                     .header("Content-Type", "application/json")
                     .POST(HttpRequest.BodyPublishers.ofString(body))

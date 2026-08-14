@@ -52,6 +52,16 @@ public class QuizGame implements RoomGame {
      * 제한시간 동안 사람이 푸는 양보다 넉넉하게 잡아 중간 보충이 드물게 한다.
      */
     static int preloadFor(int limitSec) { return Math.min(80, Math.max(20, limitSec / 3)); }
+    /**
+     * 시작할 때 <b>기다려서</b> 받아올 문제 수.
+     *
+     * <p>필요한 전량을 여기서 받으면 안 된다. 창고가 비어 있을 때 40~80문제를 달라고 하면
+     * AI 호출이 여러 번 이어져 시작 요청이 1분 넘게 막히고, 앞단 프록시가 먼저 끊어
+     * 화면에 JSON이 아닌 500이 뜬다. 시작에 필요한 만큼만 기다리고 나머지는 푸는 동안 채운다.
+     */
+    private int startCount() {
+        return Math.min(mode == Mode.SPRINT ? preloadFor(limitSec) : rounds, QuizBank.BATCH);
+    }
     /** 커서가 목록 끝에서 이만큼 안으로 들어오면 보충한다. */
     static final int TOPUP_MARGIN = 5;
     /** 목록이 무한히 커지지 않게 두는 상한. 제한시간 안에 여기까지 푸는 건 불가능하다. */
@@ -140,7 +150,7 @@ public class QuizGame implements RoomGame {
         if (players.isEmpty()) throw bad("참가자가 없습니다");
 
         questions.clear();
-        questions.addAll(bank.take(level, mode == Mode.SPRINT ? preloadFor(limitSec) : rounds));
+        questions.addAll(bank.take(level, startCount()));
         if (questions.isEmpty()) throw bad("문제를 준비하지 못했습니다. 잠시 뒤 다시 시도해 주세요");
 
         for (int i = 0; i < players.size(); i++) {
@@ -161,14 +171,20 @@ public class QuizGame implements RoomGame {
             lastReveal = null;
             return;
         }
-        note("퀴즈 시작! 난이도 " + level + " · " + questions.size() + "문제");
+        note("퀴즈 시작! 난이도 " + level + " · " + rounds + "문제");
         index = -1;
         nextQuestion();
     }
 
     private void nextQuestion() {
         index++;
-        if (index >= questions.size()) { finish(); return; }
+        if (index >= rounds) { finish(); return; }
+        // 시작할 때 한 배치만 받아두므로 남은 문제는 푸는 동안 이어 붙인다(기다리지 않는 경로).
+        if (index + TOPUP_MARGIN >= questions.size() && questions.size() < rounds) {
+            int want = Math.min(QuizBank.BATCH, rounds - questions.size());
+            questions.addAll(bank.takeReady(level, want, questions));
+        }
+        if (index >= questions.size()) { finish(); return; }   // 그래도 못 채웠으면 여기까지
         for (P p : players) { p.answer = null; p.answeredRight = false; p.answeredAt = 0; }
         phase = Phase.ASKING;
         askedAt = now();
@@ -359,8 +375,10 @@ public class QuizGame implements RoomGame {
         }
         lastReveal = new Reveal(index, q.answerLabel(), q.explain(), List.copyOf(rightSeats), Map.copyOf(given));
 
-        // 다음 판을 위해 창고를 미리 채워둔다(문제 사이 빈 시간을 활용).
-        if (bank != null) bank.prewarm(level);
+        // 다음 문제를 위해 창고를 미리 채워둔다(정답 공개 4초를 활용).
+        // 여기서 기다리면 안 된다 — reveal은 폴링 요청 안에서 방 락을 쥔 채 돌아서,
+        // 생성이 20초 걸리면 그 방의 모든 요청이 같이 멈춘다.
+        if (bank != null) bank.prewarmAsync(level);
     }
 
     /** 제출한 답을 사람이 읽을 형태로. 객관식 번호는 보기 문장으로 바꾼다. */
@@ -430,7 +448,7 @@ public class QuizGame implements RoomGame {
         boolean sprintCanAnswer = asking && me != null && !me.left && q != null;
         return new QuizState(
                 phase.name(), mode.name(), level,
-                mode == Mode.SPRINT ? 0 : questions.size(),
+                mode == Mode.SPRINT ? 0 : rounds,   // 목록은 푸는 동안 늘어나므로 설정값을 쓴다
                 mode == Mode.SPRINT ? (me == null ? 0 : me.cursor + 1) : index + 1,
                 questionSec, limitSec,
                 clientId != null && clientId.equals(hostClientId), me != null,
@@ -477,6 +495,7 @@ public class QuizGame implements RoomGame {
 
     // ── 유틸/테스트 ──
     public synchronized Phase phase() { return phase; }
+    public int level() { return level; }
     public Mode mode() { return mode; }
     int index() { return index; }
     List<P> playersList() { return players; }
