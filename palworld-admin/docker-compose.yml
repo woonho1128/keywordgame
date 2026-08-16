@@ -15,10 +15,15 @@ services:
     restart: unless-stopped
     env_file: .env
     volumes:
-      - ./data:/data        # 작업 로그(actions.log) 영구 저장
+      - ./data:/data                          # 작업 로그(actions.log) 영구 저장
+      - /var/run/docker.sock:/var/run/docker.sock  # 서버 재가동/업데이트 기능용
     networks:
       - palworld
     # 호스트로 포트를 열지 않습니다 — cloudflared 만 내부에서 접근(외부 노출 0)
+    #
+    # ⚠️ docker.sock 을 물리면 이 컨테이너가 호스트의 도커를 제어할 수 있습니다.
+    #    유지관리 API 는 슈퍼관리자로 제한되지만, 패널 비밀번호를 반드시 강하게 유지하세요.
+    #    이 기능이 필요 없으면 위 docker.sock 줄을 지우면 됩니다(나머지 기능은 그대로 동작).
 
   cloudflared:
     image: cloudflare/cloudflared:latest

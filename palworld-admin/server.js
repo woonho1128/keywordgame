@@ -2,6 +2,7 @@ import express from "express";
 import session from "express-session";
 import net from "net";
 import fs from "fs";
+import { execFile } from "child_process";
 import { fileURLToPath } from "url";
 import path from "path";
 
@@ -16,6 +17,7 @@ const {
   RCON_PORT = 25575,
   RCON_PASSWORD,
   LOG_FILE = "/data/actions.log",
+  PAL_CONTAINER = "palworld-server",
 } = process.env;
 
 // ---- 관리자 계정 로드 ----
@@ -327,6 +329,114 @@ function rconErr(e) {
     return "RCON 서버에 연결할 수 없습니다 — 팰월드 서버가 켜져 있고 RCONEnabled=True 인지 확인하세요.";
   return msg;
 }
+
+// ============ 서버 유지관리 (Docker 제어) — 슈퍼관리자 전용 ============
+// docker CLI 를 고정 인자로만 호출한다(셸을 거치지 않으므로 명령 주입 불가).
+function docker(args, timeoutMs = 30000) {
+  return new Promise((resolve, reject) => {
+    execFile("docker", args, { timeout: timeoutMs, maxBuffer: 4 * 1024 * 1024 }, (err, stdout, stderr) => {
+      if (err) return reject(new Error((stderr || err.message || "").trim().slice(0, 500)));
+      resolve(String(stdout || "").trim());
+    });
+  });
+}
+
+// 진행 중인 유지관리 작업 상태 (한 번에 하나만)
+let maint = { running: false, task: null, startedAt: null, user: null, done: false, ok: null, message: "" };
+
+function maintStart(task, user) {
+  maint = { running: true, task, startedAt: Date.now(), user, done: false, ok: null, message: "시작됨" };
+}
+function maintEnd(ok, message) {
+  maint = { ...maint, running: false, done: true, ok, message };
+}
+
+// 팰월드 컨테이너 로그에서 현재 게임 버전 읽기
+async function readGameVersion() {
+  try {
+    const out = await docker(["logs", "--tail", "800", PAL_CONTAINER]);
+    const matches = String(out).match(/Game version is (v[\d.]+)/g);
+    return matches && matches.length ? matches[matches.length - 1].replace("Game version is ", "") : null;
+  } catch {
+    return null;
+  }
+}
+
+// 컨테이너 상태 + 버전
+app.get("/api/server-status", requireAuth, async (req, res) => {
+  try {
+    const state = await docker(["inspect", "-f", "{{.State.Status}}|{{.State.StartedAt}}", PAL_CONTAINER]);
+    const [status, startedAt] = state.split("|");
+    const version = await readGameVersion();
+    res.json({ ok: true, status, startedAt, version, maint });
+  } catch (e) {
+    res.json({ ok: false, error: e.message, maint });
+  }
+});
+
+// 유지관리 작업 진행 상태(폴링용)
+app.get("/api/maintenance", requireSuper, (req, res) => res.json({ ok: true, maint }));
+
+// 최근 부팅 로그 (다운로드 진행률 확인용)
+app.get("/api/server-logs", requireSuper, async (req, res) => {
+  try {
+    const out = await docker(["logs", "--tail", "40", PAL_CONTAINER]);
+    // 이진/제어문자 제거 후 의미 있는 줄만
+    const lines = String(out)
+      .replace(/[^\x20-\x7E\n]/g, "")
+      .split("\n")
+      .filter((l) => l.trim())
+      .slice(-25);
+    res.json({ ok: true, lines });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+// 유지관리 작업 실행 (재가동 / 업데이트 / 강제 재설치)
+app.post("/api/maintenance/:task", requireSuper, async (req, res) => {
+  const task = req.params.task;
+  if (!["restart", "update", "reinstall"].includes(task)) {
+    return res.status(400).json({ ok: false, error: "알 수 없는 작업입니다." });
+  }
+  if (maint.running) {
+    return res.status(409).json({ ok: false, error: `이미 '${maint.task}' 작업이 진행 중입니다.` });
+  }
+  // 강제 재설치는 오타 방지를 위해 확인 문구를 요구
+  if (task === "reinstall" && (req.body || {}).confirm !== "REINSTALL") {
+    return res.status(400).json({ ok: false, error: "확인 문구가 필요합니다." });
+  }
+
+  const label = { restart: "서버 재가동", update: "버전 업데이트", reinstall: "강제 재설치" }[task];
+  maintStart(label, req.session.user);
+  logAction(req.session.user, label, "", "시작");
+  res.json({ ok: true, started: label }); // 즉시 응답하고 백그라운드로 진행
+
+  (async () => {
+    try {
+      if (task === "restart") {
+        await docker(["restart", PAL_CONTAINER], 120000);
+      } else {
+        // update/reinstall: 컨테이너를 멈추고 필요 시 게임 바이너리를 지운 뒤 다시 시작
+        await docker(["stop", PAL_CONTAINER], 120000);
+        if (task === "reinstall") {
+          // 세이브(Pal/Saved)는 건드리지 않고 게임 바이너리만 제거 → 스팀이 전체를 새로 받음
+          await docker(
+            ["run", "--rm", "--volumes-from", PAL_CONTAINER, "alpine",
+             "sh", "-c", "rm -rf /palworld/steamapps /palworld/Pal/Binaries /palworld/Pal/Content"],
+            600000
+          );
+        }
+        await docker(["start", PAL_CONTAINER], 120000);
+      }
+      maintEnd(true, `${label} 완료 — 서버가 켜지는 중입니다(3~20분).`);
+      logAction(maint.user, label, "", "성공");
+    } catch (e) {
+      maintEnd(false, `${label} 실패: ${e.message}`);
+      logAction(maint.user, label, "", "실패: " + e.message);
+    }
+  })();
+});
 
 app.use(express.static(path.join(__dirname, "public")));
 

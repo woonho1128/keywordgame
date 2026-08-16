@@ -103,6 +103,24 @@
       </table>
     </div>
 
+    <!-- 서버 유지관리 (슈퍼관리자 전용) -->
+    <div class="card hidden" id="maintCard">
+      <div class="head">
+        <h2>🛠️ 서버 유지관리 <span class="badge">슈퍼관리자 전용</span></h2>
+        <span class="badge" id="verBadge">버전 확인 중…</span>
+      </div>
+      <div class="row">
+        <button class="ghost sm" id="mRestart">🔄 서버 재가동</button>
+        <button class="warn sm" id="mUpdate">⬆️ 버전 업데이트</button>
+        <button class="danger sm" id="mReinstall">🔧 강제 재설치</button>
+        <button class="ghost sm" id="mLogs">📜 부팅 로그</button>
+      </div>
+      <p class="mut" style="margin:10px 0 0;" id="maintMsg">
+        버전이 안 맞아 접속이 안 되면 <b>버전 업데이트</b> → 그래도 그대로면 <b>강제 재설치</b>. 월드·설정은 유지돼요.
+      </p>
+      <pre id="bootLog" class="hidden" style="margin:10px 0 0; padding:10px; background:#0b1220; border:1px solid var(--line); border-radius:8px; overflow-x:auto; font-size:.72rem; color:var(--mut); max-height:240px;"></pre>
+    </div>
+
     <!-- 작업 로그 (슈퍼관리자 전용) -->
     <div class="card hidden" id="logCard">
       <div class="head">
@@ -146,9 +164,10 @@ function showDash(user, role) {
   $("#dashView").classList.remove("hidden");
   const isSuper = role === "super";
   $("#whoami").textContent = (user || "") + (isSuper ? " · 슈퍼관리자" : " · 관리자");
-  $("#logCard").classList.toggle("hidden", !isSuper); // 슈퍼관리자만 로그 보임
+  $("#logCard").classList.toggle("hidden", !isSuper);   // 슈퍼관리자만 로그 보임
+  $("#maintCard").classList.toggle("hidden", !isSuper); // 유지관리도 슈퍼관리자만
   refreshAll();
-  if (isSuper) loadLogs();
+  if (isSuper) { loadLogs(); loadServerStatus(); }
 }
 
 $("#loginForm").addEventListener("submit", async (e) => {
@@ -241,11 +260,77 @@ async function loadLogs() {
 $("#logRefreshBtn").addEventListener("click", loadLogs);
 function fmtTime(iso){ try { return new Date(iso).toLocaleString("ko-KR", { timeZone: "Asia/Seoul", hour12: false }); } catch(_) { return iso; } }
 
+// ---- 서버 유지관리 (슈퍼관리자) ----
+let maintTimer = null;
+
+async function loadServerStatus() {
+  try {
+    const d = await api("/api/server-status");
+    const v = d.version ? d.version : "버전 확인 불가";
+    const st = d.status === "running" ? "실행중" : (d.status || "알 수 없음");
+    $("#verBadge").textContent = `${v} · ${st}`;
+    $("#verBadge").style.color = d.status === "running" ? "var(--ok)" : "var(--warn)";
+    if (d.maint) applyMaint(d.maint);
+  } catch (e) { $("#verBadge").textContent = "상태 조회 실패"; $("#verBadge").style.color = "var(--danger)"; }
+}
+
+function applyMaint(m) {
+  const busy = !!m.running;
+  ["#mRestart", "#mUpdate", "#mReinstall"].forEach(id => { $(id).disabled = busy; });
+  if (busy) {
+    const mins = Math.floor((Date.now() - m.startedAt) / 60000);
+    $("#maintMsg").innerHTML = `⏳ <b>${escapeHtml(m.task)}</b> 진행 중… (${mins}분 경과) 완료까지 3~20분 걸릴 수 있어요.`;
+    if (!maintTimer) maintTimer = setInterval(pollMaint, 10000);
+  } else if (m.done) {
+    $("#maintMsg").innerHTML = (m.ok ? "✅ " : "❌ ") + escapeHtml(m.message);
+    if (maintTimer) { clearInterval(maintTimer); maintTimer = null; }
+  }
+}
+
+async function pollMaint() {
+  try { const d = await api("/api/maintenance"); applyMaint(d.maint); loadServerStatus(); }
+  catch (_) {}
+}
+
+async function runMaint(task, confirmText, body) {
+  if (!confirm(confirmText)) return;
+  try {
+    await api("/api/maintenance/" + task, { method: "POST", body: JSON.stringify(body || {}) });
+    toast("작업을 시작했어요.", "ok");
+    pollMaint();
+    if (!maintTimer) maintTimer = setInterval(pollMaint, 10000);
+    maybeRefreshLogs();
+  } catch (e) { toast(e.message, "err"); }
+}
+
+$("#mRestart").addEventListener("click", () => runMaint("restart",
+  "서버를 재가동합니다.\n접속자는 모두 끊기고 3~10분 뒤 복구됩니다. 진행할까요?"));
+
+$("#mUpdate").addEventListener("click", () => runMaint("update",
+  "서버를 껐다 켜서 최신 버전을 받아옵니다.\n3~15분 걸립니다. 진행할까요?"));
+
+$("#mReinstall").addEventListener("click", () => runMaint("reinstall",
+  "게임 파일(5GB)을 전부 새로 받습니다.\n월드·설정은 유지되지만 10~25분 걸립니다.\n버전 업데이트로 해결이 안 될 때만 쓰세요. 진행할까요?",
+  { confirm: "REINSTALL" }));
+
+$("#mLogs").addEventListener("click", async () => {
+  const pre = $("#bootLog");
+  if (!pre.classList.contains("hidden")) { pre.classList.add("hidden"); return; }
+  pre.classList.remove("hidden");
+  pre.textContent = "불러오는 중…";
+  try { const d = await api("/api/server-logs"); pre.textContent = d.lines.join("\n") || "(로그 없음)"; }
+  catch (e) { pre.textContent = "불러오기 실패: " + e.message; }
+});
+
 function escapeHtml(s){ return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 function escapeAttr(s){ return String(s).replace(/['\\]/g, "\\$&").replace(/"/g,'&quot;'); }
 
 // 자동 새로고침 (상태 + 접속자 목록) — 백엔드에서 RCON을 직렬화하므로 동시 호출 안전
-setInterval(() => { if (!$("#dashView").classList.contains("hidden")) refreshAll(); }, 15000);
+setInterval(() => {
+  if ($("#dashView").classList.contains("hidden")) return;
+  refreshAll();
+  if (!$("#maintCard").classList.contains("hidden")) loadServerStatus();
+}, 15000);
 
 // 시작 시 세션 확인
 api("/api/session").then(d => d.authed ? showDash(d.user, d.role) : showLogin()).catch(showLogin);
