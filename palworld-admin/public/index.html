@@ -79,7 +79,7 @@
     </div>
 
     <div class="card">
-      <div class="head"><h2>서버 상태</h2><span class="badge" id="infoBadge">조회 중…</span></div>
+      <h2>서버 조작</h2>
       <div class="row">
         <button class="ghost sm" id="saveBtn">💾 수동 저장</button>
         <button class="warn sm" id="shutdownBtn">🔁 안전 재시작(종료)</button>
@@ -200,10 +200,8 @@ $("#loginForm").addEventListener("submit", async (e) => {
 
 $("#logoutBtn").addEventListener("click", async () => { await api("/api/logout", { method: "POST" }); showLogin(); });
 
-async function loadInfo() {
-  try { const d = await api("/api/info"); $("#infoBadge").textContent = d.info || "온라인"; $("#infoBadge").style.color = "var(--ok)"; }
-  catch (e) { $("#infoBadge").textContent = "오프라인/오류"; $("#infoBadge").style.color = "var(--danger)"; }
-}
+// 서버 상태 뱃지는 제거됨 — 접속자 목록과 유지관리 카드의 버전 표시로 충분하고,
+// Info 조회를 빼면 RCON 부하도 줄어든다.
 
 async function loadPlayers() {
   const tb = $("#players");
@@ -223,7 +221,7 @@ async function loadPlayers() {
   } catch (e) { tb.innerHTML = `<tr><td colspan="3" class="mut">불러오기 실패: ${escapeHtml(e.message)}</td></tr>`; }
 }
 
-function refreshAll() { loadInfo(); loadPlayers(); }
+function refreshAll() { loadPlayers(); }
 
 $("#refreshBtn").addEventListener("click", refreshAll);
 
