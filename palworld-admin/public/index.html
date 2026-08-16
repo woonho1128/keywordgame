@@ -150,7 +150,15 @@ function toast(msg, kind) {
 }
 
 async function api(path, opts) {
-  const res = await fetch(path, Object.assign({ headers: { "Content-Type": "application/json" } }, opts));
+  // 응답이 안 오면 무한 대기하지 않도록 20초에서 끊는다
+  const ctrl = new AbortController();
+  const t = setTimeout(() => ctrl.abort(), 20000);
+  let res;
+  try {
+    res = await fetch(path, Object.assign({ headers: { "Content-Type": "application/json" }, signal: ctrl.signal }, opts));
+  } catch (e) {
+    throw new Error(e.name === "AbortError" ? "응답이 없어요 (서버가 부팅 중일 수 있어요)" : e.message);
+  } finally { clearTimeout(t); }
   let data = {};
   try { data = await res.json(); } catch (_) {}
   if (res.status === 401 && path !== "/api/login") { showLogin(); throw new Error(data.error || "로그인이 필요합니다."); }

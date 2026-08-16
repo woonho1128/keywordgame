@@ -156,7 +156,7 @@ function rconExec(command) {
 
 // RCON 재시도 래퍼: 팰월드 RCON 이 FEX 부하로 간헐적으로 느려/끊길 때 대비.
 // 조회(Info/ShowPlayers)처럼 여러 번 해도 안전한 명령에만 사용.
-async function rconRetry(command, tries = 3) {
+async function rconRetry(command, tries = 2) {
   let lastErr;
   for (let i = 0; i < tries; i++) {
     try {
@@ -167,6 +167,32 @@ async function rconRetry(command, tries = 3) {
     }
   }
   throw lastErr;
+}
+
+// 조회 명령 캐시 + 요청 합치기.
+// RCON 은 큐로 직렬 처리되는데, 여러 브라우저 탭이 15초마다 Info/ShowPlayers 를 부르면
+// 큐에 요청이 쌓여 응답이 계속 밀린다. 같은 명령이 이미 진행 중이면 그 결과를 함께 쓰고,
+// 방금 받은 결과는 잠깐 캐시해서 큐가 넘치지 않게 한다.
+const readCache = new Map(); // command -> { at, value }
+const inFlight = new Map(); // command -> Promise
+const READ_TTL = 5000;
+
+function rconRead(command) {
+  const cached = readCache.get(command);
+  if (cached && Date.now() - cached.at < READ_TTL) return Promise.resolve(cached.value);
+
+  const running = inFlight.get(command);
+  if (running) return running; // 이미 같은 조회가 진행 중 → 결과 공유
+
+  const p = rconRetry(command)
+    .then((value) => {
+      readCache.set(command, { at: Date.now(), value });
+      return value;
+    })
+    .finally(() => inFlight.delete(command));
+
+  inFlight.set(command, p);
+  return p;
 }
 
 // ShowPlayers 응답(CSV)을 파싱: 첫 줄은 헤더(name,playeruid,steamid)
@@ -238,7 +264,7 @@ app.get("/api/logs", requireSuper, (req, res) => {
 // ---- 관리 API ----
 app.get("/api/players", requireAuth, async (req, res) => {
   try {
-    const raw = await rconRetry("ShowPlayers");
+    const raw = await rconRead("ShowPlayers");
     res.json({ ok: true, players: parsePlayers(raw), raw });
   } catch (e) {
     res.status(500).json({ ok: false, error: rconErr(e) });
@@ -247,7 +273,7 @@ app.get("/api/players", requireAuth, async (req, res) => {
 
 app.get("/api/info", requireAuth, async (req, res) => {
   try {
-    const raw = await rconRetry("Info");
+    const raw = await rconRead("Info");
     res.json({ ok: true, info: String(raw).trim() });
   } catch (e) {
     res.status(500).json({ ok: false, error: rconErr(e) });
