@@ -426,14 +426,41 @@ app.get("/api/maintenance", requireSuper, (req, res) => res.json({ ok: true, mai
 // 최근 부팅 로그 (다운로드 진행률 확인용)
 app.get("/api/server-logs", requireSuper, async (req, res) => {
   try {
-    const out = await docker(["logs", "--tail", "40", PAL_CONTAINER]);
+    const out = await docker(["logs", "--tail", "120", PAL_CONTAINER]);
     // 이진/제어문자 제거 후 의미 있는 줄만
-    const lines = String(out)
+    const all = String(out)
       .replace(/[^\x20-\x7E\n]/g, "")
       .split("\n")
-      .filter((l) => l.trim())
-      .slice(-25);
-    res.json({ ok: true, lines });
+      .map((l) => l.trim())
+      .filter(Boolean);
+
+    const lines = all.slice(-30);
+
+    // 진행 상황 요약: 다운로드 퍼센트 / 준비 완료 여부 / 현재 버전
+    let phase = "대기";
+    let percent = null;
+    const dl = [...all].reverse().find((l) => /progress:\s*([\d.]+)/.test(l));
+    const ready = [...all].reverse().find((l) => /Running Palworld dedicated server/.test(l));
+    const verLine = [...all].reverse().find((l) => /Game version is/.test(l));
+    const readyIdx = ready ? all.lastIndexOf(ready) : -1;
+    const dlIdx = dl ? all.lastIndexOf(dl) : -1;
+
+    if (dl && dlIdx > readyIdx) {
+      percent = parseFloat(dl.match(/progress:\s*([\d.]+)/)[1]);
+      phase = /verifying/i.test(dl) ? "검증 중" : "다운로드 중";
+    } else if (readyIdx >= 0) {
+      phase = "가동 중";
+    } else {
+      phase = "부팅 중";
+    }
+
+    res.json({
+      ok: true,
+      lines,
+      phase,
+      percent,
+      version: verLine ? (verLine.match(/Game version is (v[\d.]+)/) || [])[1] || null : null,
+    });
   } catch (e) {
     res.status(500).json({ ok: false, error: e.message });
   }

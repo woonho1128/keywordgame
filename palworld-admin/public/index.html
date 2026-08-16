@@ -119,7 +119,16 @@
       <p class="mut" style="margin:10px 0 0;" id="maintMsg">
         버전이 안 맞아 접속이 안 되면 <b>버전 업데이트</b> → 그래도 그대로면 <b>강제 재설치</b>. 월드·설정은 유지돼요.
       </p>
-      <pre id="bootLog" class="hidden" style="margin:10px 0 0; padding:10px; background:#0b1220; border:1px solid var(--line); border-radius:8px; overflow-x:auto; font-size:.72rem; color:var(--mut); max-height:240px;"></pre>
+      <div id="progWrap" class="hidden" style="margin:12px 0 0;">
+        <div style="display:flex; justify-content:space-between; font-size:.8rem; margin-bottom:6px;">
+          <span id="progPhase" class="mut">대기</span>
+          <span id="progPct" class="mut"></span>
+        </div>
+        <div style="height:8px; background:#0b1220; border:1px solid var(--line); border-radius:999px; overflow:hidden;">
+          <div id="progBar" style="height:100%; width:0%; background:var(--accent); transition:width .4s;"></div>
+        </div>
+      </div>
+      <pre id="bootLog" class="hidden" style="margin:10px 0 0; padding:10px; background:#0b1220; border:1px solid var(--line); border-radius:8px; overflow:auto; font-size:.72rem; color:var(--mut); max-height:240px;"></pre>
     </div>
 
     <!-- 작업 로그 (슈퍼관리자 전용) -->
@@ -306,10 +315,56 @@ async function runMaint(task, confirmText, body) {
   try {
     await api("/api/maintenance/" + task, { method: "POST", body: JSON.stringify(body || {}) });
     toast("작업을 시작했어요.", "ok");
+    // 진행 상황을 바로 볼 수 있게 로그를 자동으로 열고 실시간 갱신 시작
+    $("#bootLog").classList.remove("hidden");
+    $("#progWrap").classList.remove("hidden");
+    loadBootLog();
+    startLogWatch();
     pollMaint();
     if (!maintTimer) maintTimer = setInterval(pollMaint, 10000);
     maybeRefreshLogs();
   } catch (e) { toast(e.message, "err"); }
+}
+
+// ---- 부팅 로그 실시간 감시 ----
+let logWatch = null;
+function startLogWatch() {
+  if (logWatch) return;
+  logWatch = setInterval(loadBootLog, 5000);
+}
+function stopLogWatch() {
+  if (logWatch) { clearInterval(logWatch); logWatch = null; }
+}
+
+async function loadBootLog() {
+  const pre = $("#bootLog");
+  if (pre.classList.contains("hidden")) { stopLogWatch(); return; }
+  try {
+    const d = await api("/api/server-logs");
+    const atBottom = pre.scrollTop + pre.clientHeight >= pre.scrollHeight - 20;
+    pre.textContent = d.lines.join("\n") || "(로그 없음)";
+    if (atBottom) pre.scrollTop = pre.scrollHeight; // 새 줄 따라가기
+
+    // 진행 표시줄
+    $("#progWrap").classList.remove("hidden");
+    $("#progPhase").textContent = d.phase + (d.version ? ` · ${d.version}` : "");
+    if (d.percent != null) {
+      $("#progPct").textContent = d.percent.toFixed(1) + "%";
+      $("#progBar").style.width = Math.min(100, d.percent) + "%";
+      $("#progBar").style.background = "var(--accent)";
+    } else if (d.phase === "가동 중") {
+      $("#progPct").textContent = "준비 완료";
+      $("#progBar").style.width = "100%";
+      $("#progBar").style.background = "var(--ok)";
+      stopLogWatch(); // 다 떴으면 감시 종료
+    } else {
+      $("#progPct").textContent = "";
+      $("#progBar").style.width = "35%";
+      $("#progBar").style.background = "var(--warn)";
+    }
+  } catch (e) {
+    pre.textContent = "불러오기 실패: " + e.message;
+  }
 }
 
 $("#mRestart").addEventListener("click", () => runMaint("restart",
@@ -322,13 +377,18 @@ $("#mReinstall").addEventListener("click", () => runMaint("reinstall",
   "게임 파일(5GB)을 전부 새로 받습니다.\n월드·설정은 유지되지만 10~25분 걸립니다.\n버전 업데이트로 해결이 안 될 때만 쓰세요. 진행할까요?",
   { confirm: "REINSTALL" }));
 
-$("#mLogs").addEventListener("click", async () => {
+$("#mLogs").addEventListener("click", () => {
   const pre = $("#bootLog");
-  if (!pre.classList.contains("hidden")) { pre.classList.add("hidden"); return; }
+  if (!pre.classList.contains("hidden")) {          // 열려 있으면 닫기
+    pre.classList.add("hidden");
+    $("#progWrap").classList.add("hidden");
+    stopLogWatch();
+    return;
+  }
   pre.classList.remove("hidden");
   pre.textContent = "불러오는 중…";
-  try { const d = await api("/api/server-logs"); pre.textContent = d.lines.join("\n") || "(로그 없음)"; }
-  catch (e) { pre.textContent = "불러오기 실패: " + e.message; }
+  loadBootLog();
+  startLogWatch();   // 열어두면 5초마다 자동 갱신
 });
 
 function escapeHtml(s){ return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
