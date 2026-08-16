@@ -174,12 +174,18 @@ async function rconRetry(command, tries = 2) {
 // 큐에 요청이 쌓여 응답이 계속 밀린다. 같은 명령이 이미 진행 중이면 그 결과를 함께 쓰고,
 // 방금 받은 결과는 잠깐 캐시해서 큐가 넘치지 않게 한다.
 const readCache = new Map(); // command -> { at, value }
+const failCache = new Map(); // command -> { at, err }
 const inFlight = new Map(); // command -> Promise
 const READ_TTL = 5000;
+const FAIL_TTL = 30000; // 실패한 명령은 30초 동안 재시도하지 않음
 
 function rconRead(command) {
   const cached = readCache.get(command);
   if (cached && Date.now() - cached.at < READ_TTL) return Promise.resolve(cached.value);
+
+  // 응답하지 않는 명령(예: 1.0.3 의 Info)을 매번 8초씩 기다리면 큐가 낭비된다
+  const failed = failCache.get(command);
+  if (failed && Date.now() - failed.at < FAIL_TTL) return Promise.reject(failed.err);
 
   const running = inFlight.get(command);
   if (running) return running; // 이미 같은 조회가 진행 중 → 결과 공유
@@ -187,7 +193,12 @@ function rconRead(command) {
   const p = rconRetry(command)
     .then((value) => {
       readCache.set(command, { at: Date.now(), value });
+      failCache.delete(command);
       return value;
+    })
+    .catch((err) => {
+      failCache.set(command, { at: Date.now(), err });
+      throw err;
     })
     .finally(() => inFlight.delete(command));
 
@@ -274,9 +285,18 @@ app.get("/api/players", requireAuth, async (req, res) => {
 app.get("/api/info", requireAuth, async (req, res) => {
   try {
     const raw = await rconRead("Info");
-    res.json({ ok: true, info: String(raw).trim() });
+    const info = String(raw).trim();
+    if (info) return res.json({ ok: true, info });
+    throw new Error("빈 응답");
   } catch (e) {
-    res.status(500).json({ ok: false, error: rconErr(e) });
+    // 팰월드 1.0.3 부터 Info 가 RCON 응답을 주지 않는 경우가 있다.
+    // ShowPlayers 가 되면 서버는 분명히 살아있으므로 그걸로 온라인 판정한다.
+    try {
+      await rconRead("ShowPlayers");
+      return res.json({ ok: true, info: "온라인" });
+    } catch (e2) {
+      return res.status(500).json({ ok: false, error: rconErr(e2) });
+    }
   }
 });
 
