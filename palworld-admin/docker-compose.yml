@@ -17,6 +17,8 @@ services:
     volumes:
       - ./data:/data                          # 작업 로그(actions.log) 영구 저장
       - /var/run/docker.sock:/var/run/docker.sock  # 서버 재가동/업데이트 기능용
+      # 서버 설정 편집용 — 팰월드 설정 폴더. 경로가 다르면 .env 의 PAL_CONFIG_HOST_DIR 로 바꾸세요.
+      - ${PAL_CONFIG_HOST_DIR:-/home/ubuntu/palworld-server/palworld/Pal/Saved/Config/LinuxServer}:/palconfig
     networks:
       - palworld
     # 호스트로 포트를 열지 않습니다 — cloudflared 만 내부에서 접근(외부 노출 0)

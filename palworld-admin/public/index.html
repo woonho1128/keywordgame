@@ -104,6 +104,23 @@
       </table>
     </div>
 
+    <!-- 서버 설정 (슈퍼관리자 전용) -->
+    <div class="card hidden" id="cfgCard">
+      <div class="head">
+        <h2>⚙️ 서버 설정 <span class="badge">슈퍼관리자 전용</span></h2>
+        <button class="ghost sm" id="cfgToggle">펼치기</button>
+      </div>
+      <div id="cfgBody" class="hidden">
+        <p class="mut" style="margin:0 0 12px;">값을 바꾸고 <b>저장</b>을 누르면 재가동 여부를 물어봐요. 설정은 재가동 후에 적용됩니다.</p>
+        <div id="cfgFields"></div>
+        <div class="row" style="margin-top:14px;">
+          <button id="cfgSave">💾 저장</button>
+          <button class="ghost sm" id="cfgReload">↩️ 되돌리기</button>
+          <span class="mut" id="cfgMsg"></span>
+        </div>
+      </div>
+    </div>
+
     <!-- 서버 유지관리 (슈퍼관리자 전용) -->
     <div class="card hidden" id="maintCard">
       <div class="head">
@@ -184,6 +201,7 @@ function showDash(user, role) {
   $("#whoami").textContent = (user || "") + (isSuper ? " · 슈퍼관리자" : " · 관리자");
   $("#logCard").classList.toggle("hidden", !isSuper);   // 슈퍼관리자만 로그 보임
   $("#maintCard").classList.toggle("hidden", !isSuper); // 유지관리도 슈퍼관리자만
+  $("#cfgCard").classList.toggle("hidden", !isSuper);   // 서버 설정도 슈퍼관리자만
   refreshAll();
   if (isSuper) { loadLogs(); loadServerStatus(); }
 }
@@ -275,6 +293,121 @@ async function loadLogs() {
 }
 $("#logRefreshBtn").addEventListener("click", loadLogs);
 function fmtTime(iso){ try { return new Date(iso).toLocaleString("ko-KR", { timeZone: "Asia/Seoul", hour12: false }); } catch(_) { return iso; } }
+
+// ---- 서버 설정 (슈퍼관리자) ----
+let cfgFields = [], cfgValues = {};
+
+$("#cfgToggle").addEventListener("click", () => {
+  const body = $("#cfgBody");
+  const opening = body.classList.contains("hidden");
+  body.classList.toggle("hidden", !opening);
+  $("#cfgToggle").textContent = opening ? "접기" : "펼치기";
+  if (opening && !cfgFields.length) loadSettings();
+});
+
+async function loadSettings() {
+  $("#cfgMsg").textContent = "불러오는 중…";
+  try {
+    const d = await api("/api/settings");
+    cfgFields = d.fields; cfgValues = d.values;
+    renderSettings();
+    $("#cfgMsg").textContent = "";
+  } catch (e) {
+    $("#cfgFields").innerHTML = "";
+    $("#cfgMsg").textContent = "불러오기 실패: " + e.message;
+  }
+}
+
+function renderSettings() {
+  const groups = [];
+  for (const f of cfgFields) {
+    if (!(f.key in cfgValues)) continue;   // 이 서버 버전에 없는 설정은 숨김
+    let g = groups.find(x => x.name === f.group);
+    if (!g) { g = { name: f.group, items: [] }; groups.push(g); }
+    g.items.push(f);
+  }
+  if (!groups.length) { $("#cfgFields").innerHTML = '<p class="mut">편집 가능한 설정을 찾지 못했어요.</p>'; return; }
+
+  $("#cfgFields").innerHTML = groups.map(g => `
+    <div style="margin-bottom:16px;">
+      <div class="mut" style="margin-bottom:8px; font-weight:600; border-bottom:1px solid var(--line); padding-bottom:4px;">${escapeHtml(g.name)}</div>
+      ${g.items.map(f => renderField(f)).join("")}
+    </div>`).join("");
+}
+
+function renderField(f) {
+  const v = cfgValues[f.key];
+  const id = "cf_" + f.key;
+  const label = `<label for="${id}" style="flex:1; min-width:0; font-size:.88rem;">${escapeHtml(f.label)}</label>`;
+  let input;
+  if (f.type === "bool") {
+    input = `<input type="checkbox" id="${id}" data-key="${f.key}" ${v ? "checked" : ""}
+             style="flex:0 0 auto; width:20px; height:20px; accent-color:var(--accent); cursor:pointer;" />`;
+  } else if (f.type === "select") {
+    input = `<select id="${id}" data-key="${f.key}" style="flex:0 0 auto; min-width:170px; background:#0b1220; color:var(--txt);
+             border:1px solid var(--line); border-radius:8px; padding:8px;">
+             ${f.options.map(o => `<option value="${escapeAttrQ(o.value)}" ${o.value === v ? "selected" : ""}>${escapeHtml(o.label)}</option>`).join("")}
+             </select>`;
+  } else if (f.type === "int" || f.type === "float") {
+    input = `<input type="number" id="${id}" data-key="${f.key}" value="${escapeAttrQ(v)}"
+             step="${f.type === "int" ? "1" : "0.1"}" ${f.min != null ? `min="${f.min}"` : ""} ${f.max != null ? `max="${f.max}"` : ""}
+             style="flex:0 0 auto; width:130px;" />`;
+  } else {
+    input = `<input type="text" id="${id}" data-key="${f.key}" value="${escapeAttrQ(v)}" style="flex:0 0 auto; width:220px;" />`;
+  }
+  return `<div class="row" style="justify-content:space-between; gap:12px; padding:6px 0;">${label}${input}</div>`;
+}
+
+function collectSettings() {
+  const out = {};
+  document.querySelectorAll("#cfgFields [data-key]").forEach(el => {
+    const key = el.dataset.key;
+    out[key] = el.type === "checkbox" ? el.checked : el.value;
+  });
+  return out;
+}
+
+$("#cfgReload").addEventListener("click", loadSettings);
+
+$("#cfgSave").addEventListener("click", async () => {
+  const updates = collectSettings();
+  const changedKeys = Object.keys(updates).filter(k => String(updates[k]) !== String(cfgValues[k]));
+  if (!changedKeys.length) return toast("바뀐 설정이 없어요.", "err");
+
+  const names = changedKeys.map(k => (cfgFields.find(f => f.key === k) || {}).label || k);
+  const doRestart = confirm(
+    `다음 ${changedKeys.length}개 설정을 저장합니다:\n\n· ${names.join("\n· ")}\n\n` +
+    `[확인] 저장 + 서버 즉시 재가동 (접속자 끊김, 3~10분)\n[취소] 저장만 하고 나중에 재가동\n\n` +
+    `※ 설정은 재가동해야 적용됩니다.`
+  );
+
+  $("#cfgSave").disabled = true;
+  $("#cfgMsg").textContent = "저장 중…";
+  try {
+    const d = await api("/api/settings", { method: "POST", body: JSON.stringify({ updates, restart: doRestart }) });
+    cfgValues = { ...cfgValues, ...updates };
+    $("#cfgMsg").textContent = "";
+    if (d.note) { toast(d.note, "err"); }
+    else if (d.restarted) {
+      toast(`${d.changed}개 저장 후 재가동을 시작했어요.`, "ok");
+      $("#bootLog").classList.remove("hidden");
+      $("#progWrap").classList.remove("hidden");
+      loadBootLog(); startLogWatch(); pollMaint();
+      if (!maintTimer) maintTimer = setInterval(pollMaint, 10000);
+    } else {
+      toast(`${d.changed}개 저장했어요. 재가동해야 적용됩니다.`, "ok");
+    }
+    maybeRefreshLogs();
+    loadSettings();
+  } catch (e) {
+    $("#cfgMsg").textContent = "";
+    toast(e.message, "err");
+  } finally {
+    $("#cfgSave").disabled = false;
+  }
+});
+
+function escapeAttrQ(s){ return String(s == null ? "" : s).replace(/&/g,"&amp;").replace(/"/g,"&quot;").replace(/</g,"&lt;"); }
 
 // ---- 서버 유지관리 (슈퍼관리자) ----
 let maintTimer = null;

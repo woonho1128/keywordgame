@@ -5,6 +5,7 @@ import fs from "fs";
 import { execFile } from "child_process";
 import { fileURLToPath } from "url";
 import path from "path";
+import { FIELDS, readSettings, writeSettings, validate } from "./settings.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -18,6 +19,7 @@ const {
   RCON_PASSWORD,
   LOG_FILE = "/data/actions.log",
   PAL_CONTAINER = "palworld-server",
+  PAL_CONFIG_DIR = "/palconfig",
 } = process.env;
 
 // ---- 관리자 계정 로드 ----
@@ -515,6 +517,55 @@ app.post("/api/maintenance/:task", requireSuper, async (req, res) => {
       logAction(maint.user, label, "", "실패: " + e.message);
     }
   })();
+});
+
+// ============ 서버 설정 편집 (PalWorldSettings.ini) — 슈퍼관리자 전용 ============
+app.get("/api/settings", requireSuper, (req, res) => {
+  try {
+    const { values } = readSettings(PAL_CONFIG_DIR);
+    res.json({ ok: true, fields: FIELDS, values });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message, fields: FIELDS, values: {} });
+  }
+});
+
+app.post("/api/settings", requireSuper, async (req, res) => {
+  const { updates, restart } = req.body || {};
+  const { clean, errors } = validate(updates);
+  if (errors.length) return res.status(400).json({ ok: false, error: errors.join("\n") });
+  if (!Object.keys(clean).length) return res.status(400).json({ ok: false, error: "변경할 설정이 없습니다." });
+
+  try {
+    // 설정 파일은 서버가 켜질 때만 읽으므로, 재시작 전에 파일부터 안전하게 쓴다
+    writeSettings(PAL_CONFIG_DIR, clean);
+    const changed = Object.keys(clean).join(", ");
+    logAction(req.session.user, "설정 변경", changed, "성공");
+
+    if (!restart) return res.json({ ok: true, changed: Object.keys(clean).length, restarted: false });
+
+    if (maint.running) {
+      return res.json({
+        ok: true, changed: Object.keys(clean).length, restarted: false,
+        note: `다른 작업(${maint.task})이 진행 중이라 재가동은 건너뛰었습니다. 나중에 재가동하면 적용됩니다.`,
+      });
+    }
+    maintStart("설정 적용 재가동", req.session.user);
+    logAction(req.session.user, "설정 적용 재가동", "", "시작");
+    res.json({ ok: true, changed: Object.keys(clean).length, restarted: true });
+
+    docker(["restart", PAL_CONTAINER], 120000)
+      .then(() => {
+        maintEnd(true, "설정을 적용하고 재가동했습니다 — 서버가 켜지는 중입니다(3~10분).");
+        logAction(maint.user, "설정 적용 재가동", "", "성공");
+      })
+      .catch((e) => {
+        maintEnd(false, "재가동 실패: " + e.message);
+        logAction(maint.user, "설정 적용 재가동", "", "실패: " + e.message);
+      });
+  } catch (e) {
+    logAction(req.session.user, "설정 변경", "", "실패: " + e.message);
+    if (!res.headersSent) res.status(500).json({ ok: false, error: e.message });
+  }
 });
 
 app.use(express.static(path.join(__dirname, "public")));
