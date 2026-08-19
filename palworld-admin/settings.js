@@ -51,6 +51,8 @@ export const FIELDS = [
   { key: "BuildObjectDeteriorationDamageRate", label: "건물 노후 속도 (0=노후 없음)", type: "float", group: "거점" },
   { key: "BuildObjectHpRate", label: "건물 내구도 배율", type: "float", group: "거점" },
   { key: "DropItemMaxNum", label: "바닥 아이템 최대 수", type: "int", group: "거점" },
+  // -1 이면 무제한. 떨어진 아이템 전부에 물리 연산이 걸려 CPU 를 크게 먹으므로 100 안팎을 권장.
+  { key: "PhysicsActiveDropItemMaxNum", label: "물리 적용 아이템 수 (-1=무제한, CPU 영향 큼)", type: "int", group: "거점" },
   { key: "DropItemAliveMaxHours", label: "바닥 아이템 유지 시간", type: "float", group: "거점" },
 
   // --- 데미지 ---
