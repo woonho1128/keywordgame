@@ -432,6 +432,9 @@ app.get("/api/server-logs", requireSuper, async (req, res) => {
     // 금방 밀려나기 때문에, 짧게 보면 가동 중인 서버를 "부팅 중"으로 오판한다.
     const out = await docker(["logs", "--tail", "2000", PAL_CONTAINER]);
     const all = String(out)
+      // ANSI 색상 코드를 먼저 제거한다. 제어문자만 지우면 "[0m" 같은 잔해가 본문에 남는다.
+      .replace(/\x1b\[[0-9;]*[A-Za-z]/g, "")
+      .replace(/\[[0-9;]*m/g, "")
       .replace(/[^\x20-\x7E\n]/g, "")
       .split("\n")
       .map((l) => l.trim())
@@ -510,7 +513,8 @@ app.post("/api/maintenance/:task", requireSuper, async (req, res) => {
         }
         await docker(["start", PAL_CONTAINER], 120000);
       }
-      maintEnd(true, `${label} 완료 — 서버가 켜지는 중입니다(3~20분).`);
+      // 도커 명령이 끝났을 뿐, 게임 서버는 이제부터 부팅한다. "완료"로 오해하지 않도록 표현을 분리.
+      maintEnd(true, `${label} 명령을 보냈어요. 이제 서버가 부팅합니다(3~20분) — 아래 진행 표시가 "가동 중"이 되면 접속할 수 있어요.`);
       logAction(maint.user, label, "", "성공");
     } catch (e) {
       maintEnd(false, `${label} 실패: ${e.message}`);
@@ -555,7 +559,7 @@ app.post("/api/settings", requireSuper, async (req, res) => {
 
     docker(["restart", PAL_CONTAINER], 120000)
       .then(() => {
-        maintEnd(true, "설정을 적용하고 재가동했습니다 — 서버가 켜지는 중입니다(3~10분).");
+        maintEnd(true, '설정을 저장하고 재가동 명령을 보냈어요. 이제 서버가 부팅합니다(3~10분) — 진행 표시가 "가동 중"이 되면 접속할 수 있어요.');
         logAction(maint.user, "설정 적용 재가동", "", "성공");
       })
       .catch((e) => {

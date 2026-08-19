@@ -284,15 +284,23 @@ async function loadLogs() {
     if (!d.logs.length) { tb.innerHTML = '<tr><td colspan="4" class="mut">기록 없음</td></tr>'; return; }
     tb.innerHTML = d.logs.map(l => `
       <tr>
-        <td class="steam">${escapeHtml(fmtTime(l.time))}</td>
-        <td>${escapeHtml(l.user)}</td>
-        <td>${escapeHtml(l.action)}</td>
+        <td class="steam nowrap">${escapeHtml(fmtTime(l.time))}</td>
+        <td class="nowrap">${escapeHtml(l.user)}</td>
+        <td class="nowrap">${escapeHtml(l.action)}</td>
         <td class="mut">${escapeHtml([l.target, l.result].filter(Boolean).join(" · "))}</td>
       </tr>`).join("");
   } catch (e) { tb.innerHTML = `<tr><td colspan="4" class="mut">불러오기 실패: ${escapeHtml(e.message)}</td></tr>`; }
 }
 $("#logRefreshBtn").addEventListener("click", loadLogs);
-function fmtTime(iso){ try { return new Date(iso).toLocaleString("ko-KR", { timeZone: "Asia/Seoul", hour12: false }); } catch(_) { return iso; } }
+// 좁은 화면에서 한 글자씩 쪼개지지 않도록 짧게 (예: 08-19 23:14)
+function fmtTime(iso){
+  try {
+    const d = new Date(iso);
+    const p = n => String(n).padStart(2, "0");
+    const k = new Date(d.toLocaleString("en-US", { timeZone: "Asia/Seoul" }));
+    return `${p(k.getMonth() + 1)}-${p(k.getDate())} ${p(k.getHours())}:${p(k.getMinutes())}`;
+  } catch(_) { return iso; }
+}
 
 // ---- 서버 설정 (슈퍼관리자) ----
 let cfgFields = [], cfgValues = {};
@@ -431,8 +439,16 @@ function applyMaint(m) {
     $("#maintMsg").innerHTML = `⏳ <b>${escapeHtml(m.task)}</b> 진행 중… (${mins}분 경과) 완료까지 3~20분 걸릴 수 있어요.`;
     if (!maintTimer) maintTimer = setInterval(pollMaint, 10000);
   } else if (m.done) {
-    $("#maintMsg").innerHTML = (m.ok ? "✅ " : "❌ ") + escapeHtml(m.message);
+    $("#maintMsg").innerHTML = (m.ok ? "🔄 " : "❌ ") + escapeHtml(m.message);
     if (maintTimer) { clearInterval(maintTimer); maintTimer = null; }
+    // 명령이 끝나도 게임 서버는 아직 부팅 중일 수 있다.
+    // 진행 표시를 자동으로 띄워 "가동 중"이 될 때까지 보여준다(가동 중이 되면 감시가 알아서 멈춤).
+    if (m.ok) {
+      $("#progWrap").classList.remove("hidden");
+      $("#bootLog").classList.remove("hidden");
+      loadBootLog();
+      startLogWatch();
+    }
   }
 }
 
