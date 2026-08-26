@@ -28,6 +28,7 @@
     button.sm { padding:6px 10px; font-size:.85rem; }
     .mut { color:var(--mut); font-size:.85rem; }
     .hidden { display:none !important; }
+    .nowrap { white-space:nowrap; }
     table { width:100%; border-collapse:collapse; }
     th, td { text-align:left; padding:8px 6px; border-bottom:1px solid var(--line); font-size:.9rem; vertical-align:middle; }
     th { color:var(--mut); font-weight:600; }
@@ -156,10 +157,12 @@
         <h2>📋 작업 로그 <span class="badge">슈퍼관리자 전용</span></h2>
         <button class="ghost sm" id="logRefreshBtn">🔄</button>
       </div>
-      <table>
-        <thead><tr><th>시각</th><th>관리자</th><th>작업</th><th>대상 / 결과</th></tr></thead>
-        <tbody id="logs"><tr><td colspan="4" class="mut">불러오는 중…</td></tr></tbody>
-      </table>
+      <div style="overflow-x:auto;">
+        <table>
+          <thead><tr><th class="nowrap">시각</th><th class="nowrap">관리자</th><th class="nowrap">작업</th><th>대상 / 결과</th></tr></thead>
+          <tbody id="logs"><tr><td colspan="4" class="mut">불러오는 중…</td></tr></tbody>
+        </table>
+      </div>
     </div>
   </div>
 

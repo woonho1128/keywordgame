@@ -399,12 +399,22 @@ function maintEnd(ok, message) {
   maint = { ...maint, running: false, done: true, ok, message };
 }
 
-// 팰월드 컨테이너 로그에서 현재 게임 버전 읽기
-async function readGameVersion() {
+// 팰월드 컨테이너 로그에서 현재 게임 버전 읽기.
+// 버전은 부팅 때 한 번만 찍히는데 RCON 폴링 로그가 계속 쌓여 금방 밀려난다.
+// 그래서 넓게 훑고, 한 번 읽으면 컨테이너가 다시 뜰 때까지 캐시한다.
+let versionCache = { startedAt: null, version: null };
+async function readGameVersion(startedAt) {
+  if (startedAt && versionCache.startedAt === startedAt && versionCache.version) {
+    return versionCache.version;
+  }
   try {
-    const out = await docker(["logs", "--tail", "800", PAL_CONTAINER]);
+    const out = await docker(["logs", "--tail", "5000", PAL_CONTAINER]);
     const matches = String(out).match(/Game version is (v[\d.]+)/g);
-    return matches && matches.length ? matches[matches.length - 1].replace("Game version is ", "") : null;
+    const version = matches && matches.length
+      ? matches[matches.length - 1].replace("Game version is ", "")
+      : null;
+    if (version) versionCache = { startedAt: startedAt || null, version };
+    return version;
   } catch {
     return null;
   }
@@ -415,7 +425,7 @@ app.get("/api/server-status", requireAuth, async (req, res) => {
   try {
     const state = await docker(["inspect", "-f", "{{.State.Status}}|{{.State.StartedAt}}", PAL_CONTAINER]);
     const [status, startedAt] = state.split("|");
-    const version = await readGameVersion();
+    const version = await readGameVersion(startedAt);
     res.json({ ok: true, status, startedAt, version, maint });
   } catch (e) {
     res.json({ ok: false, error: e.message, maint });
