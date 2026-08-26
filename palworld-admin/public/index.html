@@ -128,6 +128,8 @@
         <span class="badge" id="verBadge">버전 확인 중…</span>
       </div>
       <div class="row">
+        <button class="sm" id="mStart">▶️ 서버 실행</button>
+        <button class="warn sm" id="mStop">⏹️ 서버 종료</button>
         <button class="ghost sm" id="mRestart">🔄 서버 재가동</button>
         <button class="warn sm" id="mUpdate">⬆️ 버전 업데이트</button>
         <button class="danger sm" id="mReinstall">🔧 강제 재설치</button>
@@ -424,16 +426,36 @@ async function loadServerStatus() {
   try {
     const d = await api("/api/server-status");
     const v = d.version ? d.version : "버전 확인 불가";
-    const st = d.status === "running" ? "실행중" : (d.status || "알 수 없음");
+    const running = d.status === "running";
+    const st = running ? "실행중" : (d.status === "exited" ? "정지됨" : (d.status || "알 수 없음"));
     $("#verBadge").textContent = `${v} · ${st}`;
-    $("#verBadge").style.color = d.status === "running" ? "var(--ok)" : "var(--warn)";
+    $("#verBadge").style.color = running ? "var(--ok)" : "var(--danger)";
+    // 상태에 맞는 버튼만 쓸 수 있게 (정지 상태에서 종료/재가동은 의미 없음)
+    setBtnState(running);
     if (d.maint) applyMaint(d.maint);
   } catch (e) { $("#verBadge").textContent = "상태 조회 실패"; $("#verBadge").style.color = "var(--danger)"; }
 }
 
+let srvRunning = true;
+function setBtnState(running) {
+  srvRunning = running;
+  if (maintBusy) return;             // 작업 중이면 applyMaint 가 비활성화를 관리
+  $("#mStart").disabled = running;
+  $("#mStop").disabled = !running;
+  $("#mRestart").disabled = !running;
+  $("#mUpdate").disabled = false;    // 정지 상태에서도 업데이트 후 켜지므로 허용
+  $("#mReinstall").disabled = false;
+}
+
+let maintBusy = false;
 function applyMaint(m) {
   const busy = !!m.running;
-  ["#mRestart", "#mUpdate", "#mReinstall"].forEach(id => { $(id).disabled = busy; });
+  maintBusy = busy;
+  if (busy) {
+    ["#mStart", "#mStop", "#mRestart", "#mUpdate", "#mReinstall"].forEach(id => { $(id).disabled = true; });
+  } else {
+    setBtnState(srvRunning);
+  }
   if (busy) {
     const mins = Math.floor((Date.now() - m.startedAt) / 60000);
     $("#maintMsg").innerHTML = `⏳ <b>${escapeHtml(m.task)}</b> 진행 중… (${mins}분 경과) 완료까지 3~20분 걸릴 수 있어요.`;
@@ -504,6 +526,11 @@ async function loadBootLog() {
       $("#progBar").style.width = "100%";
       $("#progBar").style.background = "var(--ok)";
       stopLogWatch(); // 다 떴으면 감시 종료
+    } else if (d.phase === "정지됨") {
+      $("#progPct").textContent = "꺼져 있음";
+      $("#progBar").style.width = "100%";
+      $("#progBar").style.background = "var(--danger)";
+      stopLogWatch();
     } else {
       $("#progPct").textContent = "";
       $("#progBar").style.width = "35%";
@@ -513,6 +540,12 @@ async function loadBootLog() {
     pre.textContent = "불러오기 실패: " + e.message;
   }
 }
+
+$("#mStart").addEventListener("click", () => runMaint("start",
+  "서버를 실행합니다.\n부팅에 3~20분 걸립니다. 진행할까요?"));
+
+$("#mStop").addEventListener("click", () => runMaint("stop",
+  "서버를 종료합니다.\n접속자는 모두 끊기고, 다시 켤 때까지 접속할 수 없습니다.\n(자동으로 다시 켜지지 않아요) 진행할까요?"));
 
 $("#mRestart").addEventListener("click", () => runMaint("restart",
   "서버를 재가동합니다.\n접속자는 모두 끊기고 3~10분 뒤 복구됩니다. 진행할까요?"));

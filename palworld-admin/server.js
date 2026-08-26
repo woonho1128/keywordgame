@@ -456,6 +456,16 @@ app.get("/api/server-logs", requireSuper, async (req, res) => {
     // RCON 이 최근에 응답했다면 서버는 확실히 가동 중 (부팅 완료 표시가 밀려났어도 판정 가능)
     const rconAlive = all.slice(-40).some(isNoise);
 
+    // 컨테이너가 멈춰 있으면 로그에 옛 "Running..." 이 남아 있어도 가동 중이 아니다
+    let containerRunning = true;
+    try {
+      containerRunning = (await docker(["inspect", "-f", "{{.State.Running}}", PAL_CONTAINER])) === "true";
+    } catch {}
+    if (!containerRunning) {
+      return res.json({ ok: true, lines, phase: "정지됨", percent: null,
+        version: verLine ? (verLine.match(/Game version is (v[\d.]+)/) || [])[1] || null : null });
+    }
+
     if (dl && dlIdx > readyIdx) {
       percent = parseFloat(dl.match(/progress:\s*([\d.]+)/)[1]);
       phase = /verifying/i.test(dl) ? "검증 중" : "다운로드 중";
@@ -480,7 +490,7 @@ app.get("/api/server-logs", requireSuper, async (req, res) => {
 // 유지관리 작업 실행 (재가동 / 업데이트 / 강제 재설치)
 app.post("/api/maintenance/:task", requireSuper, async (req, res) => {
   const task = req.params.task;
-  if (!["restart", "update", "reinstall"].includes(task)) {
+  if (!["restart", "update", "reinstall", "stop", "start"].includes(task)) {
     return res.status(400).json({ ok: false, error: "알 수 없는 작업입니다." });
   }
   if (maint.running) {
@@ -491,7 +501,10 @@ app.post("/api/maintenance/:task", requireSuper, async (req, res) => {
     return res.status(400).json({ ok: false, error: "확인 문구가 필요합니다." });
   }
 
-  const label = { restart: "서버 재가동", update: "버전 업데이트", reinstall: "강제 재설치" }[task];
+  const label = {
+    restart: "서버 재가동", update: "버전 업데이트", reinstall: "강제 재설치",
+    stop: "서버 종료", start: "서버 실행",
+  }[task];
   maintStart(label, req.session.user);
   logAction(req.session.user, label, "", "시작");
   res.json({ ok: true, started: label }); // 즉시 응답하고 백그라운드로 진행
@@ -500,6 +513,10 @@ app.post("/api/maintenance/:task", requireSuper, async (req, res) => {
     try {
       if (task === "restart") {
         await docker(["restart", PAL_CONTAINER], 120000);
+      } else if (task === "stop") {
+        await docker(["stop", PAL_CONTAINER], 120000);
+      } else if (task === "start") {
+        await docker(["start", PAL_CONTAINER], 120000);
       } else {
         // update/reinstall: 컨테이너를 멈추고 필요 시 게임 바이너리를 지운 뒤 다시 시작
         await docker(["stop", PAL_CONTAINER], 120000);
@@ -514,7 +531,12 @@ app.post("/api/maintenance/:task", requireSuper, async (req, res) => {
         await docker(["start", PAL_CONTAINER], 120000);
       }
       // 도커 명령이 끝났을 뿐, 게임 서버는 이제부터 부팅한다. "완료"로 오해하지 않도록 표현을 분리.
-      maintEnd(true, `${label} 명령을 보냈어요. 이제 서버가 부팅합니다(3~20분) — 아래 진행 표시가 "가동 중"이 되면 접속할 수 있어요.`);
+      maintEnd(
+        true,
+        task === "stop"
+          ? "서버를 종료했어요. 다시 켜려면 [▶️ 서버 실행]을 누르세요."
+          : `${label} 명령을 보냈어요. 이제 서버가 부팅합니다(3~20분) — 아래 진행 표시가 "가동 중"이 되면 접속할 수 있어요.`
+      );
       logAction(maint.user, label, "", "성공");
     } catch (e) {
       maintEnd(false, `${label} 실패: ${e.message}`);
