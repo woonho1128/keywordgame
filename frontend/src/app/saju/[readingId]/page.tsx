@@ -5,7 +5,9 @@ import Link from 'next/link';
 import { api } from '@/lib/api';
 import { SajuReading } from '@/lib/saju';
 import { SajuChartView } from '@/components/saju/SajuChartView';
+import { SaveImageButton } from '@/components/saju/SaveImageButton';
 import { ShareButton } from '@/components/common/ShareButton';
+import { drawSajuCard } from '@/lib/sajuCard';
 
 export default function SajuResultPage({ params }: { params: { readingId: string } }) {
   const [reading, setReading] = useState<SajuReading | null>(null);
@@ -188,6 +190,10 @@ export default function SajuResultPage({ params }: { params: { readingId: string
 
       {/* 공유 */}
       <div className="space-y-2">
+        <SaveImageButton
+          draw={() => drawSajuCard(reading)}
+          fileName={`saju-${reading.sajuType.toLowerCase()}-${reading.readingId}.png`}
+        />
         {shareUrl && <ShareButton url={shareUrl} label="🔗 결과 링크 복사" />}
         <Link
           href="/saju/compat"

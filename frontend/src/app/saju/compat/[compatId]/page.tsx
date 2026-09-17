@@ -5,7 +5,9 @@ import Link from 'next/link';
 import { api } from '@/lib/api';
 import { CompatReading } from '@/lib/saju';
 import { SajuChartView } from '@/components/saju/SajuChartView';
+import { SaveImageButton } from '@/components/saju/SaveImageButton';
 import { ShareButton } from '@/components/common/ShareButton';
+import { drawCompatCard } from '@/lib/sajuCard';
 
 /** 점수대별 한 줄 라벨 — 숫자만 보면 감이 안 오니까 */
 function scoreLabel(score: number) {
@@ -229,6 +231,10 @@ export default function CompatResultPage({ params }: { params: { compatId: strin
       )}
 
       <div className="space-y-2">
+        <SaveImageButton
+          draw={() => drawCompatCard(reading)}
+          fileName={`gunghap-${reading.compatType.toLowerCase()}-${reading.compatId}.png`}
+        />
         {shareUrl && <ShareButton url={shareUrl} label="🔗 결과 링크 복사" />}
         <Link
           href="/saju"

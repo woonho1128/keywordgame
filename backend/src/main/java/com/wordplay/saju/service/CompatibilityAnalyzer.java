@@ -25,7 +25,7 @@ import java.util.Map;
  *
  * <h3>자리별 비중</h3>
  * <b>일지</b>가 가장 크다 — 배우자 자리라 연인·부부 궁합의 핵심으로 본다.
- * 그다음이 <b>년지</b>(띠)와 <b>월지</b>(사회적 기질), <b>시지</b>는 가장 약하게 본다.
+ * 그다음이 <b>연지</b>(띠)와 <b>월지</b>(사회적 기질), <b>시지</b>는 가장 약하게 본다.
  *
  * <p>가중치 자체는 명리 고전에 숫자로 정해진 게 아니라 이 서비스의 기준이다.
  * 점수는 재미 요소고, 실제 해석은 어떤 관계가 어느 자리에 걸렸는지가 더 중요하다.
@@ -42,7 +42,7 @@ public class CompatibilityAnalyzer {
     private record Position(String name, double weight) {}
 
     private static final Position DAY = new Position("일지", 1.0);
-    private static final Position YEAR = new Position("년지", 0.5);
+    private static final Position YEAR = new Position("연지", 0.5);
     private static final Position MONTH = new Position("월지", 0.5);
     private static final Position HOUR = new Position("시지", 0.3);
 
