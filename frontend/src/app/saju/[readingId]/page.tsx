@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { api } from '@/lib/api';
-import { SajuReading } from '@/lib/saju';
+import { partnerChips, SajuReading } from '@/lib/saju';
 import { SajuChartView } from '@/components/saju/SajuChartView';
 import { SaveImageButton } from '@/components/saju/SaveImageButton';
 import { ShareButton } from '@/components/common/ShareButton';
@@ -187,7 +187,23 @@ export default function SajuResultPage({ params }: { params: { readingId: string
                         </span>
                         <span className="text-sm font-medium text-gray-700">{encounter.where}</span>
                       </div>
-                      <p className="text-sm text-gray-700 leading-relaxed mt-1">{encounter.story}</p>
+                      {partnerChips(encounter.partner).length > 0 && (
+                        <div className="flex flex-wrap gap-1.5 mt-1.5">
+                          {partnerChips(encounter.partner).map((chip) => (
+                            <span
+                              key={chip}
+                              className={`px-2 py-0.5 rounded-full text-xs ${
+                                isPast
+                                  ? 'bg-white border border-gray-200 text-gray-500'
+                                  : 'bg-hit/10 text-hit'
+                              }`}
+                            >
+                              {chip}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                      <p className="text-sm text-gray-700 leading-relaxed mt-1.5">{encounter.story}</p>
                       {encounter.basis && (
                         <p className="text-xs text-gray-400 mt-1">근거: {encounter.basis}</p>
                       )}

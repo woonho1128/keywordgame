@@ -43,8 +43,9 @@ public class SajuService {
      * v2 = 섹션 6개 + 강점/주의점/시기별 흐름 추가
      * v3 = 요점 카드(highlights) 추가
      * v4 = 미래인연 연표(encounters) + 연도별 세운 표 제공
+     * v5 = 연표에 상대 정보(partner) 추가
      */
-    private static final String PROMPT_VERSION = "v4";
+    private static final String PROMPT_VERSION = "v5";
 
     private final SajuCalculator calculator;
     private final SajuPromptBuilder promptBuilder;

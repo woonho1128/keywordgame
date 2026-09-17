@@ -75,14 +75,28 @@ export type Section = { title: string; body: string };
 /** 결과 맨 위에 한눈에 보여주는 요점 (예: 앞으로 만날 인연 = 3번) */
 export type Highlight = { label: string; value: string; detail: string | null };
 
+/** 인연 상대의 인상 */
+export type Partner = {
+  age: string | null;
+  job: string | null;
+  vibe: string | null;
+};
+
 /** 인연이 들어오는(들어왔던) 해 — 미래인연 전용 */
 export type Encounter = {
   year: string;
   past: boolean;
   where: string;
   story: string;
+  partner: Partner | null;
   basis: string | null;
 };
+
+/** 상대 정보를 칩으로 뿌리기 좋게 정리 */
+export function partnerChips(partner: Partner | null | undefined): string[] {
+  if (!partner) return [];
+  return [partner.age, partner.job, partner.vibe].filter((v): v is string => !!v && !!v.trim());
+}
 
 /** strengths·cautions·timeline 은 나중에 추가된 필드라 예전 결과엔 없다 */
 export type SajuResult = {

@@ -71,7 +71,9 @@ class SajuControllerTest {
                         List.of("강점"), List.of("주의점"),
                         List.of(new SajuResult.Period("30~39세 무신 대운", "흐름")),
                         List.of(new SajuResult.Encounter("2027년 정미년", false, "일터·업무 모임",
-                                "프로젝트로 붙어 일하다", "세운 천간이 재성")),
+                                "프로젝트로 붙어 일하다",
+                                new SajuResult.Partner("또래", "기획·마케팅 쪽", "조용한데 할 말은 하는"),
+                                "세운 천간이 재성")),
                         List.of("키워드"), null, "조언", 77),
                 Instant.parse("2026-09-17T00:00:00Z")
         );

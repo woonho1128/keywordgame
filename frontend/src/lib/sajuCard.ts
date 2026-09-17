@@ -9,7 +9,7 @@
  * 그만큼의 캔버스를 만들어 다시 그린다. 큰 임시 캔버스를 잡지 않으려는 방법이다.
  */
 
-import { CompatReading, SajuReading } from './saju';
+import { CompatReading, partnerChips, SajuReading } from './saju';
 
 type Ctx = CanvasRenderingContext2D;
 
@@ -466,7 +466,7 @@ function drawTenGods(ctx: Ctx, y: number, groups: Record<string, number>): numbe
 function drawEncounters(
   ctx: Ctx,
   y: number,
-  encounters: { year: string; past: boolean; where: string; story: string; basis: string | null }[]
+  encounters: SajuReading['result']['encounters'] & object
 ): number {
   for (const group of [true, false]) {
     const items = encounters.filter((item) => item.past === group);
@@ -481,11 +481,16 @@ function drawEncounters(
       const accent = group ? MUTED : HIT;
       const inner = 24;
 
+      const chips = partnerChips(item.partner);
+
       ctx.font = font(BODY_SIZE);
       const story = wrap(ctx, item.story, CONTENT - inner * 2);
       ctx.font = font(22);
       const basis = item.basis ? wrap(ctx, `근거: ${item.basis}`, CONTENT - inner * 2, 2) : [];
-      const height = inner * 2 + 42 + story.length * BODY_LH + (basis.length ? basis.length * 30 + 8 : 0);
+      const height = inner * 2 + 42
+              + (chips.length ? 50 : 0)
+              + story.length * BODY_LH
+              + (basis.length ? basis.length * 30 + 8 : 0);
 
       if (group) {
         ctx.fillStyle = '#f9fafb';
@@ -510,9 +515,28 @@ function drawEncounters(
         y + inner + 4
       );
 
+      let cursor = y + inner + 42;
+      if (chips.length) {
+        ctx.font = font(22);
+        let chipX = PAD + inner;
+        for (const chip of chips) {
+          const chipWidth = ctx.measureText(chip).width + 28;
+          if (chipX + chipWidth > W - PAD - inner) break;
+
+          ctx.fillStyle = group ? '#f3f4f6' : '#eef6ec';
+          roundRect(ctx, chipX, cursor, chipWidth, 38, 19);
+          ctx.fill();
+
+          ctx.fillStyle = accent;
+          ctx.fillText(chip, chipX + 14, cursor + 8);
+          chipX += chipWidth + 8;
+        }
+        cursor += 50;
+      }
+
       ctx.font = font(BODY_SIZE);
       ctx.fillStyle = BODY_INK;
-      let cursor = drawLines(ctx, story, PAD + inner, y + inner + 42, BODY_LH);
+      cursor = drawLines(ctx, story, PAD + inner, cursor, BODY_LH);
 
       if (basis.length) {
         ctx.font = font(22);

@@ -94,18 +94,18 @@ public record FourPillars(
     public Map<String, Integer> tenGodGroupCounts() {
         Map<String, Integer> counts = new LinkedHashMap<>();
         for (String group : List.of("비겁", "식상", "재성", "관성", "인성")) counts.put(group, 0);
-        for (TenGod god : otherTenGods()) counts.merge(groupOf(god), 1, Integer::sum);
+        for (TenGod god : otherTenGods()) counts.merge(god.group(), 1, Integer::sum);
         return counts;
     }
 
-    private static String groupOf(TenGod god) {
-        return switch (god) {
-            case BIGYEON, GEOPJAE -> "비겁";
-            case SIKSIN, SANGGWAN -> "식상";
-            case PYEONJAE, JEONGJAE -> "재성";
-            case PYEONGWAN, JEONGGWAN -> "관성";
-            case PYEONIN, JEONGIN -> "인성";
-        };
+    /** 자리 이름과 기둥을 짝지어 돌려준다 (시주를 모르면 셋) */
+    public List<Map.Entry<String, Pillar>> positionedPillars() {
+        List<Map.Entry<String, Pillar>> list = new ArrayList<>(4);
+        list.add(Map.entry("연주", year));
+        list.add(Map.entry("월주", month));
+        list.add(Map.entry("일주", day));
+        if (hour != null) list.add(Map.entry("시주", hour));
+        return list;
     }
 
     /**

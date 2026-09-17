@@ -117,6 +117,33 @@ class SajuPromptBuilderTest {
     }
 
     @Test
+    void 미래인연은_배우자성_위치를_근거로_준다() {
+        FourPillars male = pillars(LocalDate.of(1997, 11, 28), LocalTime.of(0, 30), Gender.MALE);
+        String malePrompt = builder.userPrompt(SajuType.FUTURE_LOVE, "한운호", Gender.MALE, male);
+
+        assertThat(malePrompt)
+                .contains("[배우자 자리]")
+                .contains("남자는 재성(財星)")
+                .contains("일지(배우자궁)")
+                .contains("재성이 앉은 자리")
+                .contains("연주·월주 쪽에 있으면 연상")
+                .contains("partner 에 그 상대가 어떤 사람일지");
+
+        // 여자는 관성을 배우자로 본다
+        FourPillars female = pillars(LocalDate.of(1998, 3, 14), LocalTime.of(14, 0), Gender.FEMALE);
+        assertThat(builder.userPrompt(SajuType.FUTURE_LOVE, "지은", Gender.FEMALE, female))
+                .contains("여자는 관성(官星)")
+                .contains("관성이 앉은 자리");
+    }
+
+    @Test
+    void 배우자_자리_블록은_미래인연에만_붙는다() {
+        FourPillars p = pillars(LocalDate.of(1997, 11, 28), LocalTime.of(0, 30), Gender.MALE);
+        assertThat(builder.userPrompt(SajuType.TOTAL, "한운호", Gender.MALE, p))
+                .doesNotContain("[배우자 자리]");
+    }
+
+    @Test
     void 모든_종류가_요점_항목을_지정한다() {
         for (SajuType type : SajuType.values()) {
             assertThat(type.highlightHint()).isNotBlank();

@@ -43,11 +43,23 @@ public record SajuResult(
      * @param year  연도와 간지 (예: "2027년 정미년")
      * @param past  지난 기회인지
      * @param where 어디서 — 사주 용어가 아니라 실제 장소/상황 (예: "일터·업무 모임")
-     * @param story 뭐 하다 만나는지 (또는 그때 어떤 기회였는지)
-     * @param basis 그렇게 본 사주 근거 (짧게)
+     * @param story   뭐 하다 만나는지 (또는 그때 어떤 기회였는지)
+     * @param partner 그 상대는 어떤 사람인지 (없을 수 있다)
+     * @param basis   그렇게 본 사주 근거 (짧게)
      */
     @JsonIgnoreProperties(ignoreUnknown = true)
-    public record Encounter(String year, boolean past, String where, String story, String basis) {}
+    public record Encounter(String year, boolean past, String where, String story,
+                            Partner partner, String basis) {}
+
+    /**
+     * 인연 상대의 인상.
+     *
+     * @param age  나이대 (예: "또래~2살 연상")
+     * @param job  직업의 결 (예: "기획·마케팅 쪽")
+     * @param vibe 성격 한 줄 (예: "조용한데 할 말은 하는 편")
+     */
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public record Partner(String age, String job, String vibe) {}
 
     /** 시기별 흐름 한 구간 (예: "30~39세 무신 대운") */
     @JsonIgnoreProperties(ignoreUnknown = true)

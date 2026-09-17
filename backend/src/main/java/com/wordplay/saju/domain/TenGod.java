@@ -45,6 +45,17 @@ public enum TenGod {
         return keyword;
     }
 
+    /** 비겁·식상·재성·관성·인성 다섯 갈래 중 어디인지 */
+    public String group() {
+        return switch (this) {
+            case BIGYEON, GEOPJAE -> "비겁";
+            case SIKSIN, SANGGWAN -> "식상";
+            case PYEONJAE, JEONGJAE -> "재성";
+            case PYEONGWAN, JEONGGWAN -> "관성";
+            case PYEONIN, JEONGIN -> "인성";
+        };
+    }
+
     /**
      * 일간 기준으로 대상 천간의 십성을 판정.
      */
