@@ -5,6 +5,8 @@ import com.sun.net.httpserver.HttpServer;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import com.wordplay.common.exception.BusinessException;
+import com.wordplay.common.exception.ErrorCode;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.io.IOException;
@@ -16,6 +18,7 @@ import java.util.List;
 import java.util.function.Function;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * 로컬 스텁 서버로 OpenAI 호출 경로를 검증한다.
@@ -129,6 +132,30 @@ class SajuAiClientTest {
     @Test
     void 일시적인_5xx는_재시도한다() {
         plan(new int[]{503, 200}, new String[]{"{\"error\":\"overloaded\"}", chatResponse("{}")});
+
+        assertThat(client.completeJson("system", "user")).isEqualTo("{}");
+        assertThat(requestBodies).hasSize(2);
+    }
+
+    @Test
+    void 크레딧이_소진되면_재시도하지_않고_바로_알린다() {
+        plan(new int[]{429}, new String[]{
+                "{\"error\":{\"message\":\"You have no credits remaining.\","
+                        + "\"type\":\"insufficient_quota\",\"code\":\"credit_balance_exhausted\"}}"});
+
+        assertThatThrownBy(() -> client.completeJson("system", "user"))
+                .isInstanceOf(BusinessException.class)
+                .extracting(e -> ((BusinessException) e).getErrorCode())
+                .isEqualTo(ErrorCode.SAJU_AI_QUOTA_EXCEEDED);
+
+        // 크레딧 문제는 기다린다고 풀리지 않는다 — 한 번만 호출해야 한다
+        assertThat(requestBodies).hasSize(1);
+    }
+
+    @Test
+    void 일반적인_429는_재시도한다() {
+        plan(new int[]{429, 200},
+                new String[]{"{\"error\":{\"type\":\"rate_limit_exceeded\"}}", chatResponse("{}")});
 
         assertThat(client.completeJson("system", "user")).isEqualTo("{}");
         assertThat(requestBodies).hasSize(2);

@@ -2,6 +2,8 @@ package com.wordplay.saju.client;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.wordplay.common.exception.BusinessException;
+import com.wordplay.common.exception.ErrorCode;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
@@ -91,7 +93,16 @@ public class SajuAiClient {
             if (resp == null) return null;
 
             if (resp.statusCode() == 200) {
+                logUsage(resp.body());
                 return extractContent(resp.body());
+            }
+
+            // 크레딧이 없으면 재시도해봐야 똑같이 거절당한다. 바로 포기하고 원인을 분명히 알린다
+            if (resp.statusCode() == 429 && resp.body() != null
+                    && resp.body().contains("insufficient_quota")) {
+                log.error("OpenAI 크레딧이 소진되었습니다. 결제 후 다시 시도하세요: {}",
+                        truncate(resp.body(), 200));
+                throw new BusinessException(ErrorCode.SAJU_AI_QUOTA_EXCEEDED);
             }
 
             if (resp.statusCode() == 400 && adaptForModel(body, resp.body())) {
@@ -145,6 +156,24 @@ public class SajuAiClient {
             return true;
         }
         return false;
+    }
+
+    /**
+     * 토큰 사용량을 한 줄 남긴다. 마피아 봇의 사용량 로그와 같은 태그를 써서
+     * [openai-usage] 로 한 번에 훑을 수 있게 한다. (비용은 모델마다 단가가 달라 찍지 않는다)
+     */
+    private void logUsage(String responseBody) {
+        try {
+            JsonNode usage = mapper.readTree(responseBody).path("usage");
+            if (usage.isMissingNode()) return;
+            log.info("[openai-usage] saju model={} 입력={} 출력={} 합계={}",
+                    model,
+                    usage.path("prompt_tokens").asLong(),
+                    usage.path("completion_tokens").asLong(),
+                    usage.path("total_tokens").asLong());
+        } catch (Exception e) {
+            // 사용량 로그 실패가 본 기능을 막으면 안 된다
+        }
     }
 
     private String extractContent(String responseBody) {

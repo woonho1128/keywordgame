@@ -16,6 +16,8 @@ public enum ErrorCode {
     SAJU_NOT_FOUND(HttpStatus.NOT_FOUND, "사주 결과를 찾을 수 없습니다"),
     SAJU_AI_UNAVAILABLE(HttpStatus.SERVICE_UNAVAILABLE, "AI 사주 기능이 아직 설정되지 않았습니다"),
     SAJU_AI_FAILED(HttpStatus.BAD_GATEWAY, "사주 풀이에 실패했습니다. 잠시 후 다시 시도해주세요"),
+    SAJU_AI_QUOTA_EXCEEDED(HttpStatus.SERVICE_UNAVAILABLE,
+            "AI 크레딧이 떨어져 지금은 풀이를 만들 수 없어요. 관리자에게 알려주세요"),
     SAJU_RATE_LIMITED(HttpStatus.TOO_MANY_REQUESTS, "사주는 조금 뒤에 다시 볼 수 있어요"),
     INTERNAL_ERROR(HttpStatus.INTERNAL_SERVER_ERROR, "서버 오류가 발생했습니다");
 
