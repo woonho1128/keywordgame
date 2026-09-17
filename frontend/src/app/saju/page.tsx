@@ -4,7 +4,17 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { api } from '@/lib/api';
-import { SajuReading, SajuTypeCode, SajuTypeItem, SajuTypesResponse } from '@/lib/saju';
+import {
+  EMPTY_PERSON,
+  PersonForm,
+  SajuReading,
+  SajuTypeCode,
+  SajuTypeItem,
+  SajuTypesResponse,
+  toPersonPayload,
+  validatePerson,
+} from '@/lib/saju';
+import { PersonFields } from '@/components/saju/PersonFields';
 
 /** API 호출 실패 시에도 종류 선택은 보여줄 수 있도록 하드코딩 폴백 */
 const FALLBACK_TYPES: SajuTypeItem[] = [
@@ -24,11 +34,7 @@ export default function SajuFormPage() {
   const [available, setAvailable] = useState(true);
   const [sajuType, setSajuType] = useState<SajuTypeCode>('TOTAL');
 
-  const [nickname, setNickname] = useState('');
-  const [birthDate, setBirthDate] = useState('');
-  const [birthTime, setBirthTime] = useState('');
-  const [timeUnknown, setTimeUnknown] = useState(false);
-  const [gender, setGender] = useState<'MALE' | 'FEMALE'>('MALE');
+  const [person, setPerson] = useState<PersonForm>(EMPTY_PERSON);
 
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -48,30 +54,14 @@ export default function SajuFormPage() {
     e.preventDefault();
     setError(null);
 
-    if (!birthDate) return setError('생년월일을 입력해주세요.');
-    if (!timeUnknown && !birthTime) {
-      return setError('태어난 시각을 입력하거나 "시간을 몰라요"를 선택해주세요.');
-    }
-
-    const year = Number(birthDate.slice(0, 4));
-    if (year < 1901 || year > 2099) return setError('1901년 ~ 2099년 생년월일만 지원합니다.');
-    if (birthDate > new Date().toISOString().slice(0, 10)) {
-      return setError('생년월일이 미래로 되어 있어요.');
-    }
+    const problem = validatePerson(person, '');
+    if (problem) return setError(problem.trim());
 
     setSubmitting(true);
     try {
       const data = await api<SajuReading>('/api/v1/saju', {
         method: 'POST',
-        body: JSON.stringify({
-          sajuType,
-          nickname: nickname.trim() || null,
-          birthDate,
-          // 브라우저에 따라 "HH:mm:ss"로 오므로 분까지만 보낸다
-          birthTime: timeUnknown ? null : birthTime.slice(0, 5),
-          timeUnknown,
-          gender,
-        }),
+        body: JSON.stringify({ sajuType, ...toPersonPayload(person) }),
       });
       router.push(`/saju/${data.readingId}`);
     } catch (err) {
@@ -126,73 +116,12 @@ export default function SajuFormPage() {
           </div>
         </div>
 
-        <div>
-          <label className="block text-sm font-medium mb-1">이름 / 닉네임</label>
-          <input
-            type="text"
-            value={nickname}
-            onChange={(e) => setNickname(e.target.value)}
-            placeholder="우노 (비워두면 '고객님'으로 불러드려요)"
-            maxLength={20}
-            className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:border-hit"
-          />
-        </div>
+        <PersonFields label="내 정보" value={person} onChange={setPerson} namePlaceholder="우노 (비워두면 '고객님')" />
 
-        <div>
-          <label className="block text-sm font-medium mb-1">생년월일 (양력) *</label>
-          <input
-            type="date"
-            value={birthDate}
-            onChange={(e) => setBirthDate(e.target.value)}
-            min="1901-01-01"
-            max={new Date().toISOString().slice(0, 10)}
-            className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:border-hit"
-          />
-          <p className="mt-1 text-xs text-gray-400">
-            음력 생일만 아신다면 양력으로 변환한 날짜를 넣어주세요.
-          </p>
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium mb-1">태어난 시각 *</label>
-          <input
-            type="time"
-            value={birthTime}
-            onChange={(e) => setBirthTime(e.target.value)}
-            disabled={timeUnknown}
-            className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:border-hit disabled:bg-gray-100 disabled:text-gray-400"
-          />
-          <label className="mt-2 flex items-center gap-2 text-sm text-gray-600">
-            <input
-              type="checkbox"
-              checked={timeUnknown}
-              onChange={(e) => setTimeUnknown(e.target.checked)}
-              className="w-4 h-4"
-            />
-            태어난 시간을 몰라요 (시주 없이 봅니다)
-          </label>
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium mb-1">성별 *</label>
-          <div className="grid grid-cols-2 gap-2">
-            {(['MALE', 'FEMALE'] as const).map((value) => (
-              <button
-                key={value}
-                type="button"
-                onClick={() => setGender(value)}
-                className={`border-2 rounded-lg py-2 font-medium transition ${
-                  gender === value
-                    ? 'border-hit bg-green-50 text-hit'
-                    : 'border-gray-200 text-gray-500 hover:border-gray-300'
-                }`}
-              >
-                {value === 'MALE' ? '남성' : '여성'}
-              </button>
-            ))}
-          </div>
-          <p className="mt-1 text-xs text-gray-400">대운이 순행인지 역행인지 가르는 값입니다.</p>
-        </div>
+        <p className="text-xs text-gray-400 -mt-2">
+          음력 생일만 아신다면 양력으로 변환한 날짜를 넣어주세요. 성별은 대운이 순행인지
+          역행인지를 가르는 값이라 결과가 달라집니다.
+        </p>
 
         {error && <p className="text-red-500 text-sm">{error}</p>}
 
@@ -203,6 +132,13 @@ export default function SajuFormPage() {
         >
           {submitting ? '사주를 풀이하는 중... (최대 30초)' : '사주 보기'}
         </button>
+
+        <Link
+          href="/saju/compat"
+          className="block w-full text-center font-medium py-2 px-4 rounded-lg border-2 border-gray-300 text-gray-700 hover:border-move hover:text-move transition"
+        >
+          💞 두 사람 궁합 보기
+        </Link>
 
         <p className="text-xs text-gray-400 text-center leading-relaxed">
           재미로 보는 콘텐츠입니다. 중요한 결정은 스스로 내려주세요.

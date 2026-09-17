@@ -35,6 +35,7 @@ export type PillarView = {
   zodiac: string;
   stemTenGod: string;
   branchTenGod: string;
+  hiddenStems: string[] | null;
 };
 
 export type LuckCycleView = {
@@ -57,6 +58,9 @@ export type SajuChart = {
   elementCounts: Record<string, number>;
   missingElements: string[];
   strongestElement: string;
+  tenGodGroups: Record<string, number> | null;
+  bodyStrength: string | null;
+  monthSupport: boolean;
   forwardLuck: boolean;
   luckStartAge: number;
   luckCycles: LuckCycleView[];
@@ -65,10 +69,16 @@ export type SajuChart = {
   yearlyLuckYear: number;
 };
 
+export type Section = { title: string; body: string };
+
+/** strengths·cautions·timeline 은 나중에 추가된 필드라 예전 결과엔 없다 */
 export type SajuResult = {
   headline: string | null;
   summary: string;
-  sections: { title: string; body: string }[];
+  sections: Section[];
+  strengths: string[] | null;
+  cautions: string[] | null;
+  timeline: { period: string; body: string }[] | null;
   keywords: string[] | null;
   lucky: {
     color: string | null;
@@ -116,3 +126,108 @@ export function elementStyle(element: string) {
 
 /** 오행 순서 고정 (목화토금수) */
 export const ELEMENT_ORDER = ['목', '화', '토', '금', '수'];
+
+// ---------------------------------------------------------------------
+// 궁합
+// ---------------------------------------------------------------------
+
+export type CompatTypeCode = 'LOVE' | 'COUPLE' | 'FRIEND' | 'WORK' | 'FAMILY';
+
+export type CompatTypeItem = {
+  code: CompatTypeCode;
+  label: string;
+  emoji: string;
+  description: string;
+};
+
+export type CompatTypesResponse = {
+  available: boolean;
+  types: CompatTypeItem[];
+};
+
+export type CompatSignal = {
+  position: string;
+  relation: string;
+  detail: string;
+  positive: boolean;
+};
+
+export type CompatAnalysis = {
+  score: number;
+  aName: string;
+  bName: string;
+  aChart: SajuChart;
+  bChart: SajuChart;
+  aSeesB: string;
+  bSeesA: string;
+  dayStemHap: string | null;
+  aFilledByB: string[];
+  bFilledByA: string[];
+  signals: CompatSignal[];
+};
+
+export type CompatResult = {
+  headline: string | null;
+  summary: string;
+  sections: Section[];
+  strengths: string[] | null;
+  cautions: string[] | null;
+  aToB: string | null;
+  bToA: string | null;
+  keywords: string[] | null;
+  advice: string | null;
+};
+
+export type CompatReading = {
+  compatId: string;
+  shareUrl: string;
+  compatType: CompatTypeCode;
+  typeLabel: string;
+  typeEmoji: string;
+  analysis: CompatAnalysis;
+  result: CompatResult;
+  createdAt: string;
+};
+
+/** 한 사람 입력 폼의 상태 */
+export type PersonForm = {
+  nickname: string;
+  birthDate: string;
+  birthTime: string;
+  timeUnknown: boolean;
+  gender: 'MALE' | 'FEMALE';
+};
+
+export const EMPTY_PERSON: PersonForm = {
+  nickname: '',
+  birthDate: '',
+  birthTime: '',
+  timeUnknown: false,
+  gender: 'MALE',
+};
+
+/** 폼 상태 → API 요청 바디 */
+export function toPersonPayload(person: PersonForm) {
+  return {
+    nickname: person.nickname.trim() || null,
+    birthDate: person.birthDate,
+    // 브라우저에 따라 "HH:mm:ss"로 오므로 분까지만 보낸다
+    birthTime: person.timeUnknown ? null : person.birthTime.slice(0, 5),
+    timeUnknown: person.timeUnknown,
+    gender: person.gender,
+  };
+}
+
+/** 생년월일·시각 공통 검증. 문제가 없으면 null */
+export function validatePerson(person: PersonForm, who: string): string | null {
+  if (!person.birthDate) return `${who} 생년월일을 입력해주세요.`;
+  if (!person.timeUnknown && !person.birthTime) {
+    return `${who} 태어난 시각을 입력하거나 "시간을 몰라요"를 선택해주세요.`;
+  }
+  const year = Number(person.birthDate.slice(0, 4));
+  if (year < 1901 || year > 2099) return `${who} 생년월일은 1901~2099년만 지원합니다.`;
+  if (person.birthDate > new Date().toISOString().slice(0, 10)) {
+    return `${who} 생년월일이 미래로 되어 있어요.`;
+  }
+  return null;
+}

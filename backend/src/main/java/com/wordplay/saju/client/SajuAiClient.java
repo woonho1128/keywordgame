@@ -47,7 +47,7 @@ public class SajuAiClient {
     @Value("${app.saju.chat-temperature:0.85}")
     private double temperature;
 
-    @Value("${app.saju.chat-max-tokens:2000}")
+    @Value("${app.saju.chat-max-tokens:6000}")
     private int maxTokens;
 
     private final HttpClient http = HttpClient.newBuilder()
@@ -149,7 +149,12 @@ public class SajuAiClient {
 
     private String extractContent(String responseBody) {
         try {
-            JsonNode message = mapper.readTree(responseBody).path("choices").path(0).path("message");
+            JsonNode choice = mapper.readTree(responseBody).path("choices").path(0);
+            // 토큰 한도에 걸려 잘리면 JSON이 깨진 채로 온다. 원인을 바로 알 수 있게 남긴다
+            if ("length".equals(choice.path("finish_reason").asText())) {
+                log.warn("OpenAI chat hit the token limit ({}). Raise app.saju.chat-max-tokens", maxTokens);
+            }
+            JsonNode message = choice.path("message");
             if (!message.path("refusal").isNull() && !message.path("refusal").isMissingNode()) {
                 log.warn("OpenAI chat refused: {}", truncate(message.path("refusal").asText(), 200));
                 return null;

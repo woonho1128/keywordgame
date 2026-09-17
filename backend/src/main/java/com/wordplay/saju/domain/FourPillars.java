@@ -1,6 +1,8 @@
 package com.wordplay.saju.domain;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -70,5 +72,64 @@ public record FourPillars(
                 .filter(e -> e.getValue() == 0)
                 .map(Map.Entry::getKey)
                 .toList();
+    }
+
+    /** 일간을 뺀 나머지 글자들 — 십성을 셀 때 자기 자신은 빼고 본다 */
+    private List<TenGod> otherTenGods() {
+        List<TenGod> gods = new ArrayList<>(7);
+        HeavenlyStem me = dayMaster();
+        for (Pillar p : new Pillar[]{year, month, hour}) {
+            if (p != null) gods.add(TenGod.of(me, p.stem()));
+        }
+        for (Pillar p : new Pillar[]{year, month, day, hour}) {
+            if (p != null) gods.add(TenGod.of(me, p.branch()));
+        }
+        return gods;
+    }
+
+    /**
+     * 십성 그룹별 개수 — 비겁·식상·재성·관성·인성.
+     * 일간(자기 자신)은 빼고, 지지는 지장간 정기로 센다.
+     */
+    public Map<String, Integer> tenGodGroupCounts() {
+        Map<String, Integer> counts = new LinkedHashMap<>();
+        for (String group : List.of("비겁", "식상", "재성", "관성", "인성")) counts.put(group, 0);
+        for (TenGod god : otherTenGods()) counts.merge(groupOf(god), 1, Integer::sum);
+        return counts;
+    }
+
+    private static String groupOf(TenGod god) {
+        return switch (god) {
+            case BIGYEON, GEOPJAE -> "비겁";
+            case SIKSIN, SANGGWAN -> "식상";
+            case PYEONJAE, JEONGJAE -> "재성";
+            case PYEONGWAN, JEONGGWAN -> "관성";
+            case PYEONIN, JEONGIN -> "인성";
+        };
+    }
+
+    /**
+     * 득령(得令) — 태어난 달(월지)이 일간을 밀어주는지.
+     * 월지가 일간과 같은 오행이거나 일간을 생해주면 득령으로 본다.
+     */
+    public boolean hasMonthSupport() {
+        Element me = dayMaster().element();
+        Element monthElement = month.branch().element();
+        return monthElement == me || monthElement.generates() == me;
+    }
+
+    /**
+     * 신강·신약 <b>간이</b> 판정.
+     *
+     * <p>일간을 돕는 세력(비겁+인성, 득령이면 가산)과 빼가는 세력(식상+재성+관성)을 견준다.
+     * 실제 명리에서는 지장간 전체·투간·통근·합충까지 따지므로 이건 참고용 요약이다.
+     */
+    public String bodyStrength() {
+        Map<String, Integer> counts = tenGodGroupCounts();
+        int support = counts.get("비겁") + counts.get("인성") + (hasMonthSupport() ? 2 : 0);
+        int drain = counts.get("식상") + counts.get("재성") + counts.get("관성");
+        if (support >= drain + 2) return "신강";
+        if (drain >= support + 2) return "신약";
+        return "중화";
     }
 }

@@ -113,7 +113,9 @@ app:
     chat-model: ${SAJU_CHAT_MODEL:gpt-4o-mini}
     chat-timeout-ms: ${SAJU_CHAT_TIMEOUT_MS:60000}
     chat-temperature: 0.85
-    chat-max-tokens: 2000
+    # 6개 섹션 + 강점/주의점/시기별 흐름까지 한국어로 받으면 2000으로는 중간에 잘린다.
+    # 잘리면 JSON이 깨져서 통째로 실패하므로 넉넉히 준다 (gpt-4o-mini 기준 1건 $0.004 수준)
+    chat-max-tokens: ${SAJU_CHAT_MAX_TOKENS:6000}
     # 한국 표준시는 동경 135도 기준이라 서울(약 127도)은 실제 태양시보다 30분 빠르다.
     # 시주 경계 판정에만 영향. 0으로 두면 보정하지 않는다.
     longitude-offset-minutes: ${SAJU_LONGITUDE_OFFSET:-30}

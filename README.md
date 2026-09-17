@@ -6,6 +6,7 @@
 - **WordSim** — 의미 유사도 게임 (꼬맨틀형, Phase 3 예정)
 - **Lie Hint** — 힌트 3개 중 거짓말까지 찾는 게임
 - **AI 사주** — 사주팔자는 서버가 계산하고 해석만 AI가 (종합/연애/재물/직업/공부/건강/올해)
+- **궁합** — 두 사람의 사주를 맞대어 합·충을 판정 (연인/부부/친구/동료/가족)
 
 ## 디렉토리
 
@@ -28,7 +29,8 @@ keywordgaem/
 ### 1) DB 준비
 1. Supabase 프로젝트 생성 (Free Tier)
 2. SQL Editor에서 `db/schema.sql` 실행
-   - 이미 운영 중인 DB라면 전체 대신 `db/saju_migration.sql`(사주 테이블)만 실행
+   - 이미 운영 중인 DB라면 전체 대신 `db/saju_migration.sql`(사주·궁합 테이블)만 실행
+   - `CREATE TABLE IF NOT EXISTS`라 이미 적용한 DB에 다시 실행해도 안전
 3. 프로젝트 설정 → Database → Connection Pooler (Transaction mode) 정보 복사
    - host: `aws-0-{region}.pooler.supabase.com`
    - port: `6543`
@@ -93,6 +95,11 @@ npm run dev
   - [x] OpenAI Chat 연동 (JSON 응답, 모델 호환 재시도, 호출 한도, 동일 입력 재사용)
   - [x] 사주 7종 (종합/연애/재물/직업/공부/건강/올해의 운세)
   - [x] `/saju` 입력 화면, `/saju/{id}` 결과 + 공유 (OG 메타태그)
+  - [x] 해석 상세화 — 종류별 6섹션, 강점·주의점·시기별 흐름, 십성 분포/지장간/일간의 힘 근거 제공
+- [x] **궁합 완료**
+  - [x] 천간합·충, 지지 육합·삼합·충·형·해·파 판정 (12×12 전 조합을 전통 목록과 대조 검증)
+  - [x] 자리별 가중치(일지 최우선) 기반 점수 — A·B 순서를 바꿔도 같은 값
+  - [x] 궁합 5종 (연인/부부/친구/동료/가족), `/saju/compat` 입력·결과 화면
 - [ ] Phase 2: 공유 URL 페이지, 최근 게임 목록 UI, 모바일 반응형 다듬기
 - [ ] Phase 3: WordSim 사전 적재 + UI
 
@@ -110,6 +117,9 @@ npm run dev
 | GET | `/api/v1/saju/types` | 사주 종류 목록 + 사용 가능 여부 |
 | POST | `/api/v1/saju` | 사주 보기 (AI 해석 생성) |
 | GET | `/api/v1/saju/{readingId}` | 사주 결과 다시 보기 |
+| GET | `/api/v1/saju/compat/types` | 궁합 종류 목록 |
+| POST | `/api/v1/saju/compat` | 궁합 보기 (AI 해석 생성) |
+| GET | `/api/v1/saju/compat/{compatId}` | 궁합 결과 다시 보기 |
 
 ## 의사결정 요약 (v1.1 핵심)
 
@@ -126,5 +136,8 @@ npm run dev
 - **양력만 입력** (음력 생일은 사용자가 변환)
 - 같은 입력 + 같은 해면 이전 해석 **재사용** (사주는 안 바뀌고 AI 비용도 아낀다)
 - AI 호출은 실제 비용이 나가므로 **in-memory 호출 한도**를 둔다 (게임 쪽 Rate Limit 제거 방침의 예외)
+- 궁합의 합·충 판정과 점수도 **서버 계산** — AI는 점수에 맞춰 이유를 설명만 한다
+- 사주 해석은 `app.saju.chat-*`, 마피아 봇은 `app.openai.chat-*` — **설정 키를 분리**한다
+  (같은 키를 쓰면 한쪽 모델을 바꿀 때 다른 쪽까지 끌려간다)
 
 자세한 내용은 [`DESIGN.md`](./DESIGN.md), [`SAJU_DESIGN.md`](./SAJU_DESIGN.md) 참고.

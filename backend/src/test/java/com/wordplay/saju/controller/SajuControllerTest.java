@@ -67,6 +67,8 @@ class SajuControllerTest {
                 null,
                 new SajuResult("한 줄 총평", "요약",
                         List.of(new SajuResult.Section("제목", "본문")),
+                        List.of("강점"), List.of("주의점"),
+                        List.of(new SajuResult.Period("30~39세 무신 대운", "흐름")),
                         List.of("키워드"), null, "조언", 77),
                 Instant.parse("2026-09-17T00:00:00Z")
         );

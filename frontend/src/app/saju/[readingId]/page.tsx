@@ -111,6 +111,54 @@ export default function SajuResultPage({ params }: { params: { readingId: string
         ))}
       </section>
 
+      {/* 강점 / 주의점 */}
+      {((result.strengths?.length ?? 0) > 0 || (result.cautions?.length ?? 0) > 0) && (
+        <section className="mb-6 grid grid-cols-1 sm:grid-cols-2 gap-3">
+          {result.strengths && result.strengths.length > 0 && (
+            <div className="rounded-xl border-2 border-hit/40 bg-green-50/50 p-4">
+              <h2 className="font-bold text-hit mb-2">타고난 강점</h2>
+              <ul className="space-y-2">
+                {result.strengths.map((item, index) => (
+                  <li key={index} className="text-sm text-gray-700 leading-relaxed flex gap-2">
+                    <span className="text-hit shrink-0">✔</span>
+                    <span>{item}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+          {result.cautions && result.cautions.length > 0 && (
+            <div className="rounded-xl border-2 border-move/50 bg-amber-50/50 p-4">
+              <h2 className="font-bold text-move mb-2">조심할 점</h2>
+              <ul className="space-y-2">
+                {result.cautions.map((item, index) => (
+                  <li key={index} className="text-sm text-gray-700 leading-relaxed flex gap-2">
+                    <span className="text-move shrink-0">!</span>
+                    <span>{item}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </section>
+      )}
+
+      {/* 시기별 흐름 */}
+      {result.timeline && result.timeline.length > 0 && (
+        <section className="mb-6">
+          <h2 className="font-bold mb-3">시기별 흐름</h2>
+          <ol className="relative border-l-2 border-gray-200 ml-2 space-y-4">
+            {result.timeline.map((period, index) => (
+              <li key={index} className="pl-4 relative">
+                <span className="absolute -left-[7px] top-1.5 w-3 h-3 rounded-full bg-hit" />
+                <div className="text-sm font-bold">{period.period}</div>
+                <p className="text-sm text-gray-700 leading-relaxed mt-0.5">{period.body}</p>
+              </li>
+            ))}
+          </ol>
+        </section>
+      )}
+
       {/* 행운 정보 */}
       {result.lucky && (
         <section className="mb-6 grid grid-cols-2 gap-2">
@@ -141,6 +189,12 @@ export default function SajuResultPage({ params }: { params: { readingId: string
       {/* 공유 */}
       <div className="space-y-2">
         {shareUrl && <ShareButton url={shareUrl} label="🔗 결과 링크 복사" />}
+        <Link
+          href="/saju/compat"
+          className="block w-full text-center font-medium py-2 px-4 rounded-lg border-2 border-gray-300 text-gray-700 hover:border-move hover:text-move transition"
+        >
+          💞 궁합도 보기
+        </Link>
         <Link
           href="/saju"
           className="block w-full text-center font-medium py-2 px-4 rounded-lg border-2 border-gray-300 text-gray-700 hover:border-hit hover:text-hit transition"

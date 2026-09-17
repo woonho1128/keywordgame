@@ -1,5 +1,7 @@
 package com.wordplay.saju.dto;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+
 import com.wordplay.saju.domain.Element;
 import com.wordplay.saju.domain.FourPillars;
 import com.wordplay.saju.domain.HeavenlyStem;
@@ -13,6 +15,7 @@ import java.util.Map;
  * 계산된 사주팔자 — AI 해석의 입력이자 화면에 그대로 보여주는 "사실" 데이터.
  * DB에 JSON으로 저장되므로 필드를 지울 땐 과거 기록 호환을 확인할 것.
  */
+@JsonIgnoreProperties(ignoreUnknown = true)
 public record SajuChart(
         List<PillarView> pillars,
         String dayMaster,
@@ -24,6 +27,9 @@ public record SajuChart(
         Map<String, Integer> elementCounts,
         List<String> missingElements,
         String strongestElement,
+        Map<String, Integer> tenGodGroups,
+        String bodyStrength,
+        boolean monthSupport,
         boolean forwardLuck,
         int luckStartAge,
         List<LuckCycleView> luckCycles,
@@ -59,6 +65,9 @@ public record SajuChart(
                 counts,
                 p.missingElements().stream().map(Element::korean).toList(),
                 p.strongestElement().korean(),
+                p.tenGodGroupCounts(),
+                p.bodyStrength(),
+                p.hasMonthSupport(),
                 p.forwardLuck(),
                 p.luckStartAge(),
                 p.luckCycles().stream().map(LuckCycleView::from).toList(),

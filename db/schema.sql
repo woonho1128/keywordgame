@@ -160,3 +160,41 @@ CREATE TABLE IF NOT EXISTS TB_RACE_ACCOUNT (
 );
 CREATE INDEX IF NOT EXISTS ix_race_account_balance ON TB_RACE_ACCOUNT (balance DESC);
 COMMENT ON TABLE TB_RACE_ACCOUNT IS '경마 계정 - 닉+암호(PBKDF2) 영속 가상 칩 지갑';
+
+-- ---------------------------------------------------------------------
+-- TB_SAJU_COMPAT : AI 궁합 해석 기록 (공유 URL /saju/compat/{compat_id})
+--   analysis_json : 서버가 계산한 두 사주 + 합/충 관계 + 점수
+--   result_json   : AI가 생성한 해석
+-- ---------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS TB_SAJU_COMPAT (
+    compat_id       VARCHAR(12)   PRIMARY KEY,
+    compat_type     VARCHAR(20)   NOT NULL,
+    a_nickname      VARCHAR(20),
+    a_birth_date    DATE          NOT NULL,
+    a_birth_time    TIME,
+    a_gender        VARCHAR(10)   NOT NULL,
+    b_nickname      VARCHAR(20),
+    b_birth_date    DATE          NOT NULL,
+    b_birth_time    TIME,
+    b_gender        VARCHAR(10)   NOT NULL,
+    score           INTEGER       NOT NULL,
+    analysis_json   JSONB         NOT NULL,
+    result_json     JSONB         NOT NULL,
+    ai_model        VARCHAR(60),
+    cache_key       VARCHAR(64)   NOT NULL,
+    view_count      INTEGER       NOT NULL DEFAULT 0,
+    created_at      TIMESTAMP     NOT NULL DEFAULT NOW(),
+
+    CONSTRAINT ck_compat_type CHECK (compat_type IN
+        ('LOVE', 'COUPLE', 'FRIEND', 'WORK', 'FAMILY')),
+    CONSTRAINT ck_compat_gender CHECK (a_gender IN ('MALE', 'FEMALE') AND b_gender IN ('MALE', 'FEMALE'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_compat_cache
+    ON TB_SAJU_COMPAT (cache_key, created_at DESC);
+
+CREATE INDEX IF NOT EXISTS idx_compat_created
+    ON TB_SAJU_COMPAT (created_at DESC);
+
+COMMENT ON TABLE TB_SAJU_COMPAT IS 'AI 궁합 해석 기록 - 합/충 판정과 점수는 서버 계산, 해석만 AI';
+COMMENT ON COLUMN TB_SAJU_COMPAT.analysis_json IS '두 사주 + 자리별 합/충 근거 + 점수';

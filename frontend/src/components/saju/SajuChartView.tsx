@@ -6,13 +6,14 @@ import { ELEMENT_ORDER, SajuChart, elementStyle } from '@/lib/saju';
  * 계산된 사주팔자 표시.
  * AI가 만든 글이 아니라 서버가 계산한 "사실"이라서 해석과 시각적으로 구분한다.
  */
-export function SajuChartView({ chart }: { chart: SajuChart }) {
+export function SajuChartView({ chart, title = '사주팔자' }: { chart: SajuChart; title?: string }) {
   const maxCount = Math.max(1, ...Object.values(chart.elementCounts));
+  const tenGodGroups = chart.tenGodGroups ?? {};
 
   return (
     <section className="border-2 border-gray-200 rounded-xl p-4 sm:p-5">
       <div className="flex items-baseline justify-between mb-3">
-        <h2 className="font-bold">사주팔자</h2>
+        <h2 className="font-bold">{title}</h2>
         <span className="text-xs text-gray-400">서버 계산 · AI 추측 아님</span>
       </div>
 
@@ -42,6 +43,12 @@ export function SajuChartView({ chart }: { chart: SajuChart }) {
                 {pillar.stemTenGod}
                 <br />
                 {pillar.branchTenGod}
+                {pillar.hiddenStems && pillar.hiddenStems.length > 0 && (
+                  <>
+                    <br />
+                    <span className="text-gray-400">{pillar.hiddenStems.join('')}</span>
+                  </>
+                )}
               </div>
             </div>
           );
@@ -87,6 +94,33 @@ export function SajuChartView({ chart }: { chart: SajuChart }) {
           </p>
         )}
       </div>
+
+      {/* 십성 분포 — 해석의 핵심 근거 */}
+      {Object.keys(tenGodGroups).length > 0 && (
+        <div className="mt-5">
+          <div className="flex items-baseline justify-between mb-2">
+            <h3 className="text-sm font-bold">십성 분포</h3>
+            {chart.bodyStrength && (
+              <span className="text-xs text-gray-500">
+                일간의 힘 {chart.bodyStrength} · {chart.monthSupport ? '득령' : '실령'}
+              </span>
+            )}
+          </div>
+          <div className="grid grid-cols-5 gap-1.5">
+            {Object.entries(tenGodGroups).map(([group, count]) => (
+              <div
+                key={group}
+                className={`rounded-lg border py-1.5 text-center ${
+                  count === 0 ? 'border-gray-200 text-gray-300' : 'border-gray-300 text-gray-700'
+                }`}
+              >
+                <div className="text-[11px]">{group}</div>
+                <div className="font-bold text-sm">{count}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* 대운 */}
       <div className="mt-5">
