@@ -47,6 +47,26 @@ app:
     id-length: 8
     max-word-length: 20
     wordguess-max-attempts: 5
+  spyfall:
+    # 스파이폴 전체 초기화(관리자) 코드. 운영에서 환경변수로 덮어쓰기 권장.
+    admin-code: ${SPYFALL_ADMIN_CODE:1128}
+  mafia:
+    # 마피아 AI 봇 추가(관리자) 코드. 전체 초기화 코드와는 다르게 둔다.
+    bot-admin-code: ${MAFIA_BOT_ADMIN_CODE:1q2w3e4r5t!}
+  feedback:
+    # 건의사항 메일 발송(Resend HTTPS API). 비어 있으면 DB 저장만 하고 메일은 건너뛴다.
+    # 운영 서버는 아웃바운드 SMTP가 막혀 있어 SMTP 대신 HTTPS API를 쓴다.
+    resend-api-key: ${RESEND_API_KEY:}
+    mail-from: ${FEEDBACK_MAIL_FROM:gg 건의함 <onboarding@resend.dev>}
+    mail-to: ${FEEDBACK_MAIL_TO:}
+    # 무료 한도(하루 100통·월 3000통)를 넘겨 과금되지 않도록 여유를 두고 스스로 막는다.
+    # 한도를 넘으면 메일만 건너뛰고 접수는 계속 받는다(/admin/feedback에서 확인).
+    mail-daily-limit: ${FEEDBACK_MAIL_DAILY_LIMIT:80}
+    mail-monthly-limit: ${FEEDBACK_MAIL_MONTHLY_LIMIT:2500}
+  quiz:
+    # AI 상식 퀴즈 문제 생성 하루 호출 상한. 한 번에 10문제를 받으므로
+    # 200회면 하루 2000문제다. 넘으면 내장 문제로 돌아가고 게임은 계속 된다.
+    daily-call-limit: ${QUIZ_DAILY_CALL_LIMIT:200}
   wordsim:
     # WordSim 참고용 벡터 사전 위치 (rank 비교 기준)
     vectors-path: ${WORDSIM_VECTORS_PATH:/etc/wordplay/word_vectors.bin}
@@ -58,16 +78,42 @@ app:
     # text-embedding-3-small (1536d, $0.02/1M) 또는 text-embedding-3-large (3072d, $0.13/1M)
     model: ${OPENAI_MODEL:text-embedding-3-large}
     timeout-ms: 10000
-    # --- 사주 해석용 Chat Completions ---
-    # OpenAI 호환 게이트웨이를 쓰면 chat-url만 바꾸면 된다
-    chat-url: ${OPENAI_CHAT_URL:https://api.openai.com/v1/chat/completions}
-    chat-model: ${OPENAI_CHAT_MODEL:gpt-4o-mini}
-    chat-timeout-ms: 60000
-    chat-temperature: 0.85
-    chat-max-tokens: 2000
+    # 마피아 AI 봇 대화/투표용 채팅 모델(임베딩 모델과 별개).
+    # gpt-5.6-luna 는 gpt-4o 대비 입력 1/12·출력 1/8 가격이라 기본으로 쓴다.
+    chat-model: ${OPENAI_CHAT_MODEL:gpt-5.6-luna}
+    chat-timeout-ms: ${OPENAI_CHAT_TIMEOUT_MS:20000}
+    # 추론 모델 파라미터 분기(auto=모델명으로 판단, true/false 로 강제 가능).
+    chat-reasoning: ${OPENAI_CHAT_REASONING:auto}
+    # 추론 노력 수준. 허용값: none / low / medium / high / xhigh / max
+    # (그 외 값은 400이 나므로 코드에서 생략 처리된다)
+    # 출력은 짧아도 사고량은 다르다 — 토론 발언은 지금까지 나온 주장·모순·커밍아웃을
+    # 추적해야 해서 추론을 켜야 대화가 굴러간다. 끄면 같은 반박만 반복한다.
+    chat-reasoning-effort: ${OPENAI_CHAT_REASONING_EFFORT:low}   # 기본값(개별 설정이 없을 때)
+    # 발언은 medium — low로는 "쟤 수상해"만 반복하고 앞사람 말의 모순을 못 짚는다.
+    chat-effort: ${OPENAI_CHAT_EFFORT:medium}                    # 토론 발언용
+    vote-effort: ${OPENAI_VOTE_EFFORT:low}                       # 투표 판단용
+    # 사형/생존은 틀리면 그날로 시민 한 명이 죽는다. 판단이 무거워서 더 높게 준다.
+    final-vote-effort: ${OPENAI_FINAL_VOTE_EFFORT:medium}
+    # 숨은 추론 토큰이 답변 예산을 먹어 빈 응답이 오지 않도록 더해주는 여유분.
+    chat-reasoning-headroom: ${OPENAI_CHAT_REASONING_HEADROOM:2000}
+    # 사용량 로그의 어림 비용 계산 단가(1M 토큰당 달러). 기본값은 gpt-5.6-luna 기준이라
+    # 모델을 바꾸면 같이 바꿔야 금액이 맞는다. 정산은 OpenAI 청구서가 기준이다.
+    price-input-per-mtok: ${OPENAI_PRICE_INPUT:0.20}
+    price-cached-input-per-mtok: ${OPENAI_PRICE_CACHED_INPUT:0.02}
+    price-output-per-mtok: ${OPENAI_PRICE_OUTPUT:1.20}
+    krw-per-usd: ${OPENAI_KRW_PER_USD:1400}
   saju:
     # 공유 URL(/saju/{id})에 쓰는 ID 길이
     id-length: 8
+    # --- 사주 해석용 Chat Completions ---
+    # 마피아 봇(app.openai.chat-*)과 키를 나눠 쓴다. 같은 키를 공유하면 한쪽 모델 변경이
+    # 다른 쪽까지 바꿔버린다. API 키(app.openai.api-key)만 공용.
+    # 마피아 봇과 같은 모델을 쓰고 싶으면 SAJU_CHAT_MODEL=gpt-5.6-luna 로 지정.
+    chat-url: ${SAJU_CHAT_URL:https://api.openai.com/v1/chat/completions}
+    chat-model: ${SAJU_CHAT_MODEL:gpt-4o-mini}
+    chat-timeout-ms: ${SAJU_CHAT_TIMEOUT_MS:60000}
+    chat-temperature: 0.85
+    chat-max-tokens: 2000
     # 한국 표준시는 동경 135도 기준이라 서울(약 127도)은 실제 태양시보다 30분 빠르다.
     # 시주 경계 판정에만 영향. 0으로 두면 보정하지 않는다.
     longitude-offset-minutes: ${SAJU_LONGITUDE_OFFSET:-30}

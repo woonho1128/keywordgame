@@ -211,6 +211,11 @@ export default function PlayPage() {
     const word = guessInput.trim();
     if (!word) return;
 
+    if (game?.gameType === 'WORDGUESS' && game.wordLength && [...word].length !== game.wordLength) {
+      setError(`${game.wordLength}글자 단어여야 합니다`);
+      return;
+    }
+
     try {
       const res = await api<GuessResp>(`/api/v1/games/${params.gameId}/guess`, {
         method: 'POST',
@@ -344,7 +349,7 @@ export default function PlayPage() {
           {game.title && <p className="text-base font-bold text-gray-800 mb-1">{game.title}</p>}
           <p className="text-sm text-gray-500">출제자: {game.creatorNick || '익명'}</p>
           {game.gameType === 'WORDGUESS' && game.jamoCount != null && (
-            <p className="text-sm text-gray-500">정답 자모 수: {game.jamoCount}개</p>
+            <p className="text-sm text-gray-500">정답: <span className="font-bold">{game.wordLength}글자</span> · 자모 {game.jamoCount}개</p>
           )}
           <p className="text-sm text-gray-500">플레이 {game.playCount}회 · 성공 {game.solvedCount}명</p>
           {game.hintText && <p className="mt-2"><span className="font-bold">힌트:</span> {game.hintText}</p>}
@@ -398,9 +403,15 @@ export default function PlayPage() {
       </div>
 
       <div className="flex flex-wrap gap-3 mb-3">
+        {game.gameType === 'WORDGUESS' && (
+          <div className="inline-flex items-center gap-2 bg-gray-50 rounded-lg px-3 py-2 text-sm">
+            <span className="text-gray-500">정답</span>
+            <span className="font-bold text-gray-800">{game.wordLength}글자</span>
+          </div>
+        )}
         {game.gameType === 'WORDGUESS' && game.jamoCount != null && (
           <div className="inline-flex items-center gap-2 bg-gray-50 rounded-lg px-3 py-2 text-sm">
-            <span className="text-gray-500">정답 자모</span>
+            <span className="text-gray-500">자모</span>
             <span className="font-bold text-gray-800">{game.jamoCount}개</span>
           </div>
         )}

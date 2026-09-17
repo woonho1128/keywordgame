@@ -140,3 +140,23 @@ COMMENT ON TABLE TB_SIMILARITY IS 'WordSim 오프라인 사전 - fastText KR 기
 COMMENT ON TABLE TB_SAJU_READING IS 'AI 사주 해석 기록 - 사주팔자는 서버 계산, 해석만 AI';
 COMMENT ON COLUMN TB_SAJU_READING.chart_json IS '서버가 계산한 사주팔자/대운/세운';
 COMMENT ON COLUMN TB_SAJU_READING.cache_key IS '입력값 SHA-256 - 동일 입력 재사용 판단';
+
+
+-- ---------------------------------------------------------------------
+-- TB_RACE_ACCOUNT : 경마 영속 계정(가상 칩 지갑, 놀이용·환전 없음)
+-- ---------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS TB_RACE_ACCOUNT (
+    id                 BIGSERIAL     PRIMARY KEY,
+    nickname           VARCHAR(16)   NOT NULL UNIQUE,
+    password_hash      VARCHAR(200)  NOT NULL,
+    balance            BIGINT        NOT NULL DEFAULT 0,
+    peak_balance       BIGINT        NOT NULL DEFAULT 0,
+    total_races        INTEGER       NOT NULL DEFAULT 0,
+    wins               INTEGER       NOT NULL DEFAULT 0,
+    last_login_at      TIMESTAMP,
+    last_bonus_date    DATE,
+    bonus_count_today  INTEGER       NOT NULL DEFAULT 0,
+    created_at         TIMESTAMP     NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS ix_race_account_balance ON TB_RACE_ACCOUNT (balance DESC);
+COMMENT ON TABLE TB_RACE_ACCOUNT IS '경마 계정 - 닉+암호(PBKDF2) 영속 가상 칩 지갑';

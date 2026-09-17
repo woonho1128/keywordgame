@@ -4,7 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.wordplay.common.exception.BusinessException;
 import com.wordplay.common.exception.ErrorCode;
 import com.wordplay.common.util.NanoIdGenerator;
-import com.wordplay.saju.client.OpenAiChatClient;
+import com.wordplay.saju.client.SajuAiClient;
 import com.wordplay.saju.domain.FourPillars;
 import com.wordplay.saju.domain.SajuType;
 import com.wordplay.saju.dto.SajuChart;
@@ -44,7 +44,7 @@ public class SajuService {
 
     private final SajuCalculator calculator;
     private final SajuPromptBuilder promptBuilder;
-    private final OpenAiChatClient chatClient;
+    private final SajuAiClient chatClient;
     private final SajuRateLimiter rateLimiter;
     private final SajuReadingRepository readingRepository;
     private final ObjectMapper objectMapper;

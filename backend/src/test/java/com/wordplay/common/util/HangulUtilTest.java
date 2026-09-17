@@ -136,6 +136,13 @@ class HangulUtilTest {
     }
 
     @Test
+    void countSyllables_글자수() {
+        assertThat(HangulUtil.countSyllables("마피아")).isEqualTo(3);
+        assertThat(HangulUtil.countSyllables("매핌")).isEqualTo(2);   // 자모수 같아도 글자수 다름
+        assertThat(HangulUtil.countSyllables("닭")).isEqualTo(1);
+    }
+
+    @Test
     void countJamos_complex() {
         assertThat(HangulUtil.countJamos("사과")).isEqualTo(5);   // ㅅㅏㄱㅗㅏ
         assertThat(HangulUtil.countJamos("떼")).isEqualTo(4);     // ㄷㄷㅓㅣ

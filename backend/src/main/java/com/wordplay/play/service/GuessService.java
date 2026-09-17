@@ -73,10 +73,17 @@ public class GuessService {
         if (!HangulUtil.isAllHangulSyllables(guess)) {
             throw new BusinessException(ErrorCode.INVALID_HANGUL);
         }
+        int answerSyllables = HangulUtil.countSyllables(game.getAnswerWord());
+        int guessSyllables = HangulUtil.countSyllables(guess);
+        if (answerSyllables != guessSyllables) {
+            throw new BusinessException(ErrorCode.INVALID_WORD_LENGTH,
+                    "정답과 글자 수가 다릅니다 (" + answerSyllables + "글자)");
+        }
         int answerJamos = HangulUtil.countJamos(game.getAnswerWord());
         int guessJamos = HangulUtil.countJamos(guess);
         if (answerJamos != guessJamos) {
-            throw new BusinessException(ErrorCode.INVALID_WORD_LENGTH);
+            throw new BusinessException(ErrorCode.INVALID_WORD_LENGTH,
+                    "정답과 자모 수가 다릅니다 (" + answerJamos + "자모)");
         }
 
         boolean correct = guess.equals(game.getAnswerWord());

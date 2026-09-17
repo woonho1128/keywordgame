@@ -1,0 +1,938 @@
+'use client';
+
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { api } from '@/lib/api';
+import RoomChat from '@/components/RoomChat';
+
+type Phase =
+  | 'NOT_STARTED' | 'LOBBY' | 'NIGHT' | 'MORNING'
+  | 'DISCUSS' | 'VOTE' | 'DEFENSE' | 'FINAL_VOTE' | 'EXECUTE' | 'ENDED';
+
+type PlayerView = { seat: number; nick: string; alive: boolean; role: string | null };
+type VoteView = { targetSeat: number; count: number };
+
+type JobState = {
+  status: Phase;
+  round: number;
+  phaseEndsAt: number;
+  serverNow: number;
+  isHost: boolean;
+  joined: boolean;
+  seat: number;
+  nick: string | null;
+  myRole: string | null;
+  myTeam: string | null;
+  alive: boolean;
+  players: PlayerView[];
+  actionKind: string;
+  copMafiaInvestigate: boolean;
+  selectable: number[];
+  myTarget: number;
+  fellowMafia: number[];
+  copLog: string[];
+  mafiaPickTally: VoteView[];
+  nightMessage: string | null;
+  nightDeadSeat: number;
+  executedSeat: number;
+  voteTally: VoteView[];
+  accusedSeat: number;
+  killVotes: number;
+  spareVotes: number;
+  myFinalVote: number; // -1 미투표 / 0 생존 / 1 사형
+  winner: string | null;
+  aliveCount: number;
+  playerCount: number;
+  myHistory: string[];
+  history: string[];
+};
+
+type RoomSummary = { code: string; status: string; playerCount: number; host: string };
+
+const CLIENT_ID_KEY = 'jobmafia_client_id';
+const NICK_KEY = 'jobmafia_nick';
+const ROOM_KEY = 'jobmafia_room';
+
+function getClientId(): string {
+  if (typeof window === 'undefined') return '';
+  try {
+    let id = localStorage.getItem(CLIENT_ID_KEY) || '';
+    if (!id) {
+      id =
+        typeof crypto !== 'undefined' && 'randomUUID' in crypto
+          ? crypto.randomUUID()
+          : `c_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+      localStorage.setItem(CLIENT_ID_KEY, id);
+    }
+    return id;
+  } catch {
+    return `c_${Math.random().toString(36).slice(2)}`;
+  }
+}
+
+const ROLE_META: Record<string, { label: string; emoji: string; color: string; desc: string }> = {
+  CITIZEN: { label: '시민', emoji: '🧑', color: 'text-gray-700', desc: '능력 없음. 토론과 투표로 마피아를 찾으세요.' },
+  POLICE: { label: '경찰', emoji: '👮', color: 'text-blue-500', desc: '밤마다 1명을 조사하면 직업 후보 2개가 나옵니다(하나가 진짜).' },
+  DOCTOR: { label: '의사', emoji: '🩺', color: 'text-green-600', desc: '밤마다 1명을 치료해 마피아 공격을 막습니다(자신 포함).' },
+  PSYCHO: { label: '정신병자', emoji: '🤪', color: 'text-purple-500', desc: '시민팀. 본인에겐 경찰·의사·관찰자·봉쇄자 중 하나로 보이지만 능력이 실제로는 통하지 않습니다(가짜 결과).' },
+  OBSERVER: { label: '관찰자', emoji: '👁️', color: 'text-cyan-600', desc: '시민팀. 밤마다 1명을 관찰해 그 사람이 밤에 누구를 지목했는지 알아냅니다(행동 종류는 모름).' },
+  BLOCKER: { label: '봉쇄자', emoji: '🚫', color: 'text-indigo-600', desc: '시민팀. 밤마다 1명을 봉쇄해 그 사람의 밤 능력을 무효화합니다(마피아 킬도 막을 수 있음).' },
+  MAFIA: { label: '마피아', emoji: '🔪', color: 'text-red-500', desc: '밤마다 동료와 함께 1명을 제거합니다.' },
+  MAFIA_COP: { label: '경찰마피아', emoji: '🕵️‍♂️', color: 'text-red-500', desc: '마피아팀. 밤마다 살해에 가담하거나(동료와 함께) 대신 한 명을 조사할 수 있습니다(둘 중 하나만).' },
+  MAFIA_SHADOW: { label: '그림자마피아', emoji: '🥷', color: 'text-red-500', desc: '마피아팀. 이 마피아가 살아서 살해에 가담하면, 죽은 사람의 정체가 공개되지 않습니다.' },
+  MAFIA_OBSERVER: { label: '관찰자마피아', emoji: '👁️‍🗨️', color: 'text-red-500', desc: '마피아팀. 밤마다 살해에 가담하거나 대신 한 명을 관찰(밤 지목 확인)할 수 있습니다(둘 중 하나만).' },
+  MAFIA_BLOCKER: { label: '봉쇄자마피아', emoji: '⛔', color: 'text-red-500', desc: '마피아팀. 밤마다 살해에 가담하거나 대신 한 명을 봉쇄(능력 무효)할 수 있습니다(둘 중 하나만).' },
+  ATTENTION: { label: '관종', emoji: '📢', color: 'text-amber-500', desc: '중립. 낮 투표로 자신이 처형되면 혼자 승리합니다!' },
+  THIEF: { label: '도적꾼', emoji: '🕵️', color: 'text-teal-600', desc: '중립. 밤에 딱 한 번, 한 명의 직업을 훔칩니다. 그 사람은 무직(시민)이 되고 당신은 그 직업이 됩니다(그 밤의 능력은 유지).' },
+};
+
+const PHASE_LABEL: Record<Phase, string> = {
+  NOT_STARTED: '', LOBBY: '대기방', NIGHT: '🌙 밤', MORNING: '☀️ 아침',
+  DISCUSS: '💬 토론', VOTE: '🗳️ 투표', DEFENSE: '🎤 최후변론', FINAL_VOTE: '⚖️ 사형투표', EXECUTE: '⚖️ 처형', ENDED: '🏁 종료',
+};
+
+const ACTION_LABEL: Record<string, string> = {
+  MAFIA_KILL: '🔪 제거할 대상을 고르세요',
+  MAFIA_COP: '🕵️‍♂️ 살해 또는 조사를 선택하세요',
+  MAFIA_OBSERVER: '👁️‍🗨️ 살해 또는 관찰을 선택하세요',
+  MAFIA_BLOCKER: '⛔ 살해 또는 봉쇄를 선택하세요',
+  POLICE_CHECK: '🔎 조사할 대상을 고르세요',
+  DOCTOR_SAVE: '🩺 보호할 대상을 고르세요',
+  OBSERVER_WATCH: '👁️ 관찰할 대상을 고르세요 (밤 지목을 알아냄)',
+  BLOCKER_BLOCK: '🚫 봉쇄할 대상을 고르세요 (그 밤 능력 무효)',
+  THIEF_STEAL: '🕵️ 직업을 훔칠 대상을 고르세요 (밤 1회)',
+  CITIZEN_WATCH: '🌙 밤 - 지켜볼 사람을 한 명 고르세요',
+  VOTE: '🗳️ 처형할 사람에게 투표하세요',
+};
+
+export default function MafiaJobsPage() {
+  const [clientId, setClientId] = useState('');
+  const [st, setSt] = useState<JobState | null>(null);
+  const [remaining, setRemaining] = useState(0);
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  const [roomCode, setRoomCode] = useState<string | null>(null);
+  const [rooms, setRooms] = useState<RoomSummary[]>([]);
+  const roomRef = useRef<string | null>(null);
+
+  const [nick, setNick] = useState('');
+  const [showCreate, setShowCreate] = useState(false);
+  const [showAdvanced, setShowAdvanced] = useState(false);
+  const [nightSec, setNightSec] = useState(60);
+  const [discussSec, setDiscussSec] = useState(90);
+  const [voteSec, setVoteSec] = useState(30);
+  const [defenseSec, setDefenseSec] = useState(20);
+  const [finalVoteSec, setFinalVoteSec] = useState(20);
+  const [mafiaMin, setMafiaMin] = useState(1);
+  const [mafiaMax, setMafiaMax] = useState(2);
+  const [psychoMin, setPsychoMin] = useState(0);
+  const [psychoMax, setPsychoMax] = useState(1);
+  const [attentionMin, setAttentionMin] = useState(0);
+  const [attentionMax, setAttentionMax] = useState(1);
+  const [thiefMin, setThiefMin] = useState(0);
+  const [thiefMax, setThiefMax] = useState(1);
+  const [neutralGrouped, setNeutralGrouped] = useState(false);
+  const [neutralMin, setNeutralMin] = useState(0);
+  const [neutralMax, setNeutralMax] = useState(1);
+  const [mafiaCopMin, setMafiaCopMin] = useState(0);
+  const [mafiaCopMax, setMafiaCopMax] = useState(0);
+  const [mafiaShadowMin, setMafiaShadowMin] = useState(0);
+  const [mafiaShadowMax, setMafiaShadowMax] = useState(0);
+  const [observerMin, setObserverMin] = useState(0);
+  const [observerMax, setObserverMax] = useState(0);
+  const [blockerMin, setBlockerMin] = useState(0);
+  const [blockerMax, setBlockerMax] = useState(0);
+  const [mafiaObserverMin, setMafiaObserverMin] = useState(0);
+  const [mafiaObserverMax, setMafiaObserverMax] = useState(0);
+  const [mafiaBlockerMin, setMafiaBlockerMin] = useState(0);
+  const [mafiaBlockerMax, setMafiaBlockerMax] = useState(0);
+  const [abilityIndependentKill, setAbilityIndependentKill] = useState(false);
+  const [showRoles, setShowRoles] = useState(false);
+
+  const [showAdmin, setShowAdmin] = useState(false);
+  const [adminInput, setAdminInput] = useState('');
+
+  const cidRef = useRef('');
+  const offsetRef = useRef(0);
+  const endsAtRef = useRef(0);
+  const inflight = useRef(false);
+
+  const changeRoom = useCallback((code: string | null) => {
+    roomRef.current = code;
+    setRoomCode(code);
+    try {
+      if (code) localStorage.setItem(ROOM_KEY, code);
+      else localStorage.removeItem(ROOM_KEY);
+    } catch {}
+  }, []);
+
+  const poll = useCallback(async () => {
+    const cid = cidRef.current;
+    const code = roomRef.current;
+    if (!code) {
+      try { setRooms(await api<RoomSummary[]>('/api/v1/jobmafia/rooms')); } catch {}
+      return;
+    }
+    if (inflight.current) return;
+    inflight.current = true;
+    try {
+      const res = await api<JobState>(`/api/v1/jobmafia/me?roomCode=${code}&clientId=${encodeURIComponent(cid)}`);
+      if (res.status === 'NOT_STARTED') { changeRoom(null); setSt(null); }
+      else { setSt(res); offsetRef.current = res.serverNow - Date.now(); endsAtRef.current = res.phaseEndsAt; }
+    } catch {
+      /* 폴링 오류 무시 */
+    } finally {
+      inflight.current = false;
+    }
+  }, [changeRoom]);
+
+  useEffect(() => {
+    const id = getClientId();
+    setClientId(id);
+    cidRef.current = id;
+    try {
+      setNick(localStorage.getItem(NICK_KEY) || '');
+      const saved = localStorage.getItem(ROOM_KEY);
+      if (saved) { roomRef.current = saved; setRoomCode(saved); }
+    } catch {}
+    poll();
+    const pollTimer = setInterval(poll, 1000);
+    const ticker = setInterval(() => {
+      if (endsAtRef.current > 0) {
+        const now = Date.now() + offsetRef.current;
+        setRemaining(Math.max(0, Math.ceil((endsAtRef.current - now) / 1000)));
+      } else {
+        setRemaining(0);
+      }
+    }, 250);
+    return () => {
+      clearInterval(pollTimer);
+      clearInterval(ticker);
+    };
+  }, [poll]);
+
+  const post = useCallback(async (path: string, body?: unknown) => {
+    setBusy(true);
+    setError(null);
+    try {
+      const res = await api<JobState>(path, {
+        method: 'POST',
+        body: body ? JSON.stringify(body) : undefined,
+      });
+      setSt(res);
+      offsetRef.current = res.serverNow - Date.now();
+      endsAtRef.current = res.phaseEndsAt;
+      return res;
+    } catch (e) {
+      setError(e instanceof Error ? e.message : '오류가 발생했습니다');
+      return null;
+    } finally {
+      setBusy(false);
+    }
+  }, []);
+
+  const saveNick = (n: string) => {
+    try {
+      localStorage.setItem(NICK_KEY, n);
+    } catch {}
+  };
+
+  const handleCreate = async () => {
+    const n = nick.trim();
+    if (!n) return setError('닉네임을 입력하세요');
+    saveNick(n);
+    setBusy(true);
+    setError(null);
+    try {
+      const res = await api<{ roomCode: string; state: JobState }>(
+        `/api/v1/jobmafia/new?clientId=${encodeURIComponent(clientId)}`,
+        { method: 'POST', body: JSON.stringify({ nick: n, nightSec, discussSec, voteSec, mafiaMin, mafiaMax, psychoMin, psychoMax, attentionMin, attentionMax, thiefMin, thiefMax, neutralGrouped, neutralMin, neutralMax, mafiaCopMin, mafiaCopMax, mafiaShadowMin, mafiaShadowMax, observerMin, observerMax, blockerMin, blockerMax, mafiaObserverMin, mafiaObserverMax, mafiaBlockerMin, mafiaBlockerMax, abilityIndependentKill, defenseSec, finalVoteSec }) }
+      );
+      changeRoom(res.roomCode);
+      setSt(res.state);
+      setShowCreate(false);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : '방 생성 실패');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleJoin = () => {
+    const n = nick.trim();
+    if (!n) return setError('닉네임을 입력하세요');
+    saveNick(n);
+    post(`/api/v1/jobmafia/join?roomCode=${roomCode}&clientId=${encodeURIComponent(clientId)}`, { nick: n });
+  };
+
+  const handleStart = () => post(`/api/v1/jobmafia/start?roomCode=${roomCode}&clientId=${encodeURIComponent(clientId)}`);
+  const handleAct = (target: number) =>
+    post(`/api/v1/jobmafia/night-action?roomCode=${roomCode}&clientId=${encodeURIComponent(clientId)}`, { target });
+  const handleCopMode = (investigate: boolean) =>
+    post(`/api/v1/jobmafia/cop-mode?roomCode=${roomCode}&clientId=${encodeURIComponent(clientId)}&investigate=${investigate}`);
+  const handleVote = (target: number) =>
+    post(`/api/v1/jobmafia/vote?roomCode=${roomCode}&clientId=${encodeURIComponent(clientId)}`, { target });
+  const handleFinalVote = (execute: boolean) =>
+    post(`/api/v1/jobmafia/final-vote?roomCode=${roomCode}&clientId=${encodeURIComponent(clientId)}&execute=${execute}`);
+
+  const handleAdminReset = async () => {
+    const code = adminInput.trim();
+    if (!code) return;
+    const res = await post(`/api/v1/jobmafia/reset?code=${encodeURIComponent(code)}`);
+    if (res) {
+      setShowAdmin(false);
+      setAdminInput('');
+      changeRoom(null);
+      setSt(null);
+    }
+  };
+  const handleCloseRoom = async (rc: string) => {
+    const code = adminInput.trim();
+    if (!code) { setError('관리자 코드를 먼저 입력하세요'); return; }
+    if (!confirm(`${rc} 방을 삭제할까요?`)) return;
+    try {
+      await api<boolean>(`/api/v1/jobmafia/close-room?code=${encodeURIComponent(code)}&roomCode=${rc}`, { method: 'POST' });
+      setRooms((cur) => cur.filter((r) => r.code !== rc));
+    } catch (e) { setError(e instanceof Error ? e.message : '방 삭제에 실패했습니다'); }
+  };
+
+  const nickOf = (seat: number) => st?.players.find((p) => p.seat === seat)?.nick ?? `${seat}번`;
+
+  function adminFooter() {
+    return (
+      <div className="w-full mt-8 pt-4 border-t border-gray-100 flex justify-center">
+        {showAdmin ? (
+          <div className="flex items-center gap-2">
+            <input type="password" value={adminInput} onChange={(e) => setAdminInput(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && handleAdminReset()} placeholder="관리자 코드"
+              className="border border-gray-300 rounded-lg px-3 py-2 text-sm w-32 focus:outline-none focus:border-red-400" />
+            <button onClick={handleAdminReset} className="bg-gray-700 text-white text-sm px-3 py-2 rounded-lg">전체 초기화</button>
+          </div>
+        ) : (
+          <button onClick={() => setShowAdmin(true)} className="text-xs text-gray-300 hover:text-gray-500">🔒 관리자</button>
+        )}
+      </div>
+    );
+  }
+
+  function renderRoomList() {
+    return (
+      <div className="w-full space-y-4">
+        <button onClick={() => { setShowCreate(true); setError(null); }} className="w-full bg-hit text-white font-bold py-3 rounded-lg hover:opacity-90">+ 새 방 만들기</button>
+        <p className="text-sm font-bold text-gray-600">방 목록</p>
+        {rooms.length === 0 && <p className="text-gray-400 text-sm text-center py-6">아직 만들어진 방이 없어요. 새 방을 만들어보세요!</p>}
+        {rooms.map((r) => {
+          const badge = r.status === 'WAITING' ? '모집중' : r.status === 'PLAYING' ? '진행중' : '종료';
+          const cls = r.status === 'WAITING' ? 'bg-green-100 text-green-700' : r.status === 'PLAYING' ? 'bg-yellow-100 text-yellow-700' : 'bg-gray-100 text-gray-400';
+          return (
+            <div key={r.code} className="flex items-center justify-between border border-gray-200 rounded-lg px-4 py-3">
+              <div><span className="font-bold tracking-wider">{r.code}</span><span className="text-xs text-gray-400 ml-2">{r.host} · {r.playerCount}명</span></div>
+              <div className="flex items-center gap-2">
+                <span className={`text-xs px-2 py-1 rounded-full ${cls}`}>{badge}</span>
+                {r.status === 'ENDED'
+                  ? <span className="text-sm text-gray-300">종료</span>
+                  : <button onClick={() => { changeRoom(r.code); setSt(null); }} className="text-sm font-bold text-hit">{r.status === 'WAITING' ? '참가' : '이어하기'}</button>}
+                {showAdmin && <button onClick={() => handleCloseRoom(r.code)} title="방 삭제" className="text-sm text-red-500 hover:text-red-600">🗑</button>}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    );
+  }
+
+  if (!roomCode) {
+    return (
+      <main className="min-h-screen flex flex-col items-center p-6 max-w-md mx-auto w-full">
+        <h1 className="text-2xl font-bold mb-6 self-start">🕵️‍♂️ 직업 마피아</h1>
+        {showCreate ? renderCreateForm() : renderRoomList()}
+        {error && <p className="text-red-500 text-sm mt-4 text-center">{error}</p>}
+        {adminFooter()}
+      <RoomChat game="mafiajobs" roomCode="lobby" clientId={clientId} nick={nick} />
+      </main>
+    );
+  }
+
+  if (!st) {
+    return (
+      <main className="min-h-screen flex items-center justify-center">
+        <p className="text-gray-400">불러오는 중...</p>
+      </main>
+    );
+  }
+
+  const phase = st.status;
+
+  return (
+    <main className="min-h-screen flex flex-col items-center p-6 max-w-md mx-auto w-full">
+      <div className="w-full flex items-center justify-between mb-4">
+        <div className="flex items-center gap-2">
+          <h1 className="text-2xl font-bold">🕵️‍♂️ 직업 마피아</h1>
+          <span className="text-xs bg-gray-100 rounded px-2 py-1 tracking-wider font-bold">{roomCode}</span>
+          <button onClick={() => { api(`/api/v1/jobmafia/leave?roomCode=${roomCode}&clientId=${encodeURIComponent(clientId)}`, { method: 'POST' }).catch(() => {}); changeRoom(null); setSt(null); }} className="text-xs text-gray-400 underline">나가기</button>
+        </div>
+        {phase !== 'NOT_STARTED' && phase !== 'LOBBY' && (
+          <div className="text-right">
+            <div className="text-sm font-bold text-gray-700">
+              {st.round}일차 · {PHASE_LABEL[phase]}
+            </div>
+            {st.phaseEndsAt > 0 && (
+              <div className="text-lg font-extrabold tabular-nums text-gray-800">{remaining}s</div>
+            )}
+          </div>
+        )}
+      </div>
+
+      {st.joined && st.myRole && phase !== 'ENDED' && (
+        <div className="w-full mb-4">
+          <div className="rounded-xl border border-gray-200 p-3 flex items-center justify-between">
+            <span className="text-sm text-gray-500">
+              내 직업 {st.myTeam && <span className="ml-1 text-gray-400">({teamLabel(st.myTeam)})</span>}
+            </span>
+            <span className="flex items-center gap-2">
+              <span className={`font-bold ${ROLE_META[st.myRole]?.color}`}>
+                {ROLE_META[st.myRole]?.emoji} {ROLE_META[st.myRole]?.label}
+                {!st.alive && <span className="ml-2 text-gray-400">(사망)</span>}
+              </span>
+              <button onClick={() => setShowRoles((v) => !v)} className="text-xs px-2 py-1 rounded bg-gray-100 text-gray-500 font-bold">📖 직업</button>
+            </span>
+          </div>
+          {showRoles && <div className="mt-2">{rolesHelp()}</div>}
+        </div>
+      )}
+
+      {st.myHistory && st.myHistory.length > 0 && (
+        <details open className="w-full mb-4 rounded-xl border border-teal-300 bg-teal-50">
+          <summary className="cursor-pointer select-none px-3 py-2 text-xs text-teal-500 font-bold">🔒 내 행동 기록 ({st.myHistory.length}) · 나만 봄</summary>
+          <div className="px-3 pb-3 max-h-56 overflow-y-auto text-sm text-teal-800 space-y-1">
+            {st.myHistory.map((h, i) => <p key={i}>{h}</p>)}
+          </div>
+        </details>
+      )}
+
+      <div className="flex-1 w-full">
+        {phase === 'NOT_STARTED' && renderNotStarted()}
+        {phase === 'LOBBY' && renderLobby()}
+        {phase === 'NIGHT' && renderNight()}
+        {phase === 'MORNING' && renderMorning()}
+        {phase === 'DISCUSS' && renderDiscuss()}
+        {phase === 'VOTE' && renderVote()}
+        {phase === 'DEFENSE' && renderDefense()}
+        {phase === 'FINAL_VOTE' && renderFinalVote()}
+        {phase === 'EXECUTE' && renderExecute()}
+        {phase === 'ENDED' && renderEnded()}
+        {error && <p className="text-red-500 text-sm mt-4 text-center">{error}</p>}
+      </div>
+
+      {st.history && st.history.length > 0 && phase !== 'LOBBY' && phase !== 'NOT_STARTED' && (
+        <details className="w-full mt-6 rounded-xl border border-gray-200">
+          <summary className="cursor-pointer select-none px-4 py-3 text-sm font-bold text-gray-600">📜 진행 이력 ({st.history.length})</summary>
+          <div className="px-4 pb-3 max-h-64 overflow-y-auto">
+            {st.history.map((h, i) => (
+              <p key={i} className="text-sm text-gray-600 border-t border-gray-50 py-1.5">{h}</p>
+            ))}
+          </div>
+        </details>
+      )}
+
+      <div className="w-full mt-8 pt-4 border-t border-gray-100 flex justify-center">
+        {showAdmin ? (
+          <div className="flex items-center gap-2">
+            <input
+              type="password"
+              value={adminInput}
+              onChange={(e) => setAdminInput(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && handleAdminReset()}
+              placeholder="관리자 코드"
+              className="border border-gray-300 rounded-lg px-3 py-2 text-sm w-32 focus:outline-none focus:border-red-400"
+            />
+            <button onClick={handleAdminReset} className="bg-gray-700 text-white text-sm px-3 py-2 rounded-lg">
+              초기화
+            </button>
+          </div>
+        ) : (
+          <button onClick={() => setShowAdmin(true)} className="text-xs text-gray-300 hover:text-gray-500">
+            🔒 관리자
+          </button>
+        )}
+      </div>
+      <RoomChat game="mafiajobs" roomCode={roomCode} clientId={clientId} nick={nick} />
+    </main>
+  );
+
+  function teamLabel(team: string) {
+    return team === 'MAFIA' ? '마피아팀' : team === 'NEUTRAL' ? '중립' : '시민팀';
+  }
+
+  function rolesHelp() {
+    const groups: { title: string; color: string; keys: string[] }[] = [
+      { title: '🔵 시민팀 (마피아 전멸 시 승리)', color: 'text-blue-600', keys: ['CITIZEN', 'POLICE', 'DOCTOR', 'OBSERVER', 'BLOCKER', 'PSYCHO'] },
+      { title: '🔴 마피아팀 (마피아 수 ≥ 나머지 시 승리)', color: 'text-red-500', keys: ['MAFIA', 'MAFIA_COP', 'MAFIA_SHADOW', 'MAFIA_OBSERVER', 'MAFIA_BLOCKER'] },
+      { title: '⚪ 중립', color: 'text-amber-500', keys: ['ATTENTION', 'THIEF'] },
+    ];
+    return (
+      <div className="rounded-xl border border-gray-200 p-4 text-sm space-y-3">
+        <div className="flex items-center justify-between">
+          <p className="font-bold">📖 직업 · 규칙 설명</p>
+          <button onClick={() => setShowRoles(false)} className="text-xs text-gray-400">닫기 ✕</button>
+        </div>
+
+        {groups.map((g) => (
+          <div key={g.title} className="space-y-1">
+            <p className={`font-bold text-xs ${g.color}`}>{g.title}</p>
+            {g.keys.filter((k) => ROLE_META[k]).map((k) => {
+              const m = ROLE_META[k];
+              return (
+                <div key={k} className="pl-1">
+                  <span className={`font-bold ${m.color}`}>{m.emoji} {m.label}</span>
+                  <span className="text-gray-500"> — {m.desc}</span>
+                </div>
+              );
+            })}
+          </div>
+        ))}
+
+        <div className="pt-2 border-t border-gray-100 space-y-1">
+          <p className="font-bold text-xs text-gray-700">🌙 게임 진행</p>
+          <p className="text-gray-500">밤(각자 지목·능력) → 아침(결과 공개) → 토론 → 낮 투표(지목) → 🎤 최후변론 → ⚖️ 사형/생존 투표 → 처형 or 생존 → 다시 밤.</p>
+          <p className="text-gray-500">· 낮 투표는 <b>최다 득표자를 재판대에 올리는 지목</b>이에요. 동표·기권이면 재판 없이 처형 없음.</p>
+          <p className="text-gray-500">· 사형/생존 투표에서 <b>사형 표가 더 많아야 처형</b>(동수·생존 우세면 생존). 재판 당사자는 투표 불가.</p>
+        </div>
+
+        <div className="pt-2 border-t border-gray-100 space-y-1">
+          <p className="font-bold text-xs text-gray-700">⏱️ 밤 능력 순서</p>
+          <p className="text-gray-500">🚫 봉쇄자(가장 먼저) → 의사 보호·마피아 킬·경찰 조사·도적꾼 강탈(순서 무관) → 👁️ 관찰자(가장 마지막). 봉쇄당한 사람은 그 밤 능력이 무효(관찰자엔 "행동 없음"으로 보임).</p>
+          <p className="text-gray-500">· 능력마피아(경찰·관찰·봉쇄)는 밤마다 <b>능력 or 살해</b> 택1.</p>
+        </div>
+      </div>
+    );
+  }
+
+  function rangeRow(
+    label: string,
+    min: number, setMin: (n: number) => void,
+    max: number, setMax: (n: number) => void,
+    lo: number, hi: number,
+  ) {
+    const clamp = (v: number) => Math.max(lo, Math.min(hi, v));
+    const setMn = (v: number) => { const nv = clamp(v); setMin(nv); if (nv > max) setMax(nv); };
+    const setMx = (v: number) => { const nv = clamp(v); setMax(nv); if (nv < min) setMin(nv); };
+    const btn = (txt: string, on: () => void) => (
+      <button type="button" onClick={on} className="w-7 h-7 rounded border border-gray-300 text-gray-600 leading-none">{txt}</button>
+    );
+    return (
+      <div className="flex items-center justify-between">
+        <span className="text-sm">{label}</span>
+        <div className="flex items-center gap-1 text-sm">
+          {btn('−', () => setMn(min - 1))}
+          <span className="w-4 text-center font-bold">{min}</span>
+          {btn('＋', () => setMn(min + 1))}
+          <span className="text-gray-300 mx-1">~</span>
+          {btn('−', () => setMx(max - 1))}
+          <span className="w-4 text-center font-bold">{max}</span>
+          {btn('＋', () => setMx(max + 1))}
+        </div>
+      </div>
+    );
+  }
+
+  function renderNotStarted() {
+    if (showCreate) return renderCreateForm();
+    return (
+      <div className="text-center space-y-6 mt-6">
+        <p className="text-gray-500">직업이 있는 마피아. 각자 폰으로 접속해 플레이하세요.</p>
+        <button onClick={() => setShowCreate(true)} className="bg-hit text-white font-bold py-3 px-8 rounded-lg hover:opacity-90">
+          새 방 만들기
+        </button>
+        <div>
+          <button onClick={() => setShowRoles((v) => !v)} className="text-sm text-gray-400 underline">직업 설명 보기</button>
+        </div>
+        {showRoles && rolesHelp()}
+        <p className="text-xs text-gray-400">5~12명 권장</p>
+      </div>
+    );
+  }
+
+  function renderCreateForm() {
+    return (
+      <div className="space-y-5 mt-4">
+        <div>
+          <label className="block text-sm font-medium mb-1">내 닉네임 *</label>
+          <input
+            value={nick}
+            onChange={(e) => setNick(e.target.value)}
+            maxLength={16}
+            placeholder="yono"
+            className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:border-hit"
+          />
+        </div>
+
+        <div className="space-y-3 bg-gray-50 rounded-lg p-4">
+          <p className="text-sm font-medium">직업 인원 <span className="text-gray-400 font-normal text-xs">(범위 안에서 랜덤)</span></p>
+          {rangeRow('🔪 마피아', mafiaMin, setMafiaMin, mafiaMax, setMafiaMax, 0, 5)}
+          {rangeRow('🕵️‍♂️ ⌞경찰마피아', mafiaCopMin, setMafiaCopMin, mafiaCopMax, setMafiaCopMax, 0, 4)}
+          {rangeRow('🥷 ⌞그림자마피아', mafiaShadowMin, setMafiaShadowMin, mafiaShadowMax, setMafiaShadowMax, 0, 4)}
+          {rangeRow('👁️‍🗨️ ⌞관찰자마피아', mafiaObserverMin, setMafiaObserverMin, mafiaObserverMax, setMafiaObserverMax, 0, 4)}
+          {rangeRow('⛔ ⌞봉쇄자마피아', mafiaBlockerMin, setMafiaBlockerMin, mafiaBlockerMax, setMafiaBlockerMax, 0, 4)}
+          <p className="text-[11px] text-gray-400 -mt-1">⌞ 능력마피아·그림자마피아는 마피아 총원 안에서 배정돼요(나머지는 일반 마피아). 능력마피아는 밤마다 능력/살해 택1.</p>
+          {rangeRow('👁️ 관찰자', observerMin, setObserverMin, observerMax, setObserverMax, 0, 4)}
+          {rangeRow('🚫 봉쇄자', blockerMin, setBlockerMin, blockerMax, setBlockerMax, 0, 4)}
+          <label className="flex items-start gap-2 text-xs text-gray-600 pt-1 border-t border-gray-200 mt-1">
+            <input type="checkbox" className="mt-0.5" checked={abilityIndependentKill} onChange={(e) => setAbilityIndependentKill(e.target.checked)} />
+            <span>⚔️ <b>능력마피아 독립 킬</b> — 켜면 경찰마피아(살해)·그림자마피아가 <b>자기 표적을 각자 처치</b>해서 밤에 여러 명이 죽을 수 있어요(마피아 강화). 끄면 모든 마피아가 다수결로 1명만 처치.</span>
+          </label>
+          {rangeRow('🤪 정신병자', psychoMin, setPsychoMin, psychoMax, setPsychoMax, 0, 3)}
+          <label className="flex items-center gap-2 text-xs text-gray-600 pt-1">
+            <input type="checkbox" checked={neutralGrouped} onChange={(e) => setNeutralGrouped(e.target.checked)} />
+            중립(📢관종·🕵️도적꾼) 통합 랜덤 — 총 인원만 정하고 어떤 게 나올진 랜덤
+          </label>
+          {neutralGrouped
+            ? rangeRow('😈 중립 (관종/도적꾼)', neutralMin, setNeutralMin, neutralMax, setNeutralMax, 0, 4)
+            : (
+              <>
+                {rangeRow('📢 관종', attentionMin, setAttentionMin, attentionMax, setAttentionMax, 0, 3)}
+                {rangeRow('🕵️ 도적꾼', thiefMin, setThiefMin, thiefMax, setThiefMax, 0, 3)}
+              </>
+            )}
+          <p className="text-xs text-gray-400">경찰·의사는 항상 1명씩, 나머지는 시민입니다.</p>
+        </div>
+
+        <button onClick={() => setShowAdvanced((v) => !v)} className="text-sm text-gray-500 underline">
+          {showAdvanced ? '타이머 접기' : '타이머 설정'}
+        </button>
+        {showAdvanced && (
+          <div className="space-y-3 bg-gray-50 rounded-lg p-4">
+            {[
+              { label: '밤', v: nightSec, set: setNightSec, min: 20, max: 180 },
+              { label: '토론', v: discussSec, set: setDiscussSec, min: 15, max: 300 },
+              { label: '투표', v: voteSec, set: setVoteSec, min: 10, max: 120 },
+              { label: '최후변론', v: defenseSec, set: setDefenseSec, min: 5, max: 120 },
+              { label: '사형투표', v: finalVoteSec, set: setFinalVoteSec, min: 5, max: 120 },
+            ].map((row) => (
+              <div key={row.label} className="flex items-center justify-between text-sm">
+                <span>{row.label} 시간</span>
+                <span className="flex items-center gap-2">
+                  <input type="range" min={row.min} max={row.max} step={5} value={row.v}
+                    onChange={(e) => row.set(Number(e.target.value))} />
+                  <span className="w-10 text-right font-bold">{row.v}s</span>
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+
+        <div className="flex gap-2">
+          <button onClick={() => setShowCreate(false)} className="flex-1 border border-gray-300 py-3 rounded-lg">취소</button>
+          <button onClick={handleCreate} disabled={busy} className="flex-[2] bg-hit text-white font-bold py-3 rounded-lg hover:opacity-90 disabled:opacity-50">
+            {busy ? '생성 중...' : '방 만들기'}
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  function renderLobby() {
+    const canStart = st!.playerCount >= 5;
+    return (
+      <div className="space-y-5 mt-2">
+        <div className="rounded-xl border border-gray-200 p-4">
+          <p className="text-sm font-bold mb-2">참가자 ({st!.playerCount}/12)</p>
+          <div className="flex flex-wrap gap-2">
+            {st!.players.map((p) => {
+              const me = p.seat === st!.seat;
+              return (
+                <span key={p.seat} className={`bg-gray-100 rounded-full px-3 py-1 text-sm ${me ? 'ring-2 ring-hit font-bold' : ''}`}>
+                  {p.nick}{me && ' (나)'}
+                </span>
+              );
+            })}
+            {st!.players.length === 0 && <span className="text-gray-400 text-sm">아직 없음</span>}
+          </div>
+        </div>
+
+        <button onClick={() => setShowRoles((v) => !v)} className="text-sm text-gray-400 underline">직업 설명 보기</button>
+        {showRoles && rolesHelp()}
+
+        {!st!.joined ? (
+          <div className="space-y-2">
+            <label className="block text-sm font-medium">닉네임으로 참가</label>
+            <div className="flex gap-2">
+              <input value={nick} onChange={(e) => setNick(e.target.value)} maxLength={16} placeholder="닉네임"
+                className="flex-1 border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:border-hit" />
+              <button onClick={handleJoin} disabled={busy} className="bg-hit text-white font-bold px-5 rounded-lg disabled:opacity-50">참가</button>
+            </div>
+          </div>
+        ) : st!.isHost ? (
+          <button onClick={handleStart} disabled={busy || !canStart}
+            className="w-full bg-red-500 text-white font-bold py-3 rounded-lg hover:opacity-90 disabled:opacity-40">
+            {canStart ? '게임 시작' : '최소 5명 필요'}
+          </button>
+        ) : (
+          <p className="text-center text-gray-500 text-sm">방장이 시작하기를 기다리는 중...</p>
+        )}
+      </div>
+    );
+  }
+
+  function targetButtons(seats: number[], onPick: (seat: number) => void, current: number) {
+    return (
+      <div className="grid grid-cols-2 gap-2">
+        {seats.map((seat) => (
+          <button key={seat} onClick={() => onPick(seat)} disabled={busy}
+            className={`rounded-lg border py-3 px-2 text-sm font-medium transition active:scale-95 ${
+              current === seat ? 'border-hit bg-green-50 text-hit font-bold' : 'border-gray-300 hover:bg-gray-50'
+            }`}>
+            {nickOf(seat)}
+          </button>
+        ))}
+      </div>
+    );
+  }
+
+  function aliveBoard() {
+    return (
+      <div className="mt-6">
+        <p className="text-xs text-gray-400 mb-2">생존 {st!.aliveCount}명 / 전체 {st!.playerCount}명</p>
+        <div className="flex flex-wrap gap-2">
+          {st!.players.map((p) => {
+            const me = p.seat === st!.seat;
+            return (
+              <span key={p.seat}
+                className={`rounded-full px-3 py-1 text-sm ${p.alive ? 'bg-gray-100 text-gray-700' : 'bg-gray-50 text-gray-300 line-through'} ${me ? 'ring-2 ring-hit font-bold' : ''}`}>
+                {p.nick}{me && ' (나)'}
+                {p.role && <span className="ml-1">{ROLE_META[p.role]?.emoji}</span>}
+              </span>
+            );
+          })}
+        </div>
+      </div>
+    );
+  }
+
+  function renderNight() {
+    if (!st!.joined || !st!.alive) {
+      return (
+        <div className="text-center mt-8 space-y-2">
+          <p className="text-4xl">🌙</p>
+          <p className="text-gray-500">{st!.joined ? '사망하여 관전 중입니다.' : '밤이 깊었습니다.'}</p>
+          {aliveBoard()}
+        </div>
+      );
+    }
+    const kind = st!.actionKind;
+    const isAbilityMafia = kind === 'MAFIA_COP' || kind === 'MAFIA_OBSERVER' || kind === 'MAFIA_BLOCKER';
+    const abilityOn = st!.copMafiaInvestigate; // 능력모드 여부(경찰=조사/관찰자=관찰/봉쇄자=봉쇄)
+    const abilityLabel = kind === 'MAFIA_OBSERVER' ? '👁️ 관찰' : kind === 'MAFIA_BLOCKER' ? '🚫 봉쇄' : '🔎 조사';
+    const abilityHint = kind === 'MAFIA_OBSERVER' ? '👁️ 한 명을 관찰해 밤 지목을 알아내요(살해엔 가담 안 함).'
+      : kind === 'MAFIA_BLOCKER' ? '🚫 한 명을 봉쇄해 능력을 막아요(살해엔 가담 안 함).'
+      : '🔎 한 명을 조사해요(살해엔 가담하지 않음). 결과는 아침에 내 기록에 나와요.';
+    const isMafia = kind === 'MAFIA_KILL' || (isAbilityMafia && !abilityOn); // 살해모드 능력마피아 포함
+    return (
+      <div className="mt-2 space-y-4">
+        <p className="font-bold text-center">{ACTION_LABEL[kind] ?? '🌙 밤입니다'}</p>
+        {isAbilityMafia && (
+          <div className="grid grid-cols-2 gap-2">
+            <button onClick={() => handleCopMode(false)} disabled={busy}
+              className={`py-2 rounded-lg border-2 text-sm font-bold ${!abilityOn ? 'border-red-500 bg-red-50 text-red-600' : 'border-gray-200 text-gray-500'}`}>🔪 살해</button>
+            <button onClick={() => handleCopMode(true)} disabled={busy}
+              className={`py-2 rounded-lg border-2 text-sm font-bold ${abilityOn ? 'border-blue-500 bg-blue-50 text-blue-600' : 'border-gray-200 text-gray-500'}`}>{abilityLabel}</button>
+          </div>
+        )}
+        {(kind === 'MAFIA_KILL' || (isAbilityMafia && !abilityOn)) && st!.fellowMafia.length > 1 && (
+          <p className="text-center text-xs text-red-400">
+            동료 마피아: {st!.fellowMafia.map(nickOf).join(', ')} · 실시간으로 지목이 공유됩니다
+          </p>
+        )}
+        {isAbilityMafia && (
+          <p className="text-center text-xs text-gray-400">{abilityOn ? abilityHint : '🔪 동료와 함께 살해에 가담해요.'}</p>
+        )}
+        {targetButtons(st!.selectable, handleAct, st!.myTarget)}
+
+        {isMafia && st!.mafiaPickTally.length > 0 && (
+          <div className="bg-red-50 rounded-lg p-3 text-sm space-y-1">
+            <p className="text-xs text-red-400 font-medium">동료 지목 현황 (다수결)</p>
+            {st!.mafiaPickTally.slice().sort((a, b) => b.count - a.count).map((v) => (
+              <div key={v.targetSeat} className="flex justify-between text-red-700">
+                <span>{nickOf(v.targetSeat)}</span><span className="font-bold">{v.count}표</span>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {kind === 'POLICE_CHECK' && (
+          <p className="text-center text-xs text-blue-400">🔎 한 명만 조사할 수 있어요. 직업 후보 2개가 아침에 공개됩니다(하나가 진짜)</p>
+        )}
+        {st!.myTarget > 0 && (
+          <p className="text-center text-xs text-gray-400">내 선택: <b>{nickOf(st!.myTarget)}</b> · 시간 내 변경 가능</p>
+        )}
+        {aliveBoard()}
+      </div>
+    );
+  }
+
+  function copLogPanel() {
+    if (!st!.copLog || st!.copLog.length === 0) return null;
+    return (
+      <div className="mt-4 bg-blue-50 rounded-lg p-3 text-sm text-blue-700 space-y-1 text-left">
+        <p className="text-xs text-blue-400 font-medium">🔎 조사 결과</p>
+        {st!.copLog.map((l, i) => <div key={i}>{l}</div>)}
+      </div>
+    );
+  }
+
+  function renderMorning() {
+    return (
+      <div className="text-center mt-8 space-y-3">
+        <p className="text-5xl">☀️</p>
+        <p className="text-lg font-bold text-gray-800">{st!.nightMessage}</p>
+        {copLogPanel()}
+        {aliveBoard()}
+      </div>
+    );
+  }
+
+  function renderDiscuss() {
+    return (
+      <div className="text-center mt-6 space-y-3">
+        <p className="text-5xl">💬</p>
+        <p className="text-gray-600">자유롭게 토론하세요. 곧 투표가 시작됩니다.</p>
+        {st!.nightMessage && <p className="text-sm text-gray-400">{st!.nightMessage}</p>}
+        {copLogPanel()}
+        {aliveBoard()}
+      </div>
+    );
+  }
+
+  function renderVote() {
+    const tally = st!.voteTally;
+    return (
+      <div className="mt-2 space-y-4">
+        <p className="font-bold text-center">{ACTION_LABEL.VOTE}</p>
+        {st!.joined && st!.alive ? (
+          <>
+            {targetButtons(st!.selectable, handleVote, st!.myTarget)}
+            <button onClick={() => handleVote(-1)} disabled={busy}
+              className={`w-full rounded-lg border py-2 text-sm ${st!.myTarget === -1 && st!.seat > 0 ? 'border-gray-500 bg-gray-100' : 'border-gray-300'}`}>
+              기권
+            </button>
+          </>
+        ) : (
+          <p className="text-center text-gray-500 text-sm">관전 중 — 투표할 수 없습니다.</p>
+        )}
+        {copLogPanel()}
+        {tally.length > 0 && (
+          <div className="space-y-1">
+            <p className="text-xs text-gray-400">현재 득표</p>
+            {tally.slice().sort((a, b) => b.count - a.count).map((v) => (
+              <div key={v.targetSeat} className="flex justify-between text-sm">
+                <span>{nickOf(v.targetSeat)}</span><span className="font-bold">{v.count}표</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  function renderDefense() {
+    const accused = st!.accusedSeat;
+    const isAccused = st!.seat === accused;
+    return (
+      <div className="text-center mt-6 space-y-3">
+        <p className="text-4xl">🎤</p>
+        <p className="text-lg font-bold text-gray-800">{nickOf(accused)}님의 최후변론</p>
+        {isAccused
+          ? <p className="text-sm text-hit font-bold">당신이 지목되었습니다. 채팅으로 변론하세요!</p>
+          : <p className="text-sm text-gray-500">변론을 듣고, 곧 사형/생존 투표가 진행됩니다.</p>}
+        {aliveBoard()}
+      </div>
+    );
+  }
+
+  function renderFinalVote() {
+    const accused = st!.accusedSeat;
+    const isAccused = st!.seat === accused;
+    const mine = st!.myFinalVote;
+    return (
+      <div className="mt-2 space-y-4 text-center">
+        <p className="font-bold">⚖️ {nickOf(accused)}님을 처형할까요?</p>
+        {st!.joined && st!.alive && !isAccused ? (
+          <div className="grid grid-cols-2 gap-2">
+            <button onClick={() => handleFinalVote(true)} disabled={busy}
+              className={`py-3 rounded-lg border-2 font-bold ${mine === 1 ? 'border-red-500 bg-red-50 text-red-600' : 'border-gray-200 text-gray-500'}`}>💀 사형</button>
+            <button onClick={() => handleFinalVote(false)} disabled={busy}
+              className={`py-3 rounded-lg border-2 font-bold ${mine === 0 ? 'border-green-500 bg-green-50 text-green-600' : 'border-gray-200 text-gray-500'}`}>🕊️ 생존</button>
+          </div>
+        ) : (
+          <p className="text-sm text-gray-500">{isAccused ? '당신은 재판 당사자라 투표할 수 없습니다.' : '관전 중 — 투표할 수 없습니다.'}</p>
+        )}
+        <div className="flex justify-center gap-6 text-sm">
+          <span className="text-red-500 font-bold">💀 사형 {st!.killVotes}</span>
+          <span className="text-green-600 font-bold">🕊️ 생존 {st!.spareVotes}</span>
+        </div>
+        <p className="text-xs text-gray-400">사형 표가 더 많으면 처형됩니다(동수·생존 우세 시 생존).</p>
+        {aliveBoard()}
+      </div>
+    );
+  }
+
+  function renderExecute() {
+    const executed = st!.executedSeat;
+    return (
+      <div className="text-center mt-8 space-y-3">
+        <p className="text-5xl">⚖️</p>
+        {executed > 0 ? (
+          <>
+            <p className="text-lg font-bold text-gray-800">{nickOf(executed)}님이 처형되었습니다.</p>
+            {(() => {
+              const p = st!.players.find((x) => x.seat === executed);
+              return p?.role ? (
+                <p className={`font-bold ${ROLE_META[p.role]?.color}`}>정체: {ROLE_META[p.role]?.emoji} {ROLE_META[p.role]?.label}</p>
+              ) : null;
+            })()}
+          </>
+        ) : (
+          <p className="text-lg font-bold text-gray-600">동표로 아무도 처형되지 않았습니다.</p>
+        )}
+        {aliveBoard()}
+      </div>
+    );
+  }
+
+  function renderEnded() {
+    const w = st!.winner;
+    const meta =
+      w === 'MAFIA' ? { emoji: '🔪', text: '마피아 승리!', color: 'text-red-500' }
+      : w === 'NEUTRAL' ? { emoji: '📢', text: '관종 승리!', color: 'text-amber-500' }
+      : { emoji: '🎉', text: '시민팀 승리!', color: 'text-hit' };
+    return (
+      <div className="text-center mt-6 space-y-4">
+        <p className="text-6xl">{meta.emoji}</p>
+        <p className={`text-3xl font-extrabold ${meta.color}`}>{meta.text}</p>
+        <div className="rounded-xl border border-gray-200 p-4 text-left">
+          <p className="text-sm font-bold mb-2">전체 정체 공개</p>
+          <div className="space-y-1">
+            {st!.players.map((p) => {
+              const me = p.seat === st!.seat;
+              return (
+                <div key={p.seat} className="flex justify-between text-sm">
+                  <span className={`${p.alive ? '' : 'text-gray-400 line-through'} ${me ? 'font-bold' : ''}`}>
+                    {p.nick}{me && ' (나)'}
+                  </span>
+                  <span className={`font-medium ${p.role ? ROLE_META[p.role]?.color : ''}`}>
+                    {p.role ? `${ROLE_META[p.role]?.emoji} ${ROLE_META[p.role]?.label}` : '-'}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+        <button
+          onClick={() => { setShowCreate(true); setSt({ ...st!, status: 'NOT_STARTED' }); }}
+          className="w-full bg-hit text-white font-bold py-3 rounded-lg hover:opacity-90">
+          🔄 새 방 만들기
+        </button>
+      </div>
+    );
+  }
+}

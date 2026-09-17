@@ -132,9 +132,11 @@ WordPlay의 게임들과 달리 승패나 리더보드가 없고, 대신 기존 
 
 ### 4.1 모델
 
-`OpenAiChatClient` — WordSim 임베딩과 **같은 API 키**를 쓴다. 기본 모델은 `gpt-4o-mini` (사주 1건당 대략 $0.001 미만).
+`SajuAiClient` — WordSim 임베딩·마피아 봇과 **API 키(`app.openai.api-key`)만 공유**하고, 모델과 타임아웃은 `app.saju.chat-*` 로 따로 둔다. 기본 모델은 `gpt-4o-mini` (사주 1건당 대략 $0.001 미만).
 
-`app.openai.chat-url` 을 바꾸면 OpenAI 호환 게이트웨이로도 붙일 수 있다.
+> 마피아 봇에도 `com.wordplay.mafia.ai.OpenAiChatClient` 가 있다. 클래스 이름이 같으면 스프링 빈 이름이 겹쳐 앱이 아예 안 뜨므로 사주 쪽은 `SajuAiClient` 로 둔다. 설정 키도 `app.openai.chat-*`(마피아)와 `app.saju.chat-*`(사주)로 분리했다 — 같은 키를 쓰면 한쪽 모델을 바꿀 때 다른 쪽까지 끌려간다.
+
+`app.saju.chat-url` 을 바꾸면 OpenAI 호환 게이트웨이로도 붙일 수 있다. 마피아 봇과 같은 모델을 쓰고 싶으면 `SAJU_CHAT_MODEL=gpt-5.6-luna`.
 
 ### 4.2 응답 스키마
 

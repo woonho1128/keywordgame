@@ -115,6 +115,16 @@ public class HangulUtil {
         return decomposeFlat(word).size();
     }
 
+    /** 단어의 음절(글자) 수 — 한글 음절 문자만 센다. */
+    public static int countSyllables(String word) {
+        if (word == null) return 0;
+        int n = 0;
+        for (int i = 0; i < word.length(); i++) {
+            if (isHangulSyllable(word.charAt(i))) n++;
+        }
+        return n;
+    }
+
     /**
      * 꼬들 표준 2-pass 비교 — 자모 수 일치만 요구하고 음절 수는 자유.
      *
