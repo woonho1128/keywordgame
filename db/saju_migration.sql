@@ -72,3 +72,12 @@ CREATE INDEX IF NOT EXISTS idx_compat_created
 
 COMMENT ON TABLE TB_SAJU_COMPAT IS 'AI 궁합 해석 기록 - 합/충 판정과 점수는 서버 계산, 해석만 AI';
 COMMENT ON COLUMN TB_SAJU_COMPAT.analysis_json IS '두 사주 + 자리별 합/충 근거 + 점수';
+
+-- ---------------------------------------------------------------------
+-- 사주 종류 CHECK 제약 제거
+--   사주 종류는 앞으로도 늘어난다(미래인연 등). CHECK를 두면 종류를 추가할 때마다
+--   DB 마이그레이션을 해야 하고, 빠뜨리면 운영에서 INSERT가 깨진다.
+--   종류는 Java enum(@Enumerated STRING)과 API 입력 검증에서 이미 막고 있으므로
+--   DB 제약은 걷어낸다.
+-- ---------------------------------------------------------------------
+ALTER TABLE TB_SAJU_READING DROP CONSTRAINT IF EXISTS ck_saju_type;

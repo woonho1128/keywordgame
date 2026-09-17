@@ -79,6 +79,21 @@ export default function SajuResultPage({ params }: { params: { readingId: string
         </section>
       )}
 
+      {/* 요점 — 한눈에 보는 답 (미래인연이면 횟수·자리·시기) */}
+      {result.highlights && result.highlights.length > 0 && (
+        <section className="mb-6 grid grid-cols-1 sm:grid-cols-3 gap-2">
+          {result.highlights.map((highlight, index) => (
+            <div key={index} className="rounded-xl border-2 border-gray-200 p-3">
+              <div className="text-xs text-gray-500">{highlight.label}</div>
+              <div className="text-xl font-bold mt-0.5 leading-snug">{highlight.value}</div>
+              {highlight.detail && (
+                <p className="text-xs text-gray-500 mt-1 leading-relaxed">{highlight.detail}</p>
+              )}
+            </div>
+          ))}
+        </section>
+      )}
+
       {/* 요약 */}
       <section className="mb-6 rounded-xl bg-gray-50 p-4 sm:p-5">
         <p className="leading-relaxed whitespace-pre-line">{result.summary}</p>

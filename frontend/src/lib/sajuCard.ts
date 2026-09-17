@@ -305,6 +305,48 @@ function drawKeywords(ctx: Ctx, y: number, keywords: string[]): number {
   return rowTop + 52;
 }
 
+/** 요점 카드 — 한눈에 읽히는 답 (label / 큰 value / 근거) */
+function drawHighlights(
+  ctx: Ctx,
+  y: number,
+  items: { label: string; value: string; detail: string | null }[]
+): number {
+  const gap = 16;
+  const boxWidth = (CONTENT - gap * (items.length - 1)) / items.length;
+  const inner = 20;
+
+  // 가장 높은 박스에 맞춰 높이를 통일한다
+  ctx.font = font(22);
+  const details = items.map((item) =>
+    item.detail ? wrap(ctx, item.detail, boxWidth - inner * 2, 4) : []
+  );
+  const detailLines = Math.max(0, ...details.map((lines) => lines.length));
+  const height = inner * 2 + 30 + 44 + detailLines * 30;
+
+  items.forEach((item, index) => {
+    const x = PAD + index * (boxWidth + gap);
+
+    ctx.strokeStyle = FAINT;
+    ctx.lineWidth = 3;
+    roundRect(ctx, x, y, boxWidth, height, 18);
+    ctx.stroke();
+
+    ctx.font = font(22);
+    ctx.fillStyle = MUTED;
+    ctx.fillText(wrap(ctx, item.label, boxWidth - inner * 2, 1)[0] ?? '', x + inner, y + inner);
+
+    ctx.font = font(36, 'bold');
+    ctx.fillStyle = INK;
+    ctx.fillText(wrap(ctx, item.value, boxWidth - inner * 2, 1)[0] ?? '', x + inner, y + inner + 32);
+
+    ctx.font = font(22);
+    ctx.fillStyle = MUTED;
+    drawLines(ctx, details[index], x + inner, y + inner + 78, 30);
+  });
+
+  return y + height;
+}
+
 /** 해석 섹션들 (제목 + 본문) */
 function drawSections(
   ctx: Ctx,
@@ -485,6 +527,10 @@ function drawSajuBody(ctx: Ctx, reading: SajuReading): number {
 
   if (result.score !== null && result.score !== undefined) {
     y = drawScore(ctx, y, `${reading.typeLabel} 점수`, result.score, HIT) + 56;
+  }
+
+  if (result.highlights?.length) {
+    y = drawHighlights(ctx, y, result.highlights) + 48;
   }
 
   y = drawPillars(ctx, y, reading) + 8;

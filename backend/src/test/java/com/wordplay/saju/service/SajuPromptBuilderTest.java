@@ -67,6 +67,25 @@ class SajuPromptBuilderTest {
     }
 
     @Test
+    void 미래인연은_횟수와_자리를_요점으로_뽑게_한다() {
+        FourPillars p = pillars(LocalDate.of(1997, 11, 28), LocalTime.of(0, 30), Gender.MALE);
+        String prompt = builder.userPrompt(SajuType.FUTURE_LOVE, "한운호", Gender.MALE, p);
+
+        assertThat(prompt)
+                .contains("미래인연")
+                .contains("인연이 오는 자리")
+                .contains("앞으로 만날 인연 횟수")
+                .contains("highlights 3개는");
+    }
+
+    @Test
+    void 모든_종류가_요점_항목을_지정한다() {
+        for (SajuType type : SajuType.values()) {
+            assertThat(type.highlightHint()).isNotBlank();
+        }
+    }
+
+    @Test
     void 시간을_모르면_시주를_빼라고_지시한다() {
         FourPillars p = pillars(LocalDate.of(1990, 5, 15), null, Gender.FEMALE);
         String prompt = builder.userPrompt(SajuType.TOTAL, null, Gender.FEMALE, p);
@@ -87,6 +106,7 @@ class SajuPromptBuilderTest {
                 .contains("\"strengths\"")
                 .contains("\"cautions\"")
                 .contains("\"timeline\"")
+                .contains("\"highlights\"")
                 .contains("\"score\"")
                 .contains("5~8문장");
     }

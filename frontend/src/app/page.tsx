@@ -67,7 +67,7 @@ const GAMES: Game[] = [
   { href: '/quiz', title: '🧠 상식 퀴즈', desc: 'AI가 매번 새로 출제하는 상식 퀴즈 대결. 역사·동물·나라·과학·우주 등 주제도 문제도 매판 달라요. 객관식과 주관식(초성 힌트)이 섞여 나오고, 빨리 맞히면 점수가 더 붙어요. 난이도 1~10 · 혼자서도 1~10인.', hover: 'hit', solo: true, soloLabel: '🙋 혼자 가능', genres: ['puzzle', 'party'] },
   { href: '/snakes', title: '🐍 뱀과 사다리', desc: '주사위를 굴려 사다리를 타고 오르고 뱀에 물려 미끄러지는 클래식 보드게임. 사다리와 뱀 위치가 매판 새로 만들어져 같은 판이 두 번 안 나와요. 인원에 맞춰 판 크기 자동 조정. 봇과 2~10인.', hover: 'move', solo: true, soloLabel: '🤖 봇과 1인 가능', genres: ['board', 'party'] },
   { href: '/saju/compat', title: '💞 궁합', desc: '두 사람의 사주를 맞대어 보는 궁합. 연인·부부·친구·동료·가족 5가지로, 일지(배우자 자리)의 합·충과 천간합, 오행 보완까지 계산해서 점수와 이유를 같이 알려줘요.', hover: 'move', solo: true, soloLabel: '💞 혼자 가능', genres: ['party'] },
-  { href: '/saju', title: '🔮 AI 사주', desc: '생년월일시로 사주팔자(연·월·일·시주)를 계산하고 AI가 풀이해주는 운세. 종합·연애·재물·직업·공부·건강·올해의 운세 7가지. 절기와 대운까지 서버가 직접 계산해서 AI는 해석만 맡아요 (혼자 플레이).', hover: 'move', solo: true, soloLabel: '🔮 혼자 가능', genres: ['party'] },
+  { href: '/saju', title: '🔮 AI 사주', desc: '생년월일시로 사주팔자(연·월·일·시주)를 계산하고 AI가 풀이해주는 운세. 종합·연애·재물·직업·공부·건강·올해의 운세·미래인연 8가지. 절기와 대운까지 서버가 직접 계산해서 AI는 해석만 맡아요 (혼자 플레이).', hover: 'move', solo: true, soloLabel: '🔮 혼자 가능', genres: ['party'] },
   { href: '/ciao', title: '🤥 차오차오', desc: '주사위를 통 속에 숨겨 굴리고 숫자를 선언(뻥 가능!), 의심으로 견제하며 구름다리를 건너는 블러핑 레이스. X가 나오면 무조건 거짓말! 인원에 맞춰 말·목표 자동 조정. 봇과 2~10인.', hover: 'move', solo: true, soloLabel: '🤖 봇과 1인 가능', genres: ['mystery', 'party'] },
 ];
 

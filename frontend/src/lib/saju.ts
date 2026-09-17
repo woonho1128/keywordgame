@@ -10,7 +10,8 @@ export type SajuTypeCode =
   | 'CAREER'
   | 'STUDY'
   | 'HEALTH'
-  | 'YEARLY';
+  | 'YEARLY'
+  | 'FUTURE_LOVE';
 
 export type SajuTypeItem = {
   code: SajuTypeCode;
@@ -71,10 +72,14 @@ export type SajuChart = {
 
 export type Section = { title: string; body: string };
 
+/** 결과 맨 위에 한눈에 보여주는 요점 (예: 앞으로 만날 인연 = 3번) */
+export type Highlight = { label: string; value: string; detail: string | null };
+
 /** strengths·cautions·timeline 은 나중에 추가된 필드라 예전 결과엔 없다 */
 export type SajuResult = {
   headline: string | null;
   summary: string;
+  highlights: Highlight[] | null;
   sections: Section[];
   strengths: string[] | null;
   cautions: string[] | null;
@@ -169,6 +174,7 @@ export type CompatAnalysis = {
 export type CompatResult = {
   headline: string | null;
   summary: string;
+  highlights: Highlight[] | null;
   sections: Section[];
   strengths: string[] | null;
   cautions: string[] | null;

@@ -41,8 +41,9 @@ public class SajuService {
      * 프롬프트·응답 스키마 버전. 해석 형식을 바꾸면 반드시 올린다.
      * 캐시 키에 들어가므로, 올리지 않으면 같은 입력으로 다시 볼 때 예전 형식의 해석이 그대로 나온다.
      * v2 = 섹션 6개 + 강점/주의점/시기별 흐름 추가
+     * v3 = 요점 카드(highlights) 추가
      */
-    private static final String PROMPT_VERSION = "v2";
+    private static final String PROMPT_VERSION = "v3";
 
     private final SajuCalculator calculator;
     private final SajuPromptBuilder promptBuilder;

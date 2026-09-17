@@ -34,7 +34,10 @@ WordPlay의 게임들과 달리 승패나 리더보드가 없고, 대신 기존 
 | `HEALTH` | 건강사주 | 오행 과부족 — 체질, 생활 습관 |
 | `YEARLY` | 올해의 운세 | 세운 + 현재 대운 |
 
-종류가 늘어나도 `SajuType` enum에 항목 하나만 추가하면 된다. label/emoji/설명/프롬프트 관점/섹션 주제가 모두 enum에 붙어 있다.
+종류가 늘어나도 `SajuType` enum에 항목 하나만 추가하면 된다.
+label/emoji/설명/프롬프트 관점/섹션 주제/요점 항목이 모두 enum에 붙어 있고,
+DB에도 종류 CHECK 제약을 걸지 않는다(종류를 늘릴 때마다 마이그레이션이 필요해지고,
+빠뜨리면 운영에서 INSERT가 깨진다. 검증은 Java enum이 한다).
 
 ### 1.4 궁합 종류
 
@@ -226,6 +229,7 @@ WordPlay의 게임들과 달리 승패나 리더보드가 없고, 대신 기존 
 {
   "headline": "한 줄 총평",
   "summary": "전체 요약 (5~6문장)",
+  "highlights": [{ "label": "앞으로 만날 인연", "value": "3번", "detail": "그렇게 본 근거" }],
   "sections": [{ "title": "소제목", "body": "본문 (5~8문장)" }],
   "strengths": ["타고난 강점"],
   "cautions": ["조심할 점"],
@@ -237,11 +241,15 @@ WordPlay의 게임들과 달리 승패나 리더보드가 없고, 대신 기존 
 }
 ```
 
+`highlights`는 결과 맨 위에 한눈에 보여주는 요점 카드다. 무엇을 뽑을지는 종류마다
+`SajuType.highlightHint()`로 지정한다 (미래인연이면 횟수·자리·시기).
+
 섹션은 종류별로 6개를 요구한다. 궁합은 `lucky`/`timeline`/`score` 대신 `aToB`·`bToA`(서로에게
 해주면 좋은 것)를 받고, 점수는 서버 계산값을 그대로 쓴다.
 
 모델이 스키마를 조금 벗어나도 깨지지 않게 모르는 필드는 무시하고, `summary`와 `sections`가 비면 실패로 처리한다.
-`strengths`·`cautions`·`timeline`은 나중에 추가된 필드라 그전에 저장된 해석에는 없다 — 화면에서 null을 처리한다.
+`highlights`·`strengths`·`cautions`·`timeline`은 나중에 추가된 필드라 그전에 저장된 해석에는
+없다 — 화면에서 null을 처리한다.
 
 ### 4.2-1 분량과 토큰
 

@@ -117,8 +117,7 @@ CREATE TABLE IF NOT EXISTS TB_SAJU_READING (
     view_count      INTEGER       NOT NULL DEFAULT 0,
     created_at      TIMESTAMP     NOT NULL DEFAULT NOW(),
 
-    CONSTRAINT ck_saju_type CHECK (saju_type IN
-        ('TOTAL', 'LOVE', 'WEALTH', 'CAREER', 'STUDY', 'HEALTH', 'YEARLY')),
+    -- 사주 종류는 계속 늘어나므로 CHECK를 걸지 않는다 (Java enum에서 검증)
     CONSTRAINT ck_saju_gender CHECK (gender IN ('MALE', 'FEMALE'))
 );
 

@@ -58,6 +58,9 @@ public class SajuPromptBuilder {
             {
               "headline": "한 줄 총평 (25자 이내, 이 사람만의 표현으로)",
               "summary": "전체 요약 (5~6문장, 사주 근거를 한 번 이상 인용)",
+              "highlights": [
+                { "label": "항목 이름 (10자 이내)", "value": "짧은 답 (12자 이내)", "detail": "그렇게 본 근거 한 문장" }
+              ],
               "sections": [
                 { "title": "소제목 (12자 이내)", "body": "본문 (5~8문장)" }
               ],
@@ -76,7 +79,9 @@ public class SajuPromptBuilder {
               "advice": "지금 바로 실천할 조언 (3~4문장)",
               "score": 0에서 100 사이 정수
             }
-            sections 6개, strengths 3~4개, cautions 2~3개, timeline 3개, keywords 5개로 맞춰주세요.
+            highlights 3개, sections 6개, strengths 3~4개, cautions 2~3개, timeline 3개, keywords 5개로 맞춰주세요.
+            highlights 의 value 는 카드처럼 한눈에 읽히게 짧게 씁니다. 횟수를 물으면 "3번"처럼
+            숫자로 답하되, 단정이 아니라 흐름상의 짐작임이 detail 에서 드러나게 하세요.
             timeline 은 주어진 대운·세운 데이터를 그대로 쓰고 없는 간지를 만들지 마세요.
             """.formatted(COMMON_RULES);
 
@@ -132,6 +137,7 @@ public class SajuPromptBuilder {
         sb.append("- 관점: ").append(type.focus()).append('\n');
         sb.append("- sections 6개는 이 주제로 구성해주세요: ")
                 .append(String.join(" / ", type.sectionHints())).append('\n');
+        sb.append("- highlights 3개는 이런 항목으로 뽑아주세요: ").append(type.highlightHint()).append('\n');
         sb.append("- score 는 이 주제(").append(type.label())
                 .append(")에 한정한 운세 점수입니다.\n");
 

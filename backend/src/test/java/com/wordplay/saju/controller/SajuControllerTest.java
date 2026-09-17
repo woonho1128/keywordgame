@@ -66,6 +66,7 @@ class SajuControllerTest {
                 "우노", LocalDate.of(1990, 5, 15), "10:30", "남성",
                 null,
                 new SajuResult("한 줄 총평", "요약",
+                        List.of(new SajuResult.Highlight("앞으로 만날 인연", "3번", "재성이 셋이라")),
                         List.of(new SajuResult.Section("제목", "본문")),
                         List.of("강점"), List.of("주의점"),
                         List.of(new SajuResult.Period("30~39세 무신 대운", "흐름")),
@@ -85,7 +86,8 @@ class SajuControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.success").value(true))
                 .andExpect(jsonPath("$.data.readingId").value("abc12345"))
-                .andExpect(jsonPath("$.data.result.score").value(77));
+                .andExpect(jsonPath("$.data.result.score").value(77))
+                .andExpect(jsonPath("$.data.result.highlights[0].value").value("3번"));
 
         ArgumentCaptor<SajuRequest> captor = ArgumentCaptor.forClass(SajuRequest.class);
         org.mockito.Mockito.verify(sajuService).createReading(captor.capture(), anyString());

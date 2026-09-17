@@ -15,6 +15,7 @@ import java.util.List;
 public record SajuResult(
         String headline,
         String summary,
+        List<Highlight> highlights,
         List<Section> sections,
         List<String> strengths,
         List<String> cautions,
@@ -24,6 +25,13 @@ public record SajuResult(
         String advice,
         Integer score
 ) {
+
+    /**
+     * 결과 맨 위에 한눈에 보여주는 요점.
+     * 예) 미래인연 — {label:"앞으로 만날 인연", value:"3번", detail:"재성이 셋이라 …"}
+     */
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public record Highlight(String label, String value, String detail) {}
 
     @JsonIgnoreProperties(ignoreUnknown = true)
     public record Section(String title, String body) {}

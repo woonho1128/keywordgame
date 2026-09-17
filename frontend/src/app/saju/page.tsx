@@ -25,6 +25,7 @@ const FALLBACK_TYPES: SajuTypeItem[] = [
   { code: 'STUDY', label: '공부사주', emoji: '📚', description: '공부 스타일과 시험·합격 흐름' },
   { code: 'HEALTH', label: '건강사주', emoji: '🌿', description: '타고난 체질과 챙겨야 할 부분' },
   { code: 'YEARLY', label: '올해의 운세', emoji: '🗓️', description: '세운(歲運)으로 보는 올해의 흐름' },
+  { code: 'FUTURE_LOVE', label: '미래인연', emoji: '🔗', description: '앞으로 만날 인연은 어디서, 몇 번, 언제' },
 ];
 
 export default function SajuFormPage() {
