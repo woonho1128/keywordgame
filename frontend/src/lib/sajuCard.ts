@@ -10,7 +10,12 @@
 import { CompatReading, SajuReading } from './saju';
 
 const W = 1080;
-const H = 1350;
+/** 최소 높이 — 내용이 짧아도 4:5 비율은 유지한다 */
+const MIN_H = 1350;
+/** 요약이 아무리 길어도 이보다 길어지면 말줄임 */
+const MAX_H = 2400;
+/** 본문 끝에서 카드 아래까지 — 구분선(48px 아래) + 출처 + 여백 */
+const FOOTER_SPACE = 176;
 const PAD = 72;
 const CONTENT = W - PAD * 2;
 
@@ -99,17 +104,36 @@ function drawLines(
   return y + lines.length * lineHeight;
 }
 
-function createCanvas() {
+function createCanvas(height: number) {
   const canvas = document.createElement('canvas');
   canvas.width = W;
-  canvas.height = H;
+  canvas.height = height;
   const ctx = canvas.getContext('2d');
   if (!ctx) throw new Error('캔버스를 만들 수 없습니다');
 
   ctx.fillStyle = '#ffffff';
-  ctx.fillRect(0, 0, W, H);
+  ctx.fillRect(0, 0, W, height);
   ctx.textBaseline = 'top';
   return { canvas, ctx };
+}
+
+/**
+ * 내용 높이에 맞춰 카드를 만든다.
+ *
+ * <p>고정 높이로 그리면 요약이 길 때 잘린다. 그래서 넉넉한 임시 캔버스에 본문을 먼저 그리고,
+ * 실제로 쓴 높이만큼만 잘라낸 캔버스에 옮긴 뒤 맨 아래에 푸터를 붙인다.
+ *
+ * @param drawBody 본문을 그리고 마지막 y를 돌려준다
+ */
+function renderCard(drawBody: (ctx: CanvasRenderingContext2D) => number): HTMLCanvasElement {
+  const scratch = createCanvas(MAX_H);
+  const bodyBottom = drawBody(scratch.ctx);
+
+  const height = Math.min(MAX_H, Math.max(MIN_H, Math.round(bodyBottom + FOOTER_SPACE)));
+  const card = createCanvas(height);
+  card.ctx.drawImage(scratch.canvas, 0, 0);   // 남는 아래쪽은 잘린다
+  drawFooter(card.ctx, height);
+  return card.canvas;
 }
 
 /** 점수 막대 */
@@ -156,9 +180,9 @@ function drawKeywords(ctx: CanvasRenderingContext2D, y: number, keywords: string
   return y + 52;
 }
 
-function drawFooter(ctx: CanvasRenderingContext2D) {
+function drawFooter(ctx: CanvasRenderingContext2D, height: number) {
   // 카드 맨 아래 구분선 + 출처. FAINT(#d1d5db)는 흰 배경에서 거의 안 보여서 한 단계 진하게 쓴다
-  const lineY = H - PAD - 56;
+  const lineY = height - PAD - 56;
   ctx.strokeStyle = '#f3f4f6';
   ctx.lineWidth = 2;
   ctx.beginPath();
@@ -241,9 +265,16 @@ function drawElements(ctx: CanvasRenderingContext2D, y: number, counts: Record<s
   return y + 56;
 }
 
+/** 요약은 카드 높이가 늘어나므로 넉넉히 쓰되, 극단적으로 긴 글은 잘라낸다 */
+const SUMMARY_MAX_LINES = 18;
+const SUMMARY_LINE_HEIGHT = 46;
+
 /** 사주 결과 카드 */
 export function drawSajuCard(reading: SajuReading): HTMLCanvasElement {
-  const { canvas, ctx } = createCanvas();
+  return renderCard((ctx) => drawSajuBody(ctx, reading));
+}
+
+function drawSajuBody(ctx: CanvasRenderingContext2D, reading: SajuReading): number {
   const { chart, result } = reading;
   let y = PAD;
 
@@ -282,22 +313,21 @@ export function drawSajuCard(reading: SajuReading): HTMLCanvasElement {
     y = drawKeywords(ctx, y, result.keywords) + 32;
   }
 
-  // 남은 공간만큼만 요약을 채운다 (푸터와 겹치지 않게)
   ctx.font = font(30);
   ctx.fillStyle = '#374151';
-  const room = H - PAD - 96 - y;
-  const maxLines = Math.max(0, Math.floor(room / 46));
-  if (maxLines > 0) {
-    drawLines(ctx, wrap(ctx, result.summary, CONTENT, maxLines), PAD, y, 46);
-  }
-
-  drawFooter(ctx);
-  return canvas;
+  return drawLines(
+    ctx,
+    wrap(ctx, result.summary, CONTENT, SUMMARY_MAX_LINES),
+    PAD, y, SUMMARY_LINE_HEIGHT
+  );
 }
 
 /** 궁합 결과 카드 */
 export function drawCompatCard(reading: CompatReading): HTMLCanvasElement {
-  const { canvas, ctx } = createCanvas();
+  return renderCard((ctx) => drawCompatBody(ctx, reading));
+}
+
+function drawCompatBody(ctx: CanvasRenderingContext2D, reading: CompatReading): number {
   const { analysis, result } = reading;
   let y = PAD;
 
@@ -364,12 +394,9 @@ export function drawCompatCard(reading: CompatReading): HTMLCanvasElement {
 
   ctx.font = font(30);
   ctx.fillStyle = '#374151';
-  const room = H - PAD - 96 - y;
-  const maxLines = Math.max(0, Math.floor(room / 46));
-  if (maxLines > 0) {
-    drawLines(ctx, wrap(ctx, result.summary, CONTENT, maxLines), PAD, y, 46);
-  }
-
-  drawFooter(ctx);
-  return canvas;
+  return drawLines(
+    ctx,
+    wrap(ctx, result.summary, CONTENT, SUMMARY_MAX_LINES),
+    PAD, y, SUMMARY_LINE_HEIGHT
+  );
 }
