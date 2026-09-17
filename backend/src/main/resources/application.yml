@@ -51,13 +51,31 @@ app:
     # WordSim 참고용 벡터 사전 위치 (rank 비교 기준)
     vectors-path: ${WORDSIM_VECTORS_PATH:/etc/wordplay/word_vectors.bin}
   openai:
-    # OpenAI Embeddings API 키 (사전에 없는 단어 동적 임베딩용)
-    # 비어있으면 사전 단어만 사용 가능
+    # OpenAI API 키 (WordSim 임베딩 + 사주 해석 공용)
+    # 비어있으면 WordSim은 사전 단어만, 사주는 비활성
     api-key: ${OPENAI_API_KEY:}
     # 모델은 word_vectors.bin 빌드한 모델과 동일해야 함!
     # text-embedding-3-small (1536d, $0.02/1M) 또는 text-embedding-3-large (3072d, $0.13/1M)
     model: ${OPENAI_MODEL:text-embedding-3-large}
     timeout-ms: 10000
+    # --- 사주 해석용 Chat Completions ---
+    # OpenAI 호환 게이트웨이를 쓰면 chat-url만 바꾸면 된다
+    chat-url: ${OPENAI_CHAT_URL:https://api.openai.com/v1/chat/completions}
+    chat-model: ${OPENAI_CHAT_MODEL:gpt-4o-mini}
+    chat-timeout-ms: 60000
+    chat-temperature: 0.85
+    chat-max-tokens: 2000
+  saju:
+    # 공유 URL(/saju/{id})에 쓰는 ID 길이
+    id-length: 8
+    # 한국 표준시는 동경 135도 기준이라 서울(약 127도)은 실제 태양시보다 30분 빠르다.
+    # 시주 경계 판정에만 영향. 0으로 두면 보정하지 않는다.
+    longitude-offset-minutes: ${SAJU_LONGITUDE_OFFSET:-30}
+    # 같은 사람 + 같은 종류면 이전 해석을 재사용 (사주는 안 바뀌고, AI 호출 비용도 아낀다)
+    reuse-same-input: ${SAJU_REUSE:true}
+    # AI 호출 한도 (in-memory, 24시간 단위). 실제 비용이 나가므로 최소한의 방어
+    limit-per-session: ${SAJU_LIMIT_PER_SESSION:10}
+    limit-total: ${SAJU_LIMIT_TOTAL:300}
 
 ---
 # 로컬 개발 프로필

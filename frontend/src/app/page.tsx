@@ -31,6 +31,19 @@ export default function HomePage() {
           <p className="text-gray-600">힌트 3개 중 하나의 거짓말까지 찾아야 성공하는 게임.</p>
         </Link>
       </div>
+
+      {/* 게임은 아니지만 같이 즐기는 코너 */}
+      <div className="max-w-5xl w-full mt-6">
+        <Link
+          href="/saju"
+          className="block border-2 border-gray-200 rounded-xl p-8 hover:border-hit transition"
+        >
+          <h2 className="text-2xl font-bold mb-2">🔮 AI 사주</h2>
+          <p className="text-gray-600">
+            생년월일시로 사주팔자를 계산하고 AI가 풀이해드립니다. 종합·연애·재물·직업·공부·건강·올해의 운세.
+          </p>
+        </Link>
+      </div>
     </main>
   );
 }
