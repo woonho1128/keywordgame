@@ -147,6 +147,8 @@ public class SajuCompatService {
                         compatibility)
         );
         if (json == null) {
+            // 원인(HTTP 상태·본문)은 SajuAiClient 가 남긴다. 여기선 어떤 기능이 실패했는지만
+            log.warn("Compat AI call returned nothing — check the OpenAI chat log above");
             throw new BusinessException(ErrorCode.SAJU_AI_FAILED);
         }
 
