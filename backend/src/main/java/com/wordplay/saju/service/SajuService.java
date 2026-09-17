@@ -42,8 +42,9 @@ public class SajuService {
      * 캐시 키에 들어가므로, 올리지 않으면 같은 입력으로 다시 볼 때 예전 형식의 해석이 그대로 나온다.
      * v2 = 섹션 6개 + 강점/주의점/시기별 흐름 추가
      * v3 = 요점 카드(highlights) 추가
+     * v4 = 미래인연 연표(encounters) + 연도별 세운 표 제공
      */
-    private static final String PROMPT_VERSION = "v3";
+    private static final String PROMPT_VERSION = "v4";
 
     private final SajuCalculator calculator;
     private final SajuPromptBuilder promptBuilder;

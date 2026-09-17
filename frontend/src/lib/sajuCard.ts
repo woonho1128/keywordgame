@@ -462,6 +462,71 @@ function drawTenGods(ctx: Ctx, y: number, groups: Record<string, number>): numbe
   return y + 78;
 }
 
+/** 인연 연표 — 지난 기회와 앞으로의 인연을 연도·장소·장면으로 */
+function drawEncounters(
+  ctx: Ctx,
+  y: number,
+  encounters: { year: string; past: boolean; where: string; story: string; basis: string | null }[]
+): number {
+  for (const group of [true, false]) {
+    const items = encounters.filter((item) => item.past === group);
+    if (items.length === 0) continue;
+
+    ctx.font = font(24, 'bold');
+    ctx.fillStyle = MUTED;
+    ctx.fillText(group ? '지난 기회' : '앞으로', PAD, y);
+    y += 40;
+
+    for (const item of items) {
+      const accent = group ? MUTED : HIT;
+      const inner = 24;
+
+      ctx.font = font(BODY_SIZE);
+      const story = wrap(ctx, item.story, CONTENT - inner * 2);
+      ctx.font = font(22);
+      const basis = item.basis ? wrap(ctx, `근거: ${item.basis}`, CONTENT - inner * 2, 2) : [];
+      const height = inner * 2 + 42 + story.length * BODY_LH + (basis.length ? basis.length * 30 + 8 : 0);
+
+      if (group) {
+        ctx.fillStyle = '#f9fafb';
+        roundRect(ctx, PAD, y, CONTENT, height, 18);
+        ctx.fill();
+      }
+      ctx.strokeStyle = group ? FAINT : HIT;
+      ctx.lineWidth = 3;
+      roundRect(ctx, PAD, y, CONTENT, height, 18);
+      ctx.stroke();
+
+      ctx.font = font(30, 'bold');
+      ctx.fillStyle = accent;
+      ctx.fillText(item.year, PAD + inner, y + inner);
+      const yearWidth = ctx.measureText(item.year).width;
+
+      ctx.font = font(26, 'bold');
+      ctx.fillStyle = BODY_INK;
+      ctx.fillText(
+        wrap(ctx, item.where, CONTENT - inner * 2 - yearWidth - 16, 1)[0] ?? '',
+        PAD + inner + yearWidth + 16,
+        y + inner + 4
+      );
+
+      ctx.font = font(BODY_SIZE);
+      ctx.fillStyle = BODY_INK;
+      let cursor = drawLines(ctx, story, PAD + inner, y + inner + 42, BODY_LH);
+
+      if (basis.length) {
+        ctx.font = font(22);
+        ctx.fillStyle = MUTED;
+        drawLines(ctx, basis, PAD + inner, cursor + 8, 30);
+      }
+
+      y += height + 14;
+    }
+    y += 18;
+  }
+  return y - 32;
+}
+
 /** 시기별 흐름 */
 function drawTimeline(ctx: Ctx, y: number, periods: { period: string; body: string }[]): number {
   for (const period of periods) {
@@ -565,6 +630,11 @@ function drawSajuBody(ctx: Ctx, reading: SajuReading): number {
     y = drawListBox(ctx, y, '조심할 점', result.cautions, MOVE, '#fdfaef', '!') + 24;
   }
   if (result.strengths?.length || result.cautions?.length) y += 32;
+
+  if (result.encounters?.length) {
+    y = drawHeading(ctx, y, '인연 연표');
+    y = drawEncounters(ctx, y, result.encounters) + 56;
+  }
 
   if (result.timeline?.length) {
     y = drawHeading(ctx, y, '시기별 흐름');

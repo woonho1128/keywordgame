@@ -160,6 +160,49 @@ export default function SajuResultPage({ params }: { params: { readingId: string
         </section>
       )}
 
+      {/* 인연 연표 — 언제, 어디서, 뭐 하다가 (미래인연) */}
+      {result.encounters && result.encounters.length > 0 && (
+        <section className="mb-6">
+          <h2 className="font-bold mb-3">인연 연표</h2>
+          {(['past', 'future'] as const).map((group) => {
+            const items = result.encounters!.filter((e) => (group === 'past' ? e.past : !e.past));
+            if (items.length === 0) return null;
+            const isPast = group === 'past';
+            return (
+              <div key={group} className="mb-4 last:mb-0">
+                <div className="text-xs font-bold text-gray-400 mb-2">
+                  {isPast ? '지난 기회' : '앞으로'}
+                </div>
+                <ol className="space-y-3">
+                  {items.map((encounter, index) => (
+                    <li
+                      key={index}
+                      className={`rounded-xl border-2 p-3 ${
+                        isPast ? 'border-gray-200 bg-gray-50' : 'border-hit/40'
+                      }`}
+                    >
+                      <div className="flex flex-wrap items-baseline gap-x-2">
+                        <span className={`font-bold ${isPast ? 'text-gray-500' : 'text-hit'}`}>
+                          {encounter.year}
+                        </span>
+                        <span className="text-sm font-medium text-gray-700">{encounter.where}</span>
+                      </div>
+                      <p className="text-sm text-gray-700 leading-relaxed mt-1">{encounter.story}</p>
+                      {encounter.basis && (
+                        <p className="text-xs text-gray-400 mt-1">근거: {encounter.basis}</p>
+                      )}
+                    </li>
+                  ))}
+                </ol>
+              </div>
+            );
+          })}
+          <p className="mt-2 text-xs text-gray-400">
+            연도는 사주의 세운(歲運)에서 고른 것이고, 재미로 보는 흐름입니다.
+          </p>
+        </section>
+      )}
+
       {/* 시기별 흐름 */}
       {result.timeline && result.timeline.length > 0 && (
         <section className="mb-6">

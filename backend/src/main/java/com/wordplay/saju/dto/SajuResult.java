@@ -20,6 +20,7 @@ public record SajuResult(
         List<String> strengths,
         List<String> cautions,
         List<Period> timeline,
+        List<Encounter> encounters,
         List<String> keywords,
         Lucky lucky,
         String advice,
@@ -35,6 +36,18 @@ public record SajuResult(
 
     @JsonIgnoreProperties(ignoreUnknown = true)
     public record Section(String title, String body) {}
+
+    /**
+     * 인연이 들어오는(들어왔던) 해 — 미래인연 전용. 다른 종류는 비워둔다.
+     *
+     * @param year  연도와 간지 (예: "2027년 정미년")
+     * @param past  지난 기회인지
+     * @param where 어디서 — 사주 용어가 아니라 실제 장소/상황 (예: "일터·업무 모임")
+     * @param story 뭐 하다 만나는지 (또는 그때 어떤 기회였는지)
+     * @param basis 그렇게 본 사주 근거 (짧게)
+     */
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public record Encounter(String year, boolean past, String where, String story, String basis) {}
 
     /** 시기별 흐름 한 구간 (예: "30~39세 무신 대운") */
     @JsonIgnoreProperties(ignoreUnknown = true)

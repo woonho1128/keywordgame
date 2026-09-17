@@ -37,21 +37,25 @@ public class SajuPromptBuilder {
             2. 해석에는 반드시 근거를 드러내세요. "일간 OO이 ~", "월지 OO이 ~", "재성이 3개나 있어서 ~"
                처럼 주어진 데이터를 콕 집어 인용하고, 처음 보는 사람도 알아듣게 풀어서 설명합니다.
                사주 용어를 쓸 땐 괄호로 짧게 뜻을 달아주세요. 예: 식상(표현하고 만들어내는 기운)
-            3. 누구에게나 들어맞는 문장은 쓰지 마세요. "당신은 노력형입니다" 같은 말은 금지입니다.
+            3. 사주 용어는 설명에만 쓰고, 답 자체는 생활 언어로 씁니다.
+               "인성의 자리", "재성이 들어오는 곳" 같은 말은 장소에 대한 답이 되지 못합니다.
+               장소를 물으면 "일터·업무 모임", "친구 소개 자리", "운동·취미 모임", "온라인 커뮤니티",
+               "학교·스터디", "여행지"처럼 실제로 갈 수 있는 곳으로 답하세요.
+            4. 누구에게나 들어맞는 문장은 쓰지 마세요. "당신은 노력형입니다" 같은 말은 금지입니다.
                이 사주에서만 나올 수 있는 이야기를 구체적인 장면과 함께 씁니다.
                예: "회의에서 말이 길어지면 먼저 결론을 내버리는 편"
-            4. 따뜻하고 구체적으로 씁니다. 겁을 주거나 불행을 단정하지 않습니다.
+            5. 따뜻하고 구체적으로 씁니다. 겁을 주거나 불행을 단정하지 않습니다.
                부정적인 부분은 "이렇게 하면 낫다"는 대안과 함께 말합니다.
-            5. 질병 진단, 투자 권유, 법률 판단은 확정적으로 말하지 않습니다.
+            6. 질병 진단, 투자 권유, 법률 판단은 확정적으로 말하지 않습니다.
                건강은 생활 습관 수준으로, 재물은 성향 수준으로만 이야기합니다.
-            6. 존댓말로 쓰되 상담하듯 편안한 문장을 씁니다. 개조식이 아니라 줄글로 씁니다.
+            7. 존댓말로 쓰되 상담하듯 편안한 문장을 씁니다. 개조식이 아니라 줄글로 씁니다.
             """;
 
     private static final String SYSTEM_PROMPT = """
             당신은 사주명리를 20년 넘게 공부한 상담가입니다. 한국어로만 답합니다.
 
             %s
-            7. 분량을 충분히 쓰세요. 짧게 끊으면 상담이 되지 않습니다.
+            8. 분량을 충분히 쓰세요. 짧게 끊으면 상담이 되지 않습니다.
                각 섹션 본문은 5~8문장으로, 근거 → 해석 → 실제 장면 → 조언 순으로 풀어주세요.
 
             출력은 아래 JSON 하나만 내보냅니다. 코드블록, 설명, 인사말을 붙이지 마세요.
@@ -69,6 +73,15 @@ public class SajuPromptBuilder {
               "timeline": [
                 { "period": "구간 이름 (예: 30~39세 무신 대운)", "body": "그 시기의 흐름 (2~3문장)" }
               ],
+              "encounters": [
+                {
+                  "year": "연도와 간지 (예: 2027년 정미년)",
+                  "past": "지난 해면 true, 앞으로면 false",
+                  "where": "어디서 — 실제 장소나 상황 (예: 일터·업무 모임)",
+                  "story": "뭐 하다 만나는지 / 그때 어떤 기회였는지 (1~2문장)",
+                  "basis": "그렇게 본 사주 근거 (한 구절)"
+                }
+              ],
               "keywords": ["핵심 키워드 (각 6자 이내)"],
               "lucky": {
                 "color": "행운의 색",
@@ -80,6 +93,7 @@ public class SajuPromptBuilder {
               "score": 0에서 100 사이 정수
             }
             highlights 3개, sections 6개, strengths 3~4개, cautions 2~3개, timeline 3개, keywords 5개로 맞춰주세요.
+            encounters 는 "미래인연"을 요청받았을 때만 채우고, 다른 주제면 빈 배열([])로 둡니다.
             highlights 의 value 는 카드처럼 한눈에 읽히게 짧게 씁니다. 횟수를 물으면 "3번"처럼
             숫자로 답하되, 단정이 아니라 흐름상의 짐작임이 detail 에서 드러나게 하세요.
             timeline 은 주어진 대운·세운 데이터를 그대로 쓰고 없는 간지를 만들지 마세요.
@@ -89,11 +103,11 @@ public class SajuPromptBuilder {
             당신은 사주명리로 궁합을 봐주는 상담가입니다. 한국어로만 답합니다.
 
             %s
-            7. 두 사람의 관계를 봅니다. 한 사람만 칭찬하거나 한 사람을 탓하지 마세요.
+            8. 두 사람의 관계를 봅니다. 한 사람만 칭찬하거나 한 사람을 탓하지 마세요.
                "A는 이래서 B에게 이렇게 보인다" 처럼 양방향으로 풀어주세요.
-            8. 궁합 점수와 합·충 관계는 이미 계산되어 주어집니다. 주어진 점수와 어긋나는
+            9. 궁합 점수와 합·충 관계는 이미 계산되어 주어집니다. 주어진 점수와 어긋나는
                이야기를 쓰지 마세요. 점수가 낮아도 "맞출 수 있는 방법"을 반드시 같이 씁니다.
-            9. 각 섹션 본문은 5~8문장으로 충분히 풀어주세요.
+            10. 각 섹션 본문은 5~8문장으로 충분히 풀어주세요.
 
             출력은 아래 JSON 하나만 내보냅니다. 코드블록, 설명, 인사말을 붙이지 마세요.
             {
@@ -132,12 +146,24 @@ public class SajuPromptBuilder {
 
         appendChart(sb, p);
         appendLuck(sb, p);
+        appendYearSeries(sb, p);
 
         sb.append("\n[요청] ").append(type.label()).append('\n');
         sb.append("- 관점: ").append(type.focus()).append('\n');
         sb.append("- sections 6개는 이 주제로 구성해주세요: ")
                 .append(String.join(" / ", type.sectionHints())).append('\n');
         sb.append("- highlights 3개는 이런 항목으로 뽑아주세요: ").append(type.highlightHint()).append('\n');
+        if (type == SajuType.FUTURE_LOVE) {
+            sb.append("- encounters 를 5개 채워주세요: 지난 기회 2개(past=true) + 앞으로 3개(past=false).\n");
+            sb.append("  · 연도는 위 [연도별 세운] 표에서만 고르고, 왜 그 해인지 basis 에 간지 근거를 답니다.\n");
+            sb.append("  · where 는 \"일터·업무 모임\", \"친구 소개 자리\", \"운동·취미 모임\", \"온라인 커뮤니티\",\n");
+            sb.append("    \"학교·스터디\", \"여행지\"처럼 실제로 갈 수 있는 곳으로 씁니다. 사주 용어는 쓰지 마세요.\n");
+            sb.append("  · story 는 무엇을 하다가 만나는지를 장면으로 씁니다.\n");
+            sb.append("    예: 같은 프로젝트에 묶여 몇 달 붙어 일하다 가까워지는 흐름\n");
+            sb.append("  · 지난 기회는 \"그때 이런 자리에서 기회가 있었다\"는 식으로 돌아보며 씁니다.\n");
+            sb.append("- highlights 의 \"앞으로 만날 인연\" 횟수는 past=false 인 encounters 개수와 같아야 합니다.\n");
+            sb.append("- highlights 의 \"가장 유력한 자리\"도 실제 장소로 답하세요.\n");
+        }
         sb.append("- score 는 이 주제(").append(type.label())
                 .append(")에 한정한 운세 점수입니다.\n");
 
@@ -264,6 +290,30 @@ public class SajuPromptBuilder {
                 .append(" — 천간 십성 ").append(TenGod.of(p.dayMaster(), p.yearlyLuck().stem()).korean())
                 .append(", 지지 십성 ").append(TenGod.of(p.dayMaster(), p.yearlyLuck().branch()).korean())
                 .append('\n');
+    }
+
+    /**
+     * 연도별 세운 표.
+     *
+     * <p>"몇 년에 기회가 온다"를 물으면 AI가 연도를 지어내기 쉽다. 실제 간지를 미리 계산해 주고
+     * 이 표 안에서만 고르게 한다. 만 16세부터 기준연도 +12년까지.
+     */
+    private void appendYearSeries(StringBuilder sb, FourPillars p) {
+        int reference = p.yearlyLuckYear();
+        int from = Math.max(p.adjustedBirth().getYear() + 16, reference - 12);
+        int to = reference + 12;
+
+        sb.append("\n[연도별 세운] 아래 연도와 간지만 쓰세요. 표에 없는 해를 지어내지 마세요.\n");
+        for (int year = from; year <= to; year++) {
+            Pillar pillar = SajuCalculator.yearPillarOf(year);
+            sb.append("- ").append(year).append("년 ").append(pillar.korean())
+                    .append(" (천간 ").append(TenGod.of(p.dayMaster(), pillar.stem()).korean())
+                    .append(", 지지 ").append(TenGod.of(p.dayMaster(), pillar.branch()).korean())
+                    .append(')');
+            if (year < reference) sb.append(" — 지난 해");
+            else if (year == reference) sb.append(" — 올해");
+            sb.append('\n');
+        }
     }
 
     /** 궁합에선 대운 전체까지는 필요 없고 현재 구간과 세운만 본다 */

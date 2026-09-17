@@ -79,6 +79,44 @@ class SajuPromptBuilderTest {
     }
 
     @Test
+    void 연도별_세운표를_주어_연도를_지어내지_않게_한다() {
+        FourPillars p = pillars(LocalDate.of(1997, 11, 28), LocalTime.of(0, 30), Gender.MALE);
+        String prompt = builder.userPrompt(SajuType.FUTURE_LOVE, "한운호", Gender.MALE, p);
+
+        assertThat(prompt)
+                .contains("[연도별 세운]")
+                .contains("표에 없는 해를 지어내지 마세요")
+                .contains("2026년 병오 ")        // 올해
+                .contains("2014년")              // 만 16세 이후 과거
+                .contains("2038년")              // 기준연도 +12
+                .contains("— 지난 해")
+                .contains("— 올해");
+    }
+
+    @Test
+    void 미래인연은_연표와_생활언어를_요구한다() {
+        FourPillars p = pillars(LocalDate.of(1997, 11, 28), LocalTime.of(0, 30), Gender.MALE);
+        String future = builder.userPrompt(SajuType.FUTURE_LOVE, "한운호", Gender.MALE, p);
+        String total = builder.userPrompt(SajuType.TOTAL, "한운호", Gender.MALE, p);
+
+        assertThat(future)
+                .contains("encounters 를 5개")
+                .contains("지난 기회 2개")
+                .contains("사주 용어는 쓰지 마세요")
+                .contains("가장 유력한 자리");
+        // 다른 종류엔 연표 지시가 붙지 않는다
+        assertThat(total).doesNotContain("encounters 를 5개");
+    }
+
+    @Test
+    void 시스템_프롬프트는_장소를_생활언어로_답하게_한다() {
+        assertThat(builder.systemPrompt())
+                .contains("인성의 자리")
+                .contains("실제로 갈 수 있는 곳")
+                .contains("\"encounters\"");
+    }
+
+    @Test
     void 모든_종류가_요점_항목을_지정한다() {
         for (SajuType type : SajuType.values()) {
             assertThat(type.highlightHint()).isNotBlank();

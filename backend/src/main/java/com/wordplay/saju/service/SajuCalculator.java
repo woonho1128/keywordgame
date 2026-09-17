@@ -83,7 +83,7 @@ public class SajuCalculator {
                 : LocalDateTime.of(birthDate, ASSUMED_TIME);
 
         int solarYear = solarYearOf(adjusted);
-        Pillar yearPillar = yearPillar(solarYear);
+        Pillar yearPillar = yearPillarOf(solarYear);
 
         int termMonth = SolarTerms.termMonth(adjusted);
         Pillar monthPillar = monthPillar(yearPillar.stem(), termMonth);
@@ -106,7 +106,7 @@ public class SajuCalculator {
         List<LuckCycle> cycles = luckCycles(monthPillar, forward, luckStartAge, koreanAge);
 
         int yearlyLuckYear = referenceDate.getYear();
-        Pillar yearlyLuck = yearPillar(
+        Pillar yearlyLuck = yearPillarOf(
                 solarYearOf(LocalDateTime.of(referenceDate, ASSUMED_TIME)));
 
         return new FourPillars(
@@ -124,8 +124,8 @@ public class SajuCalculator {
         return moment.isBefore(ipchun) ? moment.getYear() - 1 : moment.getYear();
     }
 
-    /** 연주 — 서기 4년이 갑자년 */
-    private Pillar yearPillar(int solarYear) {
+    /** 연주 — 서기 4년이 갑자년. 세운(해당 연도 간지)도 같은 규칙이라 공개해 둔다 */
+    public static Pillar yearPillarOf(int solarYear) {
         return Pillar.ofSexagenary(solarYear - 4);
     }
 

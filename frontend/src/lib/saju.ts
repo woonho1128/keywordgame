@@ -75,6 +75,15 @@ export type Section = { title: string; body: string };
 /** 결과 맨 위에 한눈에 보여주는 요점 (예: 앞으로 만날 인연 = 3번) */
 export type Highlight = { label: string; value: string; detail: string | null };
 
+/** 인연이 들어오는(들어왔던) 해 — 미래인연 전용 */
+export type Encounter = {
+  year: string;
+  past: boolean;
+  where: string;
+  story: string;
+  basis: string | null;
+};
+
 /** strengths·cautions·timeline 은 나중에 추가된 필드라 예전 결과엔 없다 */
 export type SajuResult = {
   headline: string | null;
@@ -84,6 +93,7 @@ export type SajuResult = {
   strengths: string[] | null;
   cautions: string[] | null;
   timeline: { period: string; body: string }[] | null;
+  encounters: Encounter[] | null;
   keywords: string[] | null;
   lucky: {
     color: string | null;
