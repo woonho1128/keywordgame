@@ -9,6 +9,7 @@ import { ShareButton } from '@/components/common/ShareButton';
 import { ShareResultButton } from '@/components/common/ShareResultButton';
 import { HangulBoard } from '@/components/wordguess/HangulBoard';
 import { JamoInputCells } from '@/components/wordguess/JamoInputCells';
+import { WordGuessRules } from '@/components/wordguess/WordGuessRules';
 import { GuessHistory, WordSimGuess } from '@/components/wordsim/GuessHistory';
 import {
   buildLieHintShareText,
@@ -411,6 +412,12 @@ export default function PlayPage() {
           )}
         </div>
 
+        {game.gameType === 'WORDGUESS' && (
+          <div className="mb-4">
+            <WordGuessRules maxAttempts={game.maxAttempts ?? 5} defaultOpen />
+          </div>
+        )}
+
         <div className="mb-6 border border-gray-200 rounded-lg p-4 bg-yellow-50/40">
           <p className="text-xs text-gray-500 mb-2">친구에게 공유</p>
           <p className="text-xs text-gray-700 mb-3 break-all font-mono bg-white rounded p-2 border">{shareUrl}</p>
@@ -465,6 +472,12 @@ export default function PlayPage() {
         )}
         {game.hintText && <div className="basis-full bg-yellow-50 rounded-lg px-3 py-2 text-sm break-words">{game.hintText}</div>}
       </div>
+
+      {game.gameType === 'WORDGUESS' && (
+        <div className="mb-4">
+          <WordGuessRules maxAttempts={game.maxAttempts ?? 5} />
+        </div>
+      )}
 
       {game.gameType === 'WORDSIM' && game.top1Similarity != null && (
         <div className="mb-6 bg-gray-50 rounded-lg p-3 text-xs grid grid-cols-4 gap-2">
