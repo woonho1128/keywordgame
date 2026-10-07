@@ -159,10 +159,71 @@ class HangulUtilTest {
                 .containsExactly("ㄷ", "ㅏ");
         assertThat(r.get(0).marks()).extracting(JamoMark::mark)
                 .containsExactly("H", "H");
-        // 추측 음절 1 = 리 → ㄹ(CHO):S (정답 ㄹ은 JONG이라 다른 kind), ㅣ(JUNG):S
+        // 추측 음절 1 = 리 → ㄹ(CHO):M (정답에 ㄹ이 받침으로 있음 — 같은 자리·같은 kind가 아니라 H는 아님)
+        //                    ㅣ(JUNG):S
         assertThat(r.get(1).marks()).extracting(JamoMark::jamo)
                 .containsExactly("ㄹ", "ㅣ");
         assertThat(r.get(1).marks()).extracting(JamoMark::mark)
-                .containsExactly("S", "S");
+                .containsExactly("M", "S");
+    }
+
+    @Test
+    void compareWords_받침위치만다른오답은_전부H가_아님() {
+        // 예전 규칙(kind별 p번째끼리 비교)에서는 아래 쌍이 모두 전부 H인데 오답이었다.
+        String[][] pairs = {
+                {"김치", "기침"}, {"사장", "상자"}, {"수술", "술수"},
+                {"가방", "강바"}, {"친구", "치군"}, {"아까", "악가"}
+        };
+        for (String[] p : pairs) {
+            List<String> marks = flatMarks(HangulUtil.compareWords(p[0], p[1]));
+            assertThat(marks).as("정답 %s / 추측 %s", p[0], p[1])
+                    .anyMatch(m -> !m.equals("H"))
+                    .contains("M");                    // 옮겨진 자모는 M으로 알려준다
+        }
+    }
+
+    @Test
+    void compareWords_김치vs기침_다른자리의자모는M() {
+        List<SyllableResult> r = HangulUtil.compareWords("김치", "기침");
+        assertThat(r.get(0).marks()).extracting(JamoMark::mark)
+                .containsExactly("H", "H");            // 기 → ㄱ:H, ㅣ:H
+        assertThat(r.get(1).marks()).extracting(JamoMark::mark)
+                .containsExactly("M", "M", "M");       // 침 → ㅊ, ㅣ, ㅁ 모두 다른 자리에 있음
+    }
+
+    @Test
+    void compareWords_가방vs강아_다른음절의받침은H가아니라M() {
+        // 정답 받침 ㅇ은 둘째 음절(방)에 있음 → 첫 음절 받침 자리의 ㅇ은 H가 아니라 M
+        List<SyllableResult> r = HangulUtil.compareWords("가방", "강아");
+        assertThat(r.get(0).marks()).extracting(JamoMark::mark)
+                .containsExactly("H", "H", "M");       // 강 → ㄱ:H, ㅏ:H, ㅇ:M
+        assertThat(r.get(1).marks()).extracting(JamoMark::mark)
+                .containsExactly("S", "M");            // 아 → ㅇ:S (ㅇ은 하나뿐이고 이미 M으로 소비), ㅏ:M
+    }
+
+    @Test
+    void compareWords_한국vs하나구_초성받침구분없이_글자로M() {
+        // 정답 '한'의 받침 ㄴ이 있으므로 추측 '나'의 초성 ㄴ은 S가 아니라 M
+        List<SyllableResult> r = HangulUtil.compareWords("한국", "하나구");
+        assertThat(r.get(1).marks()).extracting(JamoMark::jamo)
+                .containsExactly("ㄴ", "ㅏ");
+        assertThat(r.get(1).marks()).extracting(JamoMark::mark)
+                .containsExactly("M", "S");
+        assertThat(r.get(2).marks()).extracting(JamoMark::mark)
+                .containsExactly("M", "M");            // 구 → ㄱ:M, ㅜ:M
+    }
+
+    @Test
+    void compareWords_가나vs나나_중복자모는_정답개수만큼만() {
+        // 정답의 ㄴ은 하나 → 둘째 칸 ㄴ이 H로 소비하므로 첫 ㄴ은 S
+        List<SyllableResult> r = HangulUtil.compareWords("가나", "나나");
+        assertThat(r.get(0).marks()).extracting(JamoMark::mark)
+                .containsExactly("S", "H");
+        assertThat(r.get(1).marks()).extracting(JamoMark::mark)
+                .containsExactly("H", "H");
+    }
+
+    private static List<String> flatMarks(List<SyllableResult> r) {
+        return r.stream().flatMap(s -> s.marks().stream()).map(JamoMark::mark).toList();
     }
 }

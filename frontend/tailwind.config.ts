@@ -7,6 +7,10 @@ const config: Config = {
   // 생긴다. 'class' 전략으로 두면 어디에도 dark 클래스를 붙이지 않으므로
   // dark: 변형이 항상 무효 → 모든 브라우저/기기에서 라이트 테마로 렌더된다.
   darkMode: 'class',
+  // hover: 스타일을 마우스가 있는 기기에서만 적용 — 터치 후 hover가 남아 버튼 색이 바뀌어 보이는 현상 방지
+  future: {
+    hoverOnlyWhenSupported: true,
+  },
   content: [
     './src/app/**/*.{ts,tsx}',
     './src/components/**/*.{ts,tsx}',

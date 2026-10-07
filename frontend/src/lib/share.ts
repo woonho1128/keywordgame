@@ -34,7 +34,9 @@ interface WordGuessShareParams {
 export function buildWordGuessShareText(p: WordGuessShareParams): string {
   const statusLine = p.solved
     ? `${p.attempts}/${p.maxAttempts} 시도 만에 정답`
-    : `${p.maxAttempts}회 시도 실패`;
+    : p.attempts >= p.maxAttempts
+      ? `${p.maxAttempts}회 시도 실패`
+      : `${p.attempts}회 시도 후 포기`;
   const timeLine = p.timeSpentSec != null ? ` · ${formatTime(p.timeSpentSec)}` : '';
   const grid = buildWordGuessGrid(p.history);
 

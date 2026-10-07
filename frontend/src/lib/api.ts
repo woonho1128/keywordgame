@@ -53,11 +53,16 @@ export async function api<T>(
   }
   Object.assign(headers, rest.headers || {});
 
-  const res = await fetch(path, {
-    ...rest,
-    credentials: 'include',
-    headers,
-  });
+  let res: Response;
+  try {
+    res = await fetch(path, {
+      ...rest,
+      credentials: 'include',
+      headers,
+    });
+  } catch {
+    throw new Error('서버에 연결할 수 없습니다. 네트워크 상태를 확인해주세요.');
+  }
   /*
    * 본문을 글자로 먼저 받고 나서 해석한다.
    *

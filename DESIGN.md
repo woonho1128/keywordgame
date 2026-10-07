@@ -184,17 +184,25 @@ TB_SIMILARITY (정적 사전) — WordSim 게임 생성/플레이 시 참조
 
 **`letter_result` JSONB 스키마 (WordGuess)**
 
+추측 음절마다 기본 자모(쌍자음·이중모음·겹받침 분해) 단위의 판정 목록을 저장한다.
+
 ```json
 [
-  {"syllable": "사", "cho": "H", "jung": "H", "jong": null},
-  {"syllable": "람", "cho": "S", "jung": "M", "jong": "S"}
+  {"syllable": "기", "marks": [
+    {"jamo": "ㄱ", "kind": "CHO", "mark": "H"},
+    {"jamo": "ㅣ", "kind": "JUNG", "mark": "H"}
+  ]},
+  {"syllable": "침", "marks": [
+    {"jamo": "ㅊ", "kind": "CHO", "mark": "M"},
+    {"jamo": "ㅣ", "kind": "JUNG", "mark": "M"},
+    {"jamo": "ㅁ", "kind": "JONG", "mark": "M"}
+  ]}
 ]
 ```
 
-- `H` = Hit (정답 위치에 정답 자모, 초록)
-- `M` = Move (정답에 포함되지만 다른 위치, 노랑)
-- `S` = Skip (정답에 없음, 회색)
-- `null` = 자모 자체가 없음 (예: 종성 없음)
+- `H` = Hit (같은 자리에 같은 역할(초성/중성/종성)의 같은 자모, 초록)
+- `M` = Move (정답에 포함되지만 다른 자리, 노랑)
+- `S` = Skip (정답에 (남은) 그 자모가 없음, 회색)
 
 ### 4.5 TB_SIMILARITY (WordSim용 정적 사전)
 
@@ -365,40 +373,48 @@ public class HangulUtil {
 
 ### 6.2 WordGuess 자모 비교 알고리즘
 
-**입력**: 정답 `answer`, 추측 `guess` (둘 다 동일 음절 수)
+**입력**: 정답 `answer`, 추측 `guess` (자모 수가 같아야 함, 음절 수는 달라도 됨)
 
-**출력**: `List<SyllableResult>` — JSONB로 저장
+**출력**: `List<SyllableResult>` — 추측 음절 단위로 묶어 JSONB로 저장
+
+**전처리**: 두 단어를 기본 자모 리스트(역할 포함)로 펼친다. 쌍자음(ㄲ→ㄱㄱ), 이중모음(ㅐ→ㅏㅣ, ㅘ→ㅗㅏ), 겹받침(ㄺ→ㄹㄱ)은 분해한다.
+예: `김치` → `[ㄱ초 ㅣ중 ㅁ종 ㅊ초 ㅣ중]`
 
 **알고리즘 (Wordle 표준 2-pass)**:
 
 ```
-1단계 [Hit 판정]
+a = flatten(answer), g = flatten(guess)        // 길이 N 동일
+
+1단계 [Hit 판정 — 같은 자리]
   for i in 0..N-1:
-    for jamo in [cho, jung, jong]:
-      if answer[i].jamo == guess[i].jamo:
-        result[i].jamo = H
-      else:
-        result[i].jamo = (미정)
+    if a[i].jamo == g[i].jamo and a[i].kind == g[i].kind:
+      result[i] = H
+      a[i] 사용 처리
 
 2단계 [Move/Skip 판정 — 풀(pool) 기반]
-  pool = answer의 모든 자모 중 1단계에서 H로 매칭되지 않은 것들 (multiset)
+  pool = a 중 1단계에서 사용되지 않은 자모의 글자 multiset (역할 무관)
   for i in 0..N-1:
-    for jamo in [cho, jung, jong]:
-      if result[i].jamo == 미정:
-        if pool에 guess[i].jamo 있음:
-          result[i].jamo = M
-          pool에서 1개 제거
-        else:
-          result[i].jamo = S
+    if result[i] 미정:
+      if pool에 g[i].jamo 있음:
+        result[i] = M, pool에서 1개 제거
+      else:
+        result[i] = S
 ```
 
-**예시**: 정답 "사과" vs 추측 "사사"
-- 1단계: 음절1 초성 ㅅ=ㅅ → H, 음절1 중성 ㅏ=ㅏ → H, 음절2 초성 ㅅ vs ㄱ → 미정, 음절2 중성 ㅏ vs ㅘ → 미정
-- pool (H 제외한 정답 자모) = {ㄱ, ㅘ}
-- 음절2 초성 ㅅ: pool에 없음 → **S**
-- 음절2 중성 ㅏ: pool에 없음 → **S**
+- H에 역할(초성/중성/종성)까지 요구하므로 **전부 H면 정답과 같은 단어**다. 역할 시퀀스가 음절 경계를 하나로 정한다.
+- M/S는 글자로만 판단하므로 **S는 "정답에 (남은) 그 자모가 없음"**을 뜻한다. 초성 ㄴ과 받침 ㄴ은 같은 글자로 본다.
 
-**결과**: `[{사 HH-}, {사 SS-}]` ✓
+**예시 1**: 정답 "김치" vs 추측 "기침" (받침 위치만 다름)
+- 1단계: ㄱ, ㅣ → H. 셋째 자리부터는 `ㅁ종/ㅊ초`, `ㅊ초/ㅣ중`, `ㅣ중/ㅁ종`으로 달라서 미정
+- pool = {ㅁ, ㅊ, ㅣ} → ㅊ, ㅣ, ㅁ 모두 **M**
+
+**결과**: `기[H H] 침[M M M]`
+
+**예시 2**: 정답 "가나" vs 추측 "나나" (중복 자모)
+- 1단계: 둘째 칸 ㅏ, 셋째 칸 ㄴ, 넷째 칸 ㅏ → H
+- pool = {ㄱ} → 첫 칸 ㄴ은 pool에 없으므로 **S** (정답의 ㄴ 하나는 이미 H로 사용됨)
+
+**결과**: `나[S H] 나[H H]`
 
 ### 6.3 게임 생성 플로우
 
