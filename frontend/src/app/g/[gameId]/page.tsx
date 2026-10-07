@@ -1,13 +1,15 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { api, GameType, getSessionKey, setSessionKey } from '@/lib/api';
 import { SyllableResult } from '@/lib/hangul';
 import { ShareButton } from '@/components/common/ShareButton';
 import { ShareResultButton } from '@/components/common/ShareResultButton';
 import { HangulBoard } from '@/components/wordguess/HangulBoard';
 import { JamoInputCells } from '@/components/wordguess/JamoInputCells';
+import { WordGuessRules } from '@/components/wordguess/WordGuessRules';
 import { GuessHistory, WordSimGuess } from '@/components/wordsim/GuessHistory';
 import {
   buildLieHintShareText,
@@ -31,7 +33,7 @@ type GameInfo = {
   gameId: string;
   gameType: GameType;
   title: string | null;
-  wordLength: number;
+  wordLength: number | null;   // WordGuess는 null (음절 수 비공개)
   jamoCount: number | null;
   hintText: string | null;
   creatorNick: string | null;
@@ -50,7 +52,7 @@ type StartResp = {
   recordId: number;
   sessionKey: string;
   gameType: GameType;
-  wordLength: number;
+  wordLength: number | null;
   hintText: string | null;
   attemptCount: number;
   status: 'IN_PROGRESS' | 'SOLVED' | 'GAVE_UP';
@@ -136,6 +138,21 @@ export default function PlayPage() {
   const [timeSpentSec, setTimeSpentSec] = useState<number | null>(null);
   const [attemptCount, setAttemptCount] = useState(0);
   const [restoring, setRestoring] = useState(false);
+  // 요청 중 재진입 방지 (더블클릭/연타). state는 비동기라 ref로 즉시 막고, state는 버튼 표시용.
+  const busyRef = useRef(false);
+  const [busy, setBusy] = useState(false);
+
+  const runExclusive = async (action: () => Promise<void>) => {
+    if (busyRef.current) return;
+    busyRef.current = true;
+    setBusy(true);
+    try {
+      await action();
+    } finally {
+      busyRef.current = false;
+      setBusy(false);
+    }
+  };
 
   useEffect(() => {
     api<GameInfo>(`/api/v1/games/${params.gameId}`)
@@ -143,53 +160,56 @@ export default function PlayPage() {
       .catch((e) => setError(e.message));
   }, [params.gameId]);
 
+  /** 서버에 저장된 진행 상태(시도 기록 포함)를 불러와 화면에 반영. */
+  const loadState = async () => {
+    const st = await api<PlayState>(`/api/v1/games/${params.gameId}/state`, { gameId: params.gameId });
+    setStarted(true);
+    setStatus(st.status);
+    setAttemptCount(st.attemptCount);
+    setNick(st.playerNick);
+    setLiePhase(Boolean(st.liePhase));
+    if (st.timeSpentSec != null) setTimeSpentSec(st.timeSpentSec);
+    if (st.revealedAnswer) setRevealedAnswer(st.revealedAnswer);
+    if (st.revealedLieIndex != null) setRevealedLieIndex(st.revealedLieIndex);
+
+    if (st.gameType === 'WORDGUESS') {
+      setHistory(
+        st.guesses
+          .filter((g) => g.letterResult != null)
+          .map((g) => ({
+            guessWord: g.guessWord,
+            letterResult: g.letterResult!,
+            isCorrect: g.isCorrect,
+          }))
+      );
+    } else if (st.gameType === 'WORDSIM') {
+      const sims: WordSimGuess[] = st.guesses
+        .filter((g) => g.similarity != null)
+        .map((g) => ({
+          guessWord: g.guessWord,
+          similarity: g.similarity!,
+          rank: g.rank,
+          isCorrect: g.isCorrect,
+        }));
+      setSimHistory(sims);
+      if (sims.length) setLastSimGuess(sims[sims.length - 1]);
+    } else {
+      setLieHistory(st.guesses.map((g) => ({
+        guessWord: g.guessWord,
+        isCorrect: g.isCorrect,
+      })));
+    }
+  };
+
   useEffect(() => {
     if (!getSessionKey(params.gameId)) return;
     setRestoring(true);
-    api<PlayState>(`/api/v1/games/${params.gameId}/state`, { gameId: params.gameId })
-      .then((st) => {
-        setStarted(true);
-        setStatus(st.status);
-        setAttemptCount(st.attemptCount);
-        setNick(st.playerNick);
-        setLiePhase(Boolean(st.liePhase));
-        if (st.timeSpentSec != null) setTimeSpentSec(st.timeSpentSec);
-        if (st.revealedAnswer) setRevealedAnswer(st.revealedAnswer);
-        if (st.revealedLieIndex != null) setRevealedLieIndex(st.revealedLieIndex);
-
-        if (st.gameType === 'WORDGUESS') {
-          setHistory(
-            st.guesses
-              .filter((g) => g.letterResult != null)
-              .map((g) => ({
-                guessWord: g.guessWord,
-                letterResult: g.letterResult!,
-                isCorrect: g.isCorrect,
-              }))
-          );
-        } else if (st.gameType === 'WORDSIM') {
-          const sims: WordSimGuess[] = st.guesses
-            .filter((g) => g.similarity != null)
-            .map((g) => ({
-              guessWord: g.guessWord,
-              similarity: g.similarity!,
-              rank: g.rank,
-              isCorrect: g.isCorrect,
-            }));
-          setSimHistory(sims);
-          if (sims.length) setLastSimGuess(sims[sims.length - 1]);
-        } else {
-          setLieHistory(st.guesses.map((g) => ({
-            guessWord: g.guessWord,
-            isCorrect: g.isCorrect,
-          })));
-        }
-      })
+    loadState()
       .catch(() => {})
       .finally(() => setRestoring(false));
   }, [params.gameId]);
 
-  const handleStart = async () => {
+  const handleStart = () => runExclusive(async () => {
     setError(null);
     if (!nick.trim()) return setError('닉네임을 입력해주세요.');
     try {
@@ -198,18 +218,33 @@ export default function PlayPage() {
         body: JSON.stringify({ playerNick: nick.trim() }),
       });
       setSessionKey(params.gameId, res.sessionKey);
+      // 쿠키로 기존 기록에 이어진 경우(localStorage만 지워진 상태 등) 시도 기록까지 불러온 뒤 화면 전환
+      if (res.attemptCount > 0 || res.status !== 'IN_PROGRESS') {
+        try {
+          await loadState();
+          return;
+        } catch {
+          // 불러오기 실패 시 아래의 기본 상태로 시작
+        }
+      }
       setStarted(true);
       setStatus(res.status);
       setAttemptCount(res.attemptCount);
     } catch (e) {
       setError(e instanceof Error ? e.message : '게임 시작에 실패했습니다.');
     }
-  };
+  });
 
-  const handleGuess = async () => {
+  /** @param text 제출 시점 입력값 (WordGuess 입력 컴포넌트가 넘김). 없으면 상태값 사용. */
+  const handleGuess = (text?: string) => runExclusive(async () => {
     setError(null);
-    const word = guessInput.trim();
+    const word = (text ?? guessInput).trim();
     if (!word) return;
+
+    // 이미 낸 단어는 서버에서도 거절하지만, 왕복 없이 바로 알려준다
+    if (game?.gameType === 'WORDGUESS' && history.some((h) => h.guessWord === word.normalize('NFC'))) {
+      return setError('이미 시도한 단어입니다');
+    }
 
     try {
       const res = await api<GuessResp>(`/api/v1/games/${params.gameId}/guess`, {
@@ -260,7 +295,7 @@ export default function PlayPage() {
     } catch (e) {
       setError(e instanceof Error ? e.message : '추측에 실패했습니다.');
     }
-  };
+  });
 
   const handleLieHint = async (selectedLieIndex: number) => {
     setError(null);
@@ -280,10 +315,15 @@ export default function PlayPage() {
     }
   };
 
-  const handleGiveUp = async () => {
+  const handleGiveUp = () => runExclusive(async () => {
     if (!confirm('정말 포기하시겠습니까?')) return;
     try {
-      const res = await api<{ answerWord: string; totalAttempts: number; revealedLieIndex: number | null }>(
+      const res = await api<{
+        answerWord: string;
+        totalAttempts: number;
+        revealedLieIndex: number | null;
+        timeSpentSec: number | null;
+      }>(
         `/api/v1/games/${params.gameId}/giveup`,
         { method: 'POST', gameId: params.gameId }
       );
@@ -292,12 +332,22 @@ export default function PlayPage() {
       setRevealedAnswer(res.answerWord);
       setRevealedLieIndex(res.revealedLieIndex);
       setAttemptCount(res.totalAttempts);
+      if (res.timeSpentSec != null) setTimeSpentSec(res.timeSpentSec);
     } catch (e) {
       setError(e instanceof Error ? e.message : '포기에 실패했습니다.');
     }
-  };
+  });
 
-  if (error && !game) return <main className="p-8 text-red-500">{error}</main>;
+  if (error && !game) {
+    return (
+      <main className="min-h-screen px-4 py-6 sm:p-8 max-w-xl mx-auto">
+        <p className="text-red-500 mb-4">{error}</p>
+        <Link href="/" className="inline-block bg-hit text-white font-bold py-2 px-6 rounded-lg hover:opacity-90">
+          홈으로
+        </Link>
+      </main>
+    );
+  }
   if (!game) return <main className="p-8 text-gray-400">불러오는 중...</main>;
   if (!started && restoring) return <main className="p-8 text-gray-400">이어하기 정보를 불러오는 중...</main>;
 
@@ -329,7 +379,7 @@ export default function PlayPage() {
 
   if (!started) {
     return (
-      <main className="min-h-screen p-8 max-w-xl mx-auto">
+      <main className="min-h-screen px-4 py-6 sm:p-8 max-w-xl mx-auto">
         <div className="flex items-baseline justify-between mb-4">
           <h1 className="text-2xl font-bold">{gameLabel(game.gameType)}</h1>
           <div className="flex gap-4 items-baseline text-sm text-gray-500">
@@ -362,6 +412,12 @@ export default function PlayPage() {
           )}
         </div>
 
+        {game.gameType === 'WORDGUESS' && (
+          <div className="mb-4">
+            <WordGuessRules maxAttempts={game.maxAttempts ?? 5} defaultOpen />
+          </div>
+        )}
+
         <div className="mb-6 border border-gray-200 rounded-lg p-4 bg-yellow-50/40">
           <p className="text-xs text-gray-500 mb-2">친구에게 공유</p>
           <p className="text-xs text-gray-700 mb-3 break-all font-mono bg-white rounded p-2 border">{shareUrl}</p>
@@ -378,15 +434,19 @@ export default function PlayPage() {
           className="w-full border border-gray-300 rounded-lg px-3 py-2 mb-4"
         />
         {error && <p className="text-red-500 text-sm mb-2">{error}</p>}
-        <button onClick={handleStart} className="w-full bg-hit text-white font-bold py-3 rounded-lg hover:opacity-90">
-          게임 시작
+        <button
+          onClick={handleStart}
+          disabled={busy}
+          className="w-full bg-hit text-white font-bold py-3 rounded-lg hover:opacity-90 disabled:opacity-50"
+        >
+          {busy ? '시작하는 중...' : '게임 시작'}
         </button>
       </main>
     );
   }
 
   return (
-    <main className="min-h-screen p-8 max-w-2xl mx-auto">
+    <main className="min-h-screen px-4 py-6 sm:p-8 max-w-2xl mx-auto">
       <div className="flex items-baseline justify-between mb-6">
         <h1 className="text-2xl font-bold">{gameLabel(game.gameType)}</h1>
         <div className="flex gap-4 items-baseline text-sm text-gray-500">
@@ -410,8 +470,14 @@ export default function PlayPage() {
             <span className="font-bold text-gray-800">{Math.max(0, game.maxAttempts - attemptCount)}/{game.maxAttempts}</span>
           </div>
         )}
-        {game.hintText && <div className="flex-1 min-w-0 bg-yellow-50 rounded-lg px-3 py-2 text-sm">{game.hintText}</div>}
+        {game.hintText && <div className="basis-full bg-yellow-50 rounded-lg px-3 py-2 text-sm break-words">{game.hintText}</div>}
       </div>
+
+      {game.gameType === 'WORDGUESS' && (
+        <div className="mb-4">
+          <WordGuessRules maxAttempts={game.maxAttempts ?? 5} />
+        </div>
+      )}
 
       {game.gameType === 'WORDSIM' && game.top1Similarity != null && (
         <div className="mb-6 bg-gray-50 rounded-lg p-3 text-xs grid grid-cols-4 gap-2">
@@ -483,8 +549,13 @@ export default function PlayPage() {
             <JamoInputCells
               jamoCount={game.jamoCount}
               value={guessInput}
-              onChange={setGuessInput}
+              onChange={(text) => {
+                setGuessInput(text);
+                if (error) setError(null);
+              }}
               onSubmit={handleGuess}
+              busy={busy}
+              error={error}
             />
           )}
 
@@ -583,7 +654,10 @@ export default function PlayPage() {
         </div>
       )}
 
-      {error && <p className="text-red-500 text-sm mt-4">{error}</p>}
+      {/* WordGuess 진행 중 에러는 입력창 바로 아래(JamoInputCells)에 표시 */}
+      {error && !(game.gameType === 'WORDGUESS' && status === 'IN_PROGRESS') && (
+        <p className="text-red-500 text-sm mt-4">{error}</p>
+      )}
     </main>
   );
 }

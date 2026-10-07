@@ -8,7 +8,8 @@ import org.hibernate.type.SqlTypes;
 import java.time.Instant;
 
 @Entity
-@Table(name = "TB_GUESS_LOG")
+@Table(name = "TB_GUESS_LOG",
+        uniqueConstraints = @UniqueConstraint(name = "uk_log_record_order", columnNames = {"record_id", "guess_order"}))
 @Getter
 @Setter
 @NoArgsConstructor

@@ -56,6 +56,14 @@ public class Game {
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
 
+    /**
+     * 플레이어에게 내려줄 음절 수.
+     * WordGuess는 추측 음절 수가 자유라 정답 음절 수 자체가 힌트가 되므로 숨긴다 (자모 수만 공개).
+     */
+    public Integer publicWordLength() {
+        return gameType == GameType.WORDGUESS ? null : wordLength;
+    }
+
     @PrePersist
     public void prePersist() {
         if (createdAt == null) createdAt = Instant.now();

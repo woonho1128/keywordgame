@@ -31,7 +31,7 @@ public record GameResponse(
 ) {
     public static GameResponse from(Game g, Integer wordGuessMaxAttempts) {
         return new GameResponse(
-                g.getGameId(), g.getGameType(), g.getTitle(), g.getWordLength(),
+                g.getGameId(), g.getGameType(), g.getTitle(), g.publicWordLength(),
                 computeJamoCount(g),
                 g.getHintText(), g.getCreatorNick(), g.getCreatedAt(),
                 g.getPlayCount(), g.getSolvedCount(),
@@ -43,7 +43,7 @@ public record GameResponse(
 
     public static GameResponse fromWithSim(Game g, ReferenceScores refs) {
         return new GameResponse(
-                g.getGameId(), g.getGameType(), g.getTitle(), g.getWordLength(),
+                g.getGameId(), g.getGameType(), g.getTitle(), g.publicWordLength(),
                 computeJamoCount(g),
                 g.getHintText(), g.getCreatorNick(), g.getCreatedAt(),
                 g.getPlayCount(), g.getSolvedCount(),
@@ -55,7 +55,7 @@ public record GameResponse(
 
     public static GameResponse fromLieHint(Game g, List<String> hints) {
         return new GameResponse(
-                g.getGameId(), g.getGameType(), g.getTitle(), g.getWordLength(),
+                g.getGameId(), g.getGameType(), g.getTitle(), g.publicWordLength(),
                 null,
                 g.getHintText(), g.getCreatorNick(), g.getCreatedAt(),
                 g.getPlayCount(), g.getSolvedCount(),

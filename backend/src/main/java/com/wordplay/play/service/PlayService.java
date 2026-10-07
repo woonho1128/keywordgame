@@ -66,7 +66,7 @@ public class PlayService {
                 record.getRecordId(),
                 sessionKey,
                 game.getGameType(),
-                game.getWordLength(),
+                game.publicWordLength(),
                 game.getHintText(),
                 record.getAttemptCount(),
                 record.getStatus().name(),
@@ -77,7 +77,7 @@ public class PlayService {
     @Transactional
     public GiveUpResponse giveUp(String gameId, String sessionKey) {
         PlayRecord record = playRecordRepository
-                .findByGameIdAndSessionKey(gameId, sessionKey)
+                .findForUpdate(gameId, sessionKey)
                 .orElseThrow(() -> new BusinessException(ErrorCode.SESSION_NOT_FOUND));
 
         if (record.getStatus() != PlayStatus.IN_PROGRESS) {
@@ -93,7 +93,8 @@ public class PlayService {
         Integer revealedLieIndex = game.getGameType() == GameType.LIE_HINT
                 ? parseLieHintConfig(game).lieIndex()
                 : null;
-        return new GiveUpResponse(game.getAnswerWord(), record.getAttemptCount(), revealedLieIndex);
+        return new GiveUpResponse(game.getAnswerWord(), record.getAttemptCount(), revealedLieIndex,
+                record.getTimeSpentSec());
     }
 
     @Transactional

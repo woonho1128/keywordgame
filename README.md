@@ -22,6 +22,7 @@ keywordgaem/
 ### 1) DB 준비
 1. Supabase 프로젝트 생성 (Free Tier)
 2. SQL Editor에서 `db/schema.sql` 실행
+   - 이미 운영 중인 DB라면 대신 `db/lie_hint_migration.sql` → `db/wordguess_fix_migration.sql` 순서로 실행
 3. 프로젝트 설정 → Database → Connection Pooler (Transaction mode) 정보 복사
    - host: `aws-0-{region}.pooler.supabase.com`
    - port: `6543`
@@ -47,7 +48,7 @@ mvn spring-boot:run
 > ⚠️ **Supabase JDBC 접속 핵심**: `channelBinding=disable` 옵션이 **필수**입니다. JDBC 드라이버의 SCRAM-SHA-256 처리가 Supabase Pooler와 충돌해서 인증 실패가 나는 알려진 이슈. 이 옵션 빼면 비밀번호가 맞아도 `password authentication failed` 에러가 납니다.
 
 빌드 검증:
-- `mvn test` → HangulUtil 7개 테스트 통과
+- `mvn test` → 단위 테스트 통과
 - `mvn package -DskipTests` → 실행 가능 JAR 생성
 
 서버: http://localhost:8080
@@ -56,12 +57,14 @@ mvn spring-boot:run
 
 ```powershell
 cd frontend
-copy .env.example .env.local
+copy .env.example .env.local   # API_BASE = 백엔드 주소 (로컬 8080)
 npm install
 npm run dev
 ```
 
 브라우저: http://localhost:3000
+
+> 운영 빌드는 `API_BASE`를 지정한 상태로 `npm run build` 해야 합니다. `/api` 프록시 주소(rewrites)가 빌드 시점에 고정됩니다. 지정하지 않으면 `http://localhost:8090`.
 
 ## 진행 상황
 
@@ -70,7 +73,7 @@ npm run dev
 - [x] **Phase 1: WordGuess MVP 완료**
   - [x] Spring Boot 백엔드
     - 공통 모듈 (ApiResponse, BusinessException, ErrorCode, GlobalExceptionHandler, CORS)
-    - HangulUtil + 6개 단위 테스트 (Wordle 표준 2-pass)
+    - HangulUtil + 단위 테스트 (Wordle 표준 2-pass)
     - SessionManager (쿠키 기반 session_key)
     - Game 도메인: 생성/조회/최근 목록 API
     - Play 도메인: /start, /guess (WordGuess 완성, WordSim stub), /giveup
@@ -98,7 +101,7 @@ npm run dev
 - 정답은 **평문 저장** (친구용, 보안 요구 낮음)
 - AES 암호화 / IP 해시 / Rate Limit / Redis **모두 제거** → 운영 단순화
 - WordSim 임베딩은 **오프라인 사전 계산** → DB 저장 → 비용 0원
-- WordGuess 자모 비교는 **Wordle 표준 2-pass** (예: 정답 "사과" + 추측 "사사" → 두 번째 ㅅ은 회색)
+- WordGuess 자모 비교는 **Wordle 표준 2-pass** — 같은 자리+같은 역할이면 초록, 다른 자리에 있으면 노랑 (예: 정답 "가나" + 추측 "나나" → 첫 ㄴ은 회색)
 - Supabase Pooler 사용 시 `prepareThreshold=0` 필수
 
 자세한 내용은 [`DESIGN.md`](./DESIGN.md) 참고.

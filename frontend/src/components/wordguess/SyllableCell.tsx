@@ -12,8 +12,8 @@ interface Props {
 export function SyllableCell({ result }: Props) {
   return (
     <div className="flex flex-col items-center gap-1">
-      <div className="text-2xl font-bold mb-1">{result.syllable}</div>
-      <div className="flex gap-1">
+      <div className="text-xl sm:text-2xl font-bold sm:mb-1">{result.syllable}</div>
+      <div className="flex gap-0.5 sm:gap-1">
         {result.marks.map((m, i) => (
           <JamoTile key={i} jamo={m.jamo} mark={m.mark} />
         ))}
