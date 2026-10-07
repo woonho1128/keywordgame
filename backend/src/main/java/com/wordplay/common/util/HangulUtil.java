@@ -120,9 +120,10 @@ public class HangulUtil {
      *
      * 매칭 규칙:
      *   - 정답/추측을 평탄화 (flat jamo list)
-     *   - 같은 kind(CHO/JUNG/JONG) 안에서만 비교
-     *   - 1단계: 같은 kind 안 같은 position에 같은 jamo → H
-     *   - 2단계: 남은 자모는 같은 kind pool에서 매칭하면 M, 없으면 S
+     *   - 1단계: 같은 위치에 같은 kind(CHO/JUNG/JONG)의 같은 jamo → H
+     *     (kind까지 같아야 하므로 전부 H면 정답과 같은 단어다)
+     *   - 2단계: H로 쓰이지 않은 정답 자모 pool(글자 기준, kind 무관)에 있으면 M, 없으면 S
+     *     (S는 "정답에 남은 그 자모가 없음"을 뜻한다)
      *   - 결과는 추측의 음절 구조에 맞춰 그룹화하여 반환 (시각화용)
      */
     public static List<SyllableResult> compareWords(String answer, String guess) {
@@ -134,43 +135,30 @@ public class HangulUtil {
                     "Jamo count mismatch: answer=" + aFlat.size() + " guess=" + gFlat.size());
         }
 
-        // kind별 인덱스 묶기
-        Map<Kind, List<Integer>> aIdx = groupByKind(aFlat);
-        Map<Kind, List<Integer>> gIdx = groupByKind(gFlat);
-
         String[] gMarks = new String[gFlat.size()];
         boolean[] aTaken = new boolean[aFlat.size()];
 
         // ---- 1단계: Hit ----
-        for (Kind k : Kind.values()) {
-            List<Integer> a = aIdx.getOrDefault(k, List.of());
-            List<Integer> g = gIdx.getOrDefault(k, List.of());
-            int len = Math.min(a.size(), g.size());
-            for (int p = 0; p < len; p++) {
-                int ai = a.get(p), gi = g.get(p);
-                if (aFlat.get(ai).jamo().equals(gFlat.get(gi).jamo())) {
-                    gMarks[gi] = "H";
-                    aTaken[ai] = true;
-                }
+        for (int i = 0; i < gFlat.size(); i++) {
+            Jamo a = aFlat.get(i), g = gFlat.get(i);
+            if (a.kind() == g.kind() && a.jamo().equals(g.jamo())) {
+                gMarks[i] = "H";
+                aTaken[i] = true;
             }
         }
 
         // ---- 2단계: Pool 기반 Move/Skip ----
-        Map<Kind, Map<String, Integer>> pool = new HashMap<>();
-        for (Kind k : Kind.values()) pool.put(k, new HashMap<>());
+        Map<String, Integer> pool = new HashMap<>();
         for (int ai = 0; ai < aFlat.size(); ai++) {
-            if (aTaken[ai]) continue;
-            Jamo j = aFlat.get(ai);
-            pool.get(j.kind()).merge(j.jamo(), 1, Integer::sum);
+            if (!aTaken[ai]) pool.merge(aFlat.get(ai).jamo(), 1, Integer::sum);
         }
         for (int gi = 0; gi < gFlat.size(); gi++) {
             if (gMarks[gi] != null) continue;
-            Jamo j = gFlat.get(gi);
-            Map<String, Integer> kindPool = pool.get(j.kind());
-            Integer cnt = kindPool.get(j.jamo());
-            if (cnt != null && cnt > 0) {
+            String jamo = gFlat.get(gi).jamo();
+            int cnt = pool.getOrDefault(jamo, 0);
+            if (cnt > 0) {
                 gMarks[gi] = "M";
-                kindPool.merge(j.jamo(), -1, Integer::sum);
+                pool.put(jamo, cnt - 1);
             } else {
                 gMarks[gi] = "S";
             }
@@ -190,14 +178,5 @@ public class HangulUtil {
             out.add(new SyllableResult(String.valueOf(c), marks));
         }
         return out;
-    }
-
-    private static Map<Kind, List<Integer>> groupByKind(List<Jamo> jamos) {
-        Map<Kind, List<Integer>> m = new HashMap<>();
-        for (Kind k : Kind.values()) m.put(k, new ArrayList<>());
-        for (int i = 0; i < jamos.size(); i++) {
-            m.get(jamos.get(i).kind()).add(i);
-        }
-        return m;
     }
 }
