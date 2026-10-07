@@ -15,7 +15,7 @@
 export type SaveOutcome = 'shared' | 'downloaded' | 'opened' | 'cancelled';
 
 /** 터치 기기인지 — 공유 시트를 띄울지 판단한다 */
-function prefersShareSheet(): boolean {
+export function prefersShareSheet(): boolean {
   if (typeof window === 'undefined') return false;
   return window.matchMedia?.('(pointer: coarse)').matches ?? false;
 }
