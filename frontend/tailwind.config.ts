@@ -1,6 +1,10 @@
 import type { Config } from 'tailwindcss';
 
 const config: Config = {
+  // hover: 스타일을 마우스가 있는 기기에서만 적용 — 터치 후 hover가 남아 버튼 색이 바뀌어 보이는 현상 방지
+  future: {
+    hoverOnlyWhenSupported: true,
+  },
   content: [
     './src/app/**/*.{ts,tsx}',
     './src/components/**/*.{ts,tsx}',

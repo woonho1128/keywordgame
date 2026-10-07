@@ -22,7 +22,7 @@ API 호출, 동시 요청 스크립트, 브라우저(Playwright, 데스크톱 + 
 | 5 | 🟠 | 재시작 시 진행 기록이 안 보임 | 프론트 |
 | 6 | 🟡 | 입력 UX (Enter 검증, 에러 위치) | 프론트 |
 | 7 | 🟡 | API 오류 처리 (비JSON 응답, 4xx가 500) | 프론트 + 백엔드 |
-| 8 | 🟡 | 소소한 정리 (리더보드 시간, 404 화면, favicon, env, 음절 수 노출) | 프론트 + 백엔드 |
+| 8 | 🟡 | 소소한 정리 (리더보드 시간, 404 화면, favicon, env, 음절 수 노출, 터치 hover 잔상) | 프론트 + 백엔드 |
 | 9 | 🔵 | 게임 방법 안내 | 프론트 |
 
 ### 1.3 작업 원칙
@@ -258,6 +258,9 @@ localStorage의 세션 키만 지워지고 쿠키는 남은 상태에서 '게임
 - 음절 수 노출 제거: WordGuess는 추측 음절 수가 자유라 음절 수 자체가 힌트가 된다.
   `GameResponse`, `StartPlayResponse`, `RecentGameItem`의 `wordLength`를 WordGuess일 때 `null`로 보낸다.
   프론트는 WordGuess에서 이 값을 쓰지 않는다. 출제 응답(`CreateGameResponse`)은 출제자 본인이라 유지한다.
+- 터치 hover 잔상 (구현 중 추가 발견): 폰에서 '게임 시작'을 누른 자리에 '포기' 버튼이 나타나면
+  hover 스타일(빨간 글씨)이 남아 있다. Tailwind `future.hoverOnlyWhenSupported`로
+  `hover:` 스타일을 마우스가 있는 기기에서만 적용한다. 모든 페이지 공용이며 데스크톱 동작은 같다.
 
 ## 10. [9] 게임 방법 안내
 

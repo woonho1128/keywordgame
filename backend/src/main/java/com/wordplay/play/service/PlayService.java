@@ -66,7 +66,7 @@ public class PlayService {
                 record.getRecordId(),
                 sessionKey,
                 game.getGameType(),
-                game.getWordLength(),
+                game.publicWordLength(),
                 game.getHintText(),
                 record.getAttemptCount(),
                 record.getStatus().name(),

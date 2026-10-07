@@ -18,7 +18,7 @@ public record RecentGameItem(
     public static RecentGameItem from(Game g) {
         return new RecentGameItem(
                 g.getGameId(), g.getGameType(), g.getHintText(), g.getCreatorNick(),
-                g.getWordLength(), g.getPlayCount(), g.getSolvedCount(), g.getCreatedAt()
+                g.publicWordLength(), g.getPlayCount(), g.getSolvedCount(), g.getCreatedAt()
         );
     }
 }

@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { api } from '@/lib/api';
+import { formatTime } from '@/lib/share';
 
 type Entry = {
   rank: number | null;
@@ -81,7 +82,7 @@ export default function LeaderboardPage() {
           </div>
           <div className="flex items-center gap-3 text-sm text-gray-500">
             <span>{e.attemptCount}회</span>
-            <span>{e.timeSpentSec != null ? `${e.timeSpentSec}초` : '-'}</span>
+            <span>{e.timeSpentSec != null ? formatTime(e.timeSpentSec) : '-'}</span>
             {data.detailVisible && (
               <span className="text-gray-300">{isOpen ? '▲' : '▼'}</span>
             )}

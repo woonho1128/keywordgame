@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { api, GameType, getSessionKey, setSessionKey } from '@/lib/api';
 import { SyllableResult } from '@/lib/hangul';
 import { ShareButton } from '@/components/common/ShareButton';
@@ -31,7 +32,7 @@ type GameInfo = {
   gameId: string;
   gameType: GameType;
   title: string | null;
-  wordLength: number;
+  wordLength: number | null;   // WordGuess는 null (음절 수 비공개)
   jamoCount: number | null;
   hintText: string | null;
   creatorNick: string | null;
@@ -50,7 +51,7 @@ type StartResp = {
   recordId: number;
   sessionKey: string;
   gameType: GameType;
-  wordLength: number;
+  wordLength: number | null;
   hintText: string | null;
   attemptCount: number;
   status: 'IN_PROGRESS' | 'SOLVED' | 'GAVE_UP';
@@ -336,7 +337,16 @@ export default function PlayPage() {
     }
   });
 
-  if (error && !game) return <main className="p-8 text-red-500">{error}</main>;
+  if (error && !game) {
+    return (
+      <main className="min-h-screen px-4 py-6 sm:p-8 max-w-xl mx-auto">
+        <p className="text-red-500 mb-4">{error}</p>
+        <Link href="/" className="inline-block bg-hit text-white font-bold py-2 px-6 rounded-lg hover:opacity-90">
+          홈으로
+        </Link>
+      </main>
+    );
+  }
   if (!game) return <main className="p-8 text-gray-400">불러오는 중...</main>;
   if (!started && restoring) return <main className="p-8 text-gray-400">이어하기 정보를 불러오는 중...</main>;
 

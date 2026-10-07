@@ -57,12 +57,14 @@ mvn spring-boot:run
 
 ```powershell
 cd frontend
-copy .env.example .env.local
+copy .env.example .env.local   # API_BASE = 백엔드 주소 (로컬 8080)
 npm install
 npm run dev
 ```
 
 브라우저: http://localhost:3000
+
+> 운영 빌드는 `API_BASE`를 지정한 상태로 `npm run build` 해야 합니다. `/api` 프록시 주소(rewrites)가 빌드 시점에 고정됩니다. 지정하지 않으면 `http://localhost:8090`.
 
 ## 진행 상황
 
