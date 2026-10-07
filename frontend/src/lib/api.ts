@@ -53,12 +53,24 @@ export async function api<T>(
   }
   Object.assign(headers, rest.headers || {});
 
-  const res = await fetch(path, {
-    ...rest,
-    credentials: 'include',
-    headers,
-  });
-  const json = (await res.json()) as ApiResponse<T>;
+  let res: Response;
+  try {
+    res = await fetch(path, {
+      ...rest,
+      credentials: 'include',
+      headers,
+    });
+  } catch {
+    throw new Error('서버에 연결할 수 없습니다. 네트워크 상태를 확인해주세요.');
+  }
+
+  // 백엔드 재시작/다운 중엔 프록시가 JSON이 아닌 텍스트 오류를 돌려준다
+  let json: ApiResponse<T>;
+  try {
+    json = (await res.json()) as ApiResponse<T>;
+  } catch {
+    throw new Error('서버가 잠시 응답하지 않습니다. 잠시 후 다시 시도해주세요.');
+  }
   if (!json.success || json.data === null) {
     throw new Error(json.error?.message || 'Unknown error');
   }
