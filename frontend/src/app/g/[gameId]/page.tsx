@@ -233,9 +233,10 @@ export default function PlayPage() {
     }
   });
 
-  const handleGuess = () => runExclusive(async () => {
+  /** @param text 제출 시점 입력값 (WordGuess 입력 컴포넌트가 넘김). 없으면 상태값 사용. */
+  const handleGuess = (text?: string) => runExclusive(async () => {
     setError(null);
-    const word = guessInput.trim();
+    const word = (text ?? guessInput).trim();
     if (!word) return;
 
     // 이미 낸 단어는 서버에서도 거절하지만, 왕복 없이 바로 알려준다
@@ -525,9 +526,13 @@ export default function PlayPage() {
             <JamoInputCells
               jamoCount={game.jamoCount}
               value={guessInput}
-              onChange={setGuessInput}
+              onChange={(text) => {
+                setGuessInput(text);
+                if (error) setError(null);
+              }}
               onSubmit={handleGuess}
               busy={busy}
+              error={error}
             />
           )}
 
@@ -626,7 +631,10 @@ export default function PlayPage() {
         </div>
       )}
 
-      {error && <p className="text-red-500 text-sm mt-4">{error}</p>}
+      {/* WordGuess 진행 중 에러는 입력창 바로 아래(JamoInputCells)에 표시 */}
+      {error && !(game.gameType === 'WORDGUESS' && status === 'IN_PROGRESS') && (
+        <p className="text-red-500 text-sm mt-4">{error}</p>
+      )}
     </main>
   );
 }
