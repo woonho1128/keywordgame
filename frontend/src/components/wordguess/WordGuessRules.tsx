@@ -36,7 +36,7 @@ export function WordGuessRules({ maxAttempts, defaultOpen = false }: Props) {
         <div className="space-y-1.5">
           <div className="flex items-center gap-2">
             <JamoTile jamo="ㄱ" mark="H" />
-            <span>그 자리에 맞는 자모 (초성·받침 위치까지 일치)</span>
+            <span>같은 칸에 맞는 자모 (입력 칸 순서 기준)</span>
           </div>
           <div className="flex items-center gap-2">
             <JamoTile jamo="ㄱ" mark="M" />

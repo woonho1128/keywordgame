@@ -129,10 +129,12 @@ public class HangulUtil {
      * 꼬들 표준 2-pass 비교 — 자모 수 일치만 요구하고 음절 수는 자유.
      *
      * 매칭 규칙:
-     *   - 정답/추측을 평탄화 (flat jamo list)
-     *   - 1단계: 같은 위치에 같은 kind(CHO/JUNG/JONG)의 같은 jamo → H
-     *     (kind까지 같아야 하므로 전부 H면 정답과 같은 단어다)
-     *   - 2단계: H로 쓰이지 않은 정답 자모 pool(글자 기준, kind 무관)에 있으면 M, 없으면 S
+     *   - 정답/추측을 평탄화 (flat jamo list) — 입력 칸에 보이는 자모 한 줄과 같은 순서
+     *   - 1단계: 같은 칸(인덱스)에 같은 jamo → H. 초성/받침 역할은 따지지 않는다
+     *     (예: 정답 사과 ㅅㅏ[ㄱ]ㅗㅏ / 추측 석수 ㅅㅓ[ㄱ]ㅅㅜ → 셋째 칸 ㄱ은 H)
+     *   - 예외: 자모 줄이 통째로 같은데 단어가 다르면(쌍자음이 받침으로 갈라진 아까/악가 등)
+     *     역할이 다른 칸은 H에서 빼서 오답이 전부 초록으로 보이지 않게 한다
+     *   - 2단계: H로 쓰이지 않은 정답 자모 pool(글자 기준)에 있으면 M, 없으면 S
      *     (S는 "정답에 남은 그 자모가 없음"을 뜻한다)
      *   - 결과는 추측의 음절 구조에 맞춰 그룹화하여 반환 (시각화용)
      */
@@ -145,13 +147,24 @@ public class HangulUtil {
                     "Jamo count mismatch: answer=" + aFlat.size() + " guess=" + gFlat.size());
         }
 
-        String[] gMarks = new String[gFlat.size()];
-        boolean[] aTaken = new boolean[aFlat.size()];
+        int n = gFlat.size();
+        String[] gMarks = new String[n];
+        boolean[] aTaken = new boolean[n];
 
         // ---- 1단계: Hit ----
-        for (int i = 0; i < gFlat.size(); i++) {
-            Jamo a = aFlat.get(i), g = gFlat.get(i);
-            if (a.kind() == g.kind() && a.jamo().equals(g.jamo())) {
+        boolean[] hit = new boolean[n];
+        boolean sameLine = true;
+        for (int i = 0; i < n; i++) {
+            hit[i] = aFlat.get(i).jamo().equals(gFlat.get(i).jamo());
+            sameLine &= hit[i];
+        }
+        if (sameLine && !answer.equals(guess)) {
+            for (int i = 0; i < n; i++) {
+                if (aFlat.get(i).kind() != gFlat.get(i).kind()) hit[i] = false;
+            }
+        }
+        for (int i = 0; i < n; i++) {
+            if (hit[i]) {
                 gMarks[i] = "H";
                 aTaken[i] = true;
             }
