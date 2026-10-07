@@ -22,11 +22,11 @@ export function JamoTile({ jamo, mark }: Props) {
 
   return (
     <div className={clsx(
-      'flex flex-col items-center justify-center w-10 h-10 border-2 rounded text-sm font-bold',
+      'flex flex-col items-center justify-center w-8 h-8 sm:w-10 sm:h-10 border-2 rounded text-sm font-bold',
       colorClass
     )}>
-      <span className="text-base leading-none">{jamo}</span>
-      <span className="text-[10px] opacity-80 leading-none mt-0.5">{icon}</span>
+      <span className="text-sm sm:text-base leading-none">{jamo}</span>
+      <span className="text-[9px] sm:text-[10px] opacity-80 leading-none mt-0.5">{icon}</span>
     </div>
   );
 }

@@ -349,7 +349,7 @@ export default function PlayPage() {
 
   if (!started) {
     return (
-      <main className="min-h-screen p-8 max-w-xl mx-auto">
+      <main className="min-h-screen px-4 py-6 sm:p-8 max-w-xl mx-auto">
         <div className="flex items-baseline justify-between mb-4">
           <h1 className="text-2xl font-bold">{gameLabel(game.gameType)}</h1>
           <div className="flex gap-4 items-baseline text-sm text-gray-500">
@@ -410,7 +410,7 @@ export default function PlayPage() {
   }
 
   return (
-    <main className="min-h-screen p-8 max-w-2xl mx-auto">
+    <main className="min-h-screen px-4 py-6 sm:p-8 max-w-2xl mx-auto">
       <div className="flex items-baseline justify-between mb-6">
         <h1 className="text-2xl font-bold">{gameLabel(game.gameType)}</h1>
         <div className="flex gap-4 items-baseline text-sm text-gray-500">
@@ -434,7 +434,7 @@ export default function PlayPage() {
             <span className="font-bold text-gray-800">{Math.max(0, game.maxAttempts - attemptCount)}/{game.maxAttempts}</span>
           </div>
         )}
-        {game.hintText && <div className="flex-1 min-w-0 bg-yellow-50 rounded-lg px-3 py-2 text-sm">{game.hintText}</div>}
+        {game.hintText && <div className="basis-full bg-yellow-50 rounded-lg px-3 py-2 text-sm break-words">{game.hintText}</div>}
       </div>
 
       {game.gameType === 'WORDSIM' && game.top1Similarity != null && (

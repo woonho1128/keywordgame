@@ -42,14 +42,14 @@ export function JamoInputCells({ jamoCount, value, onChange, onSubmit, disabled,
       {/* 자모 셀 */}
       <div
         onClick={focusInput}
-        className="flex flex-wrap gap-1.5 justify-center cursor-text py-2"
+        className="flex flex-wrap gap-1 sm:gap-1.5 justify-center cursor-text py-2"
         role="textbox"
       >
         {cells.map((jamo, i) => (
           <div
             key={i}
             className={clsx(
-              'w-10 h-12 rounded-lg border-2 flex items-center justify-center text-xl font-bold transition',
+              'w-8 h-10 sm:w-10 sm:h-12 rounded-lg border-2 flex items-center justify-center text-lg sm:text-xl font-bold transition',
               jamo
                 ? 'border-hit bg-white text-gray-800'
                 : 'border-dashed border-gray-300 bg-gray-50 text-gray-300'
@@ -88,17 +88,18 @@ export function JamoInputCells({ jamoCount, value, onChange, onSubmit, disabled,
           autoCorrect="off"
           autoCapitalize="off"
           spellCheck={false}
-          className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-base"
+          // min-w-0: flex 안의 input은 기본 최소폭(약 20글자) 때문에 줄어들지 않아 좁은 화면에서 버튼을 밀어낸다
+          className="flex-1 min-w-0 border border-gray-300 rounded-lg px-3 py-2 text-base"
           placeholder="한글로 추측 (예: 사과)"
         />
-        <span className="text-sm text-gray-500 whitespace-nowrap">
+        <span className="shrink-0 text-sm text-gray-500 whitespace-nowrap">
           {jamos.length}/{jamoCount}
         </span>
         <button
           type="button"
           onClick={onSubmit}
           disabled={disabled || busy || jamos.length !== jamoCount}
-          className="bg-hit text-white font-bold px-6 py-2 rounded-lg hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed"
+          className="shrink-0 whitespace-nowrap bg-hit text-white font-bold px-4 sm:px-6 py-2 rounded-lg hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed"
         >
           추측
         </button>
