@@ -10,6 +10,7 @@ interface Props {
   onChange: (text: string) => void;
   onSubmit: () => void;
   disabled?: boolean;
+  busy?: boolean;                      // 제출 요청 중 — 입력창은 그대로 두고(모바일 키보드 유지) 제출만 막음
 }
 
 /**
@@ -23,7 +24,7 @@ interface Props {
  *
  * 한글 IME 조합 중에는 분해를 늦춰서 "사" 조합 끝나야 [ㅅ][ㅏ] 표시.
  */
-export function JamoInputCells({ jamoCount, value, onChange, onSubmit, disabled }: Props) {
+export function JamoInputCells({ jamoCount, value, onChange, onSubmit, disabled, busy }: Props) {
   const hiddenInputRef = useRef<HTMLInputElement>(null);
   const composingRef = useRef(false);
 
@@ -79,7 +80,7 @@ export function JamoInputCells({ jamoCount, value, onChange, onSubmit, disabled 
           onKeyDown={(e) => {
             if (e.key === 'Enter' && !composingRef.current && !disabled) {
               e.preventDefault();
-              onSubmit();
+              if (!busy) onSubmit();
             }
           }}
           disabled={disabled}
@@ -96,7 +97,7 @@ export function JamoInputCells({ jamoCount, value, onChange, onSubmit, disabled 
         <button
           type="button"
           onClick={onSubmit}
-          disabled={disabled || jamos.length !== jamoCount}
+          disabled={disabled || busy || jamos.length !== jamoCount}
           className="bg-hit text-white font-bold px-6 py-2 rounded-lg hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed"
         >
           추측

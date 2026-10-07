@@ -44,8 +44,9 @@ public class GuessService {
 
     @Transactional
     public GuessResponse guess(String gameId, GuessRequest req, String sessionKey) {
+        // 행 잠금: 같은 세션의 동시 요청은 앞 요청이 커밋될 때까지 대기 → 시도 번호 중복 방지
         PlayRecord record = playRecordRepository
-                .findByGameIdAndSessionKey(gameId, sessionKey)
+                .findForUpdate(gameId, sessionKey)
                 .orElseThrow(() -> new BusinessException(ErrorCode.SESSION_NOT_FOUND));
 
         if (record.getStatus() != PlayStatus.IN_PROGRESS) {
@@ -77,6 +78,10 @@ public class GuessService {
         int guessJamos = HangulUtil.countJamos(guess);
         if (answerJamos != guessJamos) {
             throw new BusinessException(ErrorCode.INVALID_WORD_LENGTH);
+        }
+        // 같은 단어 재추측은 시도로 세지 않고 거절 (실수로 다시 내도 기회가 줄지 않게)
+        if (guessLogRepository.existsByRecordIdAndGuessWord(record.getRecordId(), guess)) {
+            throw new BusinessException(ErrorCode.DUPLICATE_GUESS);
         }
 
         boolean correct = guess.equals(game.getAnswerWord());

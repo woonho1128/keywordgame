@@ -72,7 +72,9 @@ CREATE TABLE IF NOT EXISTS TB_GUESS_LOG (
     created_at      TIMESTAMP     NOT NULL DEFAULT NOW(),
 
     CONSTRAINT fk_log_record FOREIGN KEY (record_id)
-        REFERENCES TB_PLAY_RECORD(record_id) ON DELETE CASCADE
+        REFERENCES TB_PLAY_RECORD(record_id) ON DELETE CASCADE,
+    -- 같은 플레이 기록 안에서 시도 번호는 유일 (동시 요청으로 번호가 겹치는 것 방지)
+    CONSTRAINT uk_log_record_order UNIQUE (record_id, guess_order)
 );
 
 CREATE INDEX IF NOT EXISTS idx_log_record

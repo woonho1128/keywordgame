@@ -13,5 +13,7 @@ public interface GuessLogRepository extends JpaRepository<GuessLog, Long> {
 
     Optional<GuessLog> findFirstByRecordIdAndIsCorrectTrueOrderByGuessOrderAsc(Long recordId);
 
+    boolean existsByRecordIdAndGuessWord(Long recordId, String guessWord);
+
     List<GuessLog> findByRecordIdInAndIsCorrectTrue(Collection<Long> recordIds);
 }

@@ -77,7 +77,7 @@ public class PlayService {
     @Transactional
     public GiveUpResponse giveUp(String gameId, String sessionKey) {
         PlayRecord record = playRecordRepository
-                .findByGameIdAndSessionKey(gameId, sessionKey)
+                .findForUpdate(gameId, sessionKey)
                 .orElseThrow(() -> new BusinessException(ErrorCode.SESSION_NOT_FOUND));
 
         if (record.getStatus() != PlayStatus.IN_PROGRESS) {

@@ -22,6 +22,7 @@ keywordgaem/
 ### 1) DB 준비
 1. Supabase 프로젝트 생성 (Free Tier)
 2. SQL Editor에서 `db/schema.sql` 실행
+   - 이미 운영 중인 DB라면 대신 `db/lie_hint_migration.sql` → `db/wordguess_fix_migration.sql` 순서로 실행
 3. 프로젝트 설정 → Database → Connection Pooler (Transaction mode) 정보 복사
    - host: `aws-0-{region}.pooler.supabase.com`
    - port: `6543`

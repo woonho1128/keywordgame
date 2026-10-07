@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { api, GameType, getSessionKey, setSessionKey } from '@/lib/api';
 import { SyllableResult } from '@/lib/hangul';
@@ -136,6 +136,21 @@ export default function PlayPage() {
   const [timeSpentSec, setTimeSpentSec] = useState<number | null>(null);
   const [attemptCount, setAttemptCount] = useState(0);
   const [restoring, setRestoring] = useState(false);
+  // 요청 중 재진입 방지 (더블클릭/연타). state는 비동기라 ref로 즉시 막고, state는 버튼 표시용.
+  const busyRef = useRef(false);
+  const [busy, setBusy] = useState(false);
+
+  const runExclusive = async (action: () => Promise<void>) => {
+    if (busyRef.current) return;
+    busyRef.current = true;
+    setBusy(true);
+    try {
+      await action();
+    } finally {
+      busyRef.current = false;
+      setBusy(false);
+    }
+  };
 
   useEffect(() => {
     api<GameInfo>(`/api/v1/games/${params.gameId}`)
@@ -189,7 +204,7 @@ export default function PlayPage() {
       .finally(() => setRestoring(false));
   }, [params.gameId]);
 
-  const handleStart = async () => {
+  const handleStart = () => runExclusive(async () => {
     setError(null);
     if (!nick.trim()) return setError('닉네임을 입력해주세요.');
     try {
@@ -204,12 +219,17 @@ export default function PlayPage() {
     } catch (e) {
       setError(e instanceof Error ? e.message : '게임 시작에 실패했습니다.');
     }
-  };
+  });
 
-  const handleGuess = async () => {
+  const handleGuess = () => runExclusive(async () => {
     setError(null);
     const word = guessInput.trim();
     if (!word) return;
+
+    // 이미 낸 단어는 서버에서도 거절하지만, 왕복 없이 바로 알려준다
+    if (game?.gameType === 'WORDGUESS' && history.some((h) => h.guessWord === word.normalize('NFC'))) {
+      return setError('이미 시도한 단어입니다');
+    }
 
     try {
       const res = await api<GuessResp>(`/api/v1/games/${params.gameId}/guess`, {
@@ -260,7 +280,7 @@ export default function PlayPage() {
     } catch (e) {
       setError(e instanceof Error ? e.message : '추측에 실패했습니다.');
     }
-  };
+  });
 
   const handleLieHint = async (selectedLieIndex: number) => {
     setError(null);
@@ -280,7 +300,7 @@ export default function PlayPage() {
     }
   };
 
-  const handleGiveUp = async () => {
+  const handleGiveUp = () => runExclusive(async () => {
     if (!confirm('정말 포기하시겠습니까?')) return;
     try {
       const res = await api<{ answerWord: string; totalAttempts: number; revealedLieIndex: number | null }>(
@@ -295,7 +315,7 @@ export default function PlayPage() {
     } catch (e) {
       setError(e instanceof Error ? e.message : '포기에 실패했습니다.');
     }
-  };
+  });
 
   if (error && !game) return <main className="p-8 text-red-500">{error}</main>;
   if (!game) return <main className="p-8 text-gray-400">불러오는 중...</main>;
@@ -378,8 +398,12 @@ export default function PlayPage() {
           className="w-full border border-gray-300 rounded-lg px-3 py-2 mb-4"
         />
         {error && <p className="text-red-500 text-sm mb-2">{error}</p>}
-        <button onClick={handleStart} className="w-full bg-hit text-white font-bold py-3 rounded-lg hover:opacity-90">
-          게임 시작
+        <button
+          onClick={handleStart}
+          disabled={busy}
+          className="w-full bg-hit text-white font-bold py-3 rounded-lg hover:opacity-90 disabled:opacity-50"
+        >
+          {busy ? '시작하는 중...' : '게임 시작'}
         </button>
       </main>
     );
@@ -485,6 +509,7 @@ export default function PlayPage() {
               value={guessInput}
               onChange={setGuessInput}
               onSubmit={handleGuess}
+              busy={busy}
             />
           )}
 
