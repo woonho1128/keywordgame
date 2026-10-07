@@ -158,48 +158,51 @@ export default function PlayPage() {
       .catch((e) => setError(e.message));
   }, [params.gameId]);
 
+  /** 서버에 저장된 진행 상태(시도 기록 포함)를 불러와 화면에 반영. */
+  const loadState = async () => {
+    const st = await api<PlayState>(`/api/v1/games/${params.gameId}/state`, { gameId: params.gameId });
+    setStarted(true);
+    setStatus(st.status);
+    setAttemptCount(st.attemptCount);
+    setNick(st.playerNick);
+    setLiePhase(Boolean(st.liePhase));
+    if (st.timeSpentSec != null) setTimeSpentSec(st.timeSpentSec);
+    if (st.revealedAnswer) setRevealedAnswer(st.revealedAnswer);
+    if (st.revealedLieIndex != null) setRevealedLieIndex(st.revealedLieIndex);
+
+    if (st.gameType === 'WORDGUESS') {
+      setHistory(
+        st.guesses
+          .filter((g) => g.letterResult != null)
+          .map((g) => ({
+            guessWord: g.guessWord,
+            letterResult: g.letterResult!,
+            isCorrect: g.isCorrect,
+          }))
+      );
+    } else if (st.gameType === 'WORDSIM') {
+      const sims: WordSimGuess[] = st.guesses
+        .filter((g) => g.similarity != null)
+        .map((g) => ({
+          guessWord: g.guessWord,
+          similarity: g.similarity!,
+          rank: g.rank,
+          isCorrect: g.isCorrect,
+        }));
+      setSimHistory(sims);
+      if (sims.length) setLastSimGuess(sims[sims.length - 1]);
+    } else {
+      setLieHistory(st.guesses.map((g) => ({
+        guessWord: g.guessWord,
+        isCorrect: g.isCorrect,
+      })));
+    }
+  };
+
   useEffect(() => {
     if (!getSessionKey(params.gameId)) return;
     setRestoring(true);
-    api<PlayState>(`/api/v1/games/${params.gameId}/state`, { gameId: params.gameId })
-      .then((st) => {
-        setStarted(true);
-        setStatus(st.status);
-        setAttemptCount(st.attemptCount);
-        setNick(st.playerNick);
-        setLiePhase(Boolean(st.liePhase));
-        if (st.timeSpentSec != null) setTimeSpentSec(st.timeSpentSec);
-        if (st.revealedAnswer) setRevealedAnswer(st.revealedAnswer);
-        if (st.revealedLieIndex != null) setRevealedLieIndex(st.revealedLieIndex);
-
-        if (st.gameType === 'WORDGUESS') {
-          setHistory(
-            st.guesses
-              .filter((g) => g.letterResult != null)
-              .map((g) => ({
-                guessWord: g.guessWord,
-                letterResult: g.letterResult!,
-                isCorrect: g.isCorrect,
-              }))
-          );
-        } else if (st.gameType === 'WORDSIM') {
-          const sims: WordSimGuess[] = st.guesses
-            .filter((g) => g.similarity != null)
-            .map((g) => ({
-              guessWord: g.guessWord,
-              similarity: g.similarity!,
-              rank: g.rank,
-              isCorrect: g.isCorrect,
-            }));
-          setSimHistory(sims);
-          if (sims.length) setLastSimGuess(sims[sims.length - 1]);
-        } else {
-          setLieHistory(st.guesses.map((g) => ({
-            guessWord: g.guessWord,
-            isCorrect: g.isCorrect,
-          })));
-        }
-      })
+    loadState()
       .catch(() => {})
       .finally(() => setRestoring(false));
   }, [params.gameId]);
@@ -213,6 +216,15 @@ export default function PlayPage() {
         body: JSON.stringify({ playerNick: nick.trim() }),
       });
       setSessionKey(params.gameId, res.sessionKey);
+      // 쿠키로 기존 기록에 이어진 경우(localStorage만 지워진 상태 등) 시도 기록까지 불러온 뒤 화면 전환
+      if (res.attemptCount > 0 || res.status !== 'IN_PROGRESS') {
+        try {
+          await loadState();
+          return;
+        } catch {
+          // 불러오기 실패 시 아래의 기본 상태로 시작
+        }
+      }
       setStarted(true);
       setStatus(res.status);
       setAttemptCount(res.attemptCount);
