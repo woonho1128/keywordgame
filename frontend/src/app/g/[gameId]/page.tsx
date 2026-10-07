@@ -303,7 +303,12 @@ export default function PlayPage() {
   const handleGiveUp = () => runExclusive(async () => {
     if (!confirm('정말 포기하시겠습니까?')) return;
     try {
-      const res = await api<{ answerWord: string; totalAttempts: number; revealedLieIndex: number | null }>(
+      const res = await api<{
+        answerWord: string;
+        totalAttempts: number;
+        revealedLieIndex: number | null;
+        timeSpentSec: number | null;
+      }>(
         `/api/v1/games/${params.gameId}/giveup`,
         { method: 'POST', gameId: params.gameId }
       );
@@ -312,6 +317,7 @@ export default function PlayPage() {
       setRevealedAnswer(res.answerWord);
       setRevealedLieIndex(res.revealedLieIndex);
       setAttemptCount(res.totalAttempts);
+      if (res.timeSpentSec != null) setTimeSpentSec(res.timeSpentSec);
     } catch (e) {
       setError(e instanceof Error ? e.message : '포기에 실패했습니다.');
     }
