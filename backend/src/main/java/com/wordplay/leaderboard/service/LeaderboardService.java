@@ -1,13 +1,16 @@
 package com.wordplay.leaderboard.service;
 
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.wordplay.common.exception.BusinessException;
 import com.wordplay.common.exception.ErrorCode;
+import com.wordplay.common.util.HangulUtil.SyllableResult;
 import com.wordplay.game.entity.Game;
 import com.wordplay.game.entity.GameType;
 import com.wordplay.game.repository.GameRepository;
 import com.wordplay.leaderboard.dto.LeaderboardEntry;
+import com.wordplay.leaderboard.dto.LeaderboardEntry.GuessRow;
 import com.wordplay.leaderboard.dto.LeaderboardResponse;
 import com.wordplay.leaderboard.repository.LeaderboardRepository;
 import com.wordplay.play.entity.GuessLog;
@@ -43,6 +46,7 @@ public class LeaderboardService {
         Game game = gameRepository.findById(gameId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.GAME_NOT_FOUND));
         boolean isLieHint = game.getGameType() == GameType.LIE_HINT;
+        boolean isWordGuess = game.getGameType() == GameType.WORDGUESS;
 
         List<PlayRecord> solved = leaderboardRepository.findRankings(gameId, PageRequest.of(0, clamped));
         long total = leaderboardRepository.countSolvers(gameId);
@@ -52,22 +56,45 @@ public class LeaderboardService {
                 ? leaderboardRepository.findFailures(gameId, PageRequest.of(0, clamped))
                 : List.of();
 
-        // 상세(거짓 힌트 선택값) 공개 여부: Lie Hint이고, 보는 사람이 이 게임을 끝냈을 때만
-        boolean detailVisible = isLieHint && viewerSessionKey != null
+        // 상세 공개 여부: 상세가 있는 모드(Lie Hint 선택값, WordGuess 입력 이력)이고,
+        // 보는 사람이 이 게임을 끝냈을 때만 — 정답을 모르는 사람에게 남의 풀이를 보여주지 않는다
+        boolean detailVisible = (isLieHint || isWordGuess) && viewerSessionKey != null
                 && playRecordRepository.findByGameIdAndSessionKey(gameId, viewerSessionKey)
                         .map(r -> r.getStatus() != PlayStatus.IN_PROGRESS)
                         .orElse(false);
 
-        // 거짓 힌트 선택값 — 상세 공개 가능할 때만 채운다 (응답 자체에 안 실으면 스포일러 불가)
-        Map<Long, Integer> lieSelections = detailVisible
-                ? loadLieSelections(Stream.concat(solved.stream(), failed.stream())
-                        .map(PlayRecord::getRecordId).toList())
+        // 상세는 공개 가능할 때만 채운다 (응답 자체에 안 실으면 스포일러 불가)
+        List<Long> recordIds = Stream.concat(solved.stream(), failed.stream())
+                .map(PlayRecord::getRecordId).toList();
+        Map<Long, Integer> lieSelections = detailVisible && isLieHint
+                ? loadLieSelections(recordIds)
+                : Map.of();
+        Map<Long, List<GuessRow>> guessHistories = detailVisible && isWordGuess
+                ? loadGuessHistories(recordIds)
                 : Map.of();
 
-        List<LeaderboardEntry> rankings = buildEntries(solved, true, lieSelections);
-        List<LeaderboardEntry> failures = buildEntries(failed, false, lieSelections);
+        List<LeaderboardEntry> rankings = buildEntries(solved, true, lieSelections, guessHistories);
+        List<LeaderboardEntry> failures = buildEntries(failed, false, lieSelections, guessHistories);
 
-        return new LeaderboardResponse((int) total, rankings, failures, detailVisible);
+        return new LeaderboardResponse((int) total, rankings, failures, detailVisible, game.getGameType());
+    }
+
+    /** WordGuess — 각 record의 추측 로그를 시도 순서대로 (단어 + 자모 판정). */
+    private Map<Long, List<GuessRow>> loadGuessHistories(List<Long> recordIds) {
+        if (recordIds.isEmpty()) return Map.of();
+        Map<Long, List<GuessRow>> result = new HashMap<>();
+        for (GuessLog log : guessLogRepository.findByRecordIdInOrderByRecordIdAscGuessOrderAsc(recordIds)) {
+            if (log.getLetterResult() == null) continue;
+            try {
+                List<SyllableResult> letters = objectMapper.readValue(
+                        log.getLetterResult(), new TypeReference<List<SyllableResult>>() {});
+                result.computeIfAbsent(log.getRecordId(), k -> new ArrayList<>())
+                        .add(new GuessRow(log.getGuessWord(), letters, log.getIsCorrect()));
+            } catch (Exception ignored) {
+                // 파싱 실패한 줄은 빼고 표시
+            }
+        }
+        return result;
     }
 
     /** 각 record의 정답 추측 로그에서 거짓 힌트 선택값(selectedLieIndex)을 뽑아낸다. */
@@ -90,7 +117,8 @@ public class LeaderboardService {
     }
 
     private List<LeaderboardEntry> buildEntries(List<PlayRecord> records, boolean ranked,
-                                                Map<Long, Integer> lieSelections) {
+                                                Map<Long, Integer> lieSelections,
+                                                Map<Long, List<GuessRow>> guessHistories) {
         List<LeaderboardEntry> entries = new ArrayList<>(records.size());
         int rank = 1;
         for (PlayRecord r : records) {
@@ -101,7 +129,8 @@ public class LeaderboardService {
                     r.getAttemptCount(),
                     r.getTimeSpentSec(),
                     r.getFinishedAt(),
-                    lieSelections.get(r.getRecordId())
+                    lieSelections.get(r.getRecordId()),
+                    guessHistories.get(r.getRecordId())
             ));
         }
         return entries;

@@ -338,6 +338,13 @@ TB_SIMILARITY (정적 사전) — WordSim 게임 생성/플레이 시 참조
 #### GET `/api/v1/games/{gameId}/leaderboard?limit=50`
 정렬: `attempt_count ASC, time_spent_sec ASC`, `status = 'SOLVED'` 만
 
+응답: `totalPlayers`, `rankings`, `failures`(Lie Hint만), `detailVisible`, `gameType`
+
+- `detailVisible`: 요청한 세션(`X-Session-Key`/쿠키)이 이 게임을 끝냈을 때(SOLVED/GAVE_UP)만 `true`
+- 상세는 `detailVisible`일 때만 응답에 실린다 (안 푼 사람에게는 서버가 아예 보내지 않음 — 스포일러 방지)
+  - WordGuess: 각 항목의 `guesses` = 시도 순서대로 `{guessWord, letterResult, isCorrect}` (최대 5줄)
+  - Lie Hint: 각 항목의 `selectedLieIndex`
+
 ### 5.5 에러 코드 카탈로그
 
 | 코드 | HTTP | 설명 |

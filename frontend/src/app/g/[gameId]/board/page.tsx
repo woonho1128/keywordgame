@@ -3,8 +3,16 @@
 import { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
-import { api } from '@/lib/api';
+import { api, GameType } from '@/lib/api';
 import { formatTime } from '@/lib/share';
+import { SyllableResult } from '@/lib/hangul';
+import { HangulBoard } from '@/components/wordguess/HangulBoard';
+
+type GuessRow = {
+  guessWord: string;
+  letterResult: SyllableResult[];
+  isCorrect: boolean;
+};
 
 type Entry = {
   rank: number | null;
@@ -13,7 +21,8 @@ type Entry = {
   attemptCount: number;
   timeSpentSec: number | null;
   finishedAt: string;
-  selectedLieIndex: number | null;
+  selectedLieIndex: number | null;   // Lie Hint 상세
+  guesses: GuessRow[] | null;        // WordGuess 상세 (입력 이력)
 };
 
 type Resp = {
@@ -21,9 +30,10 @@ type Resp = {
   rankings: Entry[];
   failures: Entry[];
   detailVisible: boolean;
+  gameType: GameType;
 };
 
-/** 선택 상세 한 줄 텍스트 (게임을 끝낸 사람에게만 노출). */
+/** Lie Hint 선택 상세 한 줄 텍스트 (게임을 끝낸 사람에게만 노출). */
 function detailText(e: Entry): string {
   if (e.selectedLieIndex != null) {
     const mark = e.status === 'SOLVED' ? '정답' : '오답';
@@ -48,6 +58,13 @@ export default function LeaderboardPage() {
   if (error) return <main className="p-8 text-red-500">{error}</main>;
   if (!data) return <main className="p-8 text-gray-400">불러오는 중...</main>;
 
+  const isWordGuess = data.gameType === 'WORDGUESS';
+  const allKeys = [
+    ...data.rankings.map((e) => `s-${e.rank}`),
+    ...data.failures.map((_, i) => `f-${i}`),
+  ];
+  const allOpen = allKeys.length > 0 && allKeys.every((k) => expanded.has(k));
+
   const toggle = (key: string) => {
     setExpanded((cur) => {
       const next = new Set(cur);
@@ -67,11 +84,11 @@ export default function LeaderboardPage() {
           }`}
           onClick={data.detailVisible ? () => toggle(key) : undefined}
         >
-          <div className="flex items-center gap-3">
-            <span className="font-bold text-gray-400 w-6 text-center">{leftLabel}</span>
-            <span>{e.playerNick}</span>
+          <div className="flex items-center gap-3 min-w-0">
+            <span className="font-bold text-gray-400 w-6 text-center shrink-0">{leftLabel}</span>
+            <span className="truncate">{e.playerNick}</span>
             <span
-              className={`text-xs px-1.5 py-0.5 rounded ${
+              className={`text-xs px-1.5 py-0.5 rounded shrink-0 ${
                 e.status === 'SOLVED'
                   ? 'bg-green-100 text-green-700'
                   : 'bg-red-100 text-red-600'
@@ -80,7 +97,7 @@ export default function LeaderboardPage() {
               {e.status === 'SOLVED' ? '성공' : '실패'}
             </span>
           </div>
-          <div className="flex items-center gap-3 text-sm text-gray-500">
+          <div className="flex items-center gap-3 text-sm text-gray-500 shrink-0">
             <span>{e.attemptCount}회</span>
             <span>{e.timeSpentSec != null ? formatTime(e.timeSpentSec) : '-'}</span>
             {data.detailVisible && (
@@ -89,14 +106,20 @@ export default function LeaderboardPage() {
           </div>
         </div>
         {data.detailVisible && isOpen && (
-          <div className="pb-2 pl-9 text-sm text-gray-600">{detailText(e)}</div>
+          e.guesses ? (
+            <div className="pb-4 pt-1 sm:pl-9">
+              <HangulBoard history={e.guesses} />
+            </div>
+          ) : (
+            <div className="pb-2 pl-9 text-sm text-gray-600">{detailText(e)}</div>
+          )
         )}
       </div>
     );
   };
 
   return (
-    <main className="min-h-screen p-8 max-w-2xl mx-auto">
+    <main className="min-h-screen px-4 py-6 sm:p-8 max-w-2xl mx-auto">
       <div className="flex items-baseline justify-between mb-6">
         <h1 className="text-2xl font-bold">🏆 리더보드</h1>
         <div className="flex gap-4 items-baseline text-sm text-gray-500">
@@ -105,7 +128,18 @@ export default function LeaderboardPage() {
         </div>
       </div>
 
-      <p className="text-sm text-gray-500 mb-4">총 {data.totalPlayers}명이 정답을 맞췄습니다.</p>
+      <div className="flex items-baseline justify-between gap-3 mb-4">
+        <p className="text-sm text-gray-500">총 {data.totalPlayers}명이 정답을 맞췄습니다.</p>
+        {isWordGuess && data.detailVisible && allKeys.length > 0 && (
+          <button
+            type="button"
+            onClick={() => setExpanded(allOpen ? new Set() : new Set(allKeys))}
+            className="shrink-0 text-sm text-gray-500 underline hover:text-hit"
+          >
+            {allOpen ? '모두 접기' : '모두 펼치기'}
+          </button>
+        )}
+      </div>
 
       {data.rankings.length === 0 ? (
         <div className="text-center text-gray-400 py-12">아직 정답자가 없습니다.</div>
@@ -113,6 +147,14 @@ export default function LeaderboardPage() {
         <div>
           {data.rankings.map((e) => renderEntry(e, `s-${e.rank}`, String(e.rank)))}
         </div>
+      )}
+
+      {isWordGuess && data.rankings.length > 0 && (
+        <p className="mt-4 text-xs text-gray-400">
+          {data.detailVisible
+            ? '줄을 누르면 각자 입력한 단어를 볼 수 있습니다.'
+            : '게임을 끝내면 각 정답자가 무엇을 입력했는지 볼 수 있습니다.'}
+        </p>
       )}
 
       {data.failures.length > 0 && (
@@ -124,7 +166,7 @@ export default function LeaderboardPage() {
         </div>
       )}
 
-      {data.failures.length > 0 && !data.detailVisible && (
+      {!isWordGuess && data.failures.length > 0 && !data.detailVisible && (
         <p className="mt-4 text-xs text-gray-400">
           게임을 끝내면 각 도전자가 거짓 힌트로 무엇을 골랐는지 볼 수 있습니다.
         </p>
